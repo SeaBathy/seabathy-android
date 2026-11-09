@@ -1,0 +1,14 @@
+SeaBathy is free, open-source offline bathymetry for boats.
+
+• Your own depth surveys: GeoTIFF files, even multi-gigabyte ones, coloured by depth with relief shading, and the depth under the crosshair as you pan
+• MBTiles charts and map packs, raster or vector
+• Free seabed depths for the area on screen, anywhere in the world
+• The seabed in 3D: rotate, fly in, tap for depth and slope, contours, satellite or offline maps draped over the terrain
+• Offline maps: download the area on screen for use with no signal
+• Tides: heights, highs and lows, sunrise, sunset and moon, saved for offline use
+• Sea conditions: wind, waves, swell, currents, sea temperature, chlorophyll, sea level and salinity, with moving flow lines and a time slider
+• Waypoints, routes with depth checks against your draft, tracks, anchor and depth alarms, GPX import and export
+• Your choice of units for depth, distance, speed, tides, wind, waves and temperature
+• No account, ads or tracking
+
+SeaBathy does not include official nautical charts and must not be used as the sole source for navigation or safety-of-life decisions.

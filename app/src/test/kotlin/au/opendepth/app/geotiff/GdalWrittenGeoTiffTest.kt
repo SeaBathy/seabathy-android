@@ -1,0 +1,65 @@
+package au.opendepth.app.geotiff
+
+import org.junit.Assert.assertEquals
+import org.junit.Rule
+import org.junit.Test
+import org.junit.rules.TemporaryFolder
+import java.util.Base64
+
+/**
+ * Decodes small GeoTIFFs written by real GDAL (`gdal_translate -co COMPRESS=DEFLATE
+ * -co PREDICTOR=...`), not by this project's own test encoder -- so a decoder and
+ * encoder that agree with each other but not with libtiff cannot both pass.
+ *
+ * Every fixture is the same 8x4 EPSG:4326 grid, origin 147.0E 18.0S, 0.01 degree
+ * cells, holding -(1.5 + row * 10 + column) metres.
+ */
+class GdalWrittenGeoTiffTest {
+
+    @get:Rule
+    val folder = TemporaryFolder()
+
+    private fun read(name: String, base64: String): GeoTiffReader.Result.Depth {
+        val file = folder.newFile("$name.tif").apply { writeBytes(Base64.getDecoder().decode(base64)) }
+        return GeoTiffReader.read(file) as GeoTiffReader.Result.Depth
+    }
+
+    private fun GeoTiffReader.Result.Depth.at(row: Int, column: Int): Double =
+        grid.sampleMetres(-18.0 - 0.005 - row * 0.01, 147.005 + column * 0.01)!!
+
+    private fun assertFloatGrid(result: GeoTiffReader.Result.Depth) {
+        assertEquals(-1.5, result.at(0, 0), 1e-4)
+        assertEquals(-8.5, result.at(0, 7), 1e-4)
+        assertEquals(-14.5, result.at(1, 3), 1e-4)
+        assertEquals(-38.5, result.at(3, 7), 1e-4)
+    }
+
+    @Test
+    fun `little-endian float32 deflate predictor 3`() = assertFloatGrid(read("le_p3", LE_P3))
+
+    @Test
+    fun `big-endian float32 deflate predictor 3`() = assertFloatGrid(read("be_p3", BE_P3))
+
+    @Test
+    fun `tiled little-endian float32 deflate predictor 3`() = assertFloatGrid(read("le_p3_tiled", LE_P3_TILED))
+
+    @Test
+    fun `little-endian int16 deflate predictor 2`() {
+        val result = read("le_p2_int16", LE_P2_INT16)
+        // GDAL rounded the half-metre values to integers when writing Int16.
+        assertEquals(INT16_ROW0_COL0, result.at(0, 0), 1e-6)
+        assertEquals(INT16_ROW1_COL3, result.at(1, 3), 1e-6)
+        assertEquals(INT16_ROW3_COL7, result.at(3, 7), 1e-6)
+    }
+
+    private companion object {
+        const val INT16_ROW0_COL0 = -2.0
+        const val INT16_ROW1_COL3 = -15.0
+        const val INT16_ROW3_COL7 = -39.0
+
+        const val LE_P3 = "SUkqAAgAAAASAAABAwABAAAACAAAAAEBAwABAAAABAAAAAIBAwABAAAAIAAAAAMBAwABAAAACAAAAAYBAwABAAAAAQAAABEBBAABAAAAjAEAABUBAwABAAAAAQAAABYBAwABAAAABAAAABcBBAABAAAANgAAABwBAwABAAAAAQAAAD0BAwABAAAAAwAAAFMBAwABAAAAAwAAAA6DDAADAAAA7AAAAIKEDAAGAAAABAEAAK+HAwAgAAAANAEAALCHDAACAAAAdAEAALGHAgAIAAAAhAEAAIGkAgAGAAAA5gAAAAAAAAAtOTk5OQB7FK5H4XqEP3sUrkfheoQ/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGBiQAAAAAAAADLAAAAAAAAAAAABAAEAAAAHAAAEAAABAAIAAQQAAAEAAQAACAAAAQDmEAEIsYcHAAAABggAAAEAjiMJCLCHAQABAAsIsIcBAAAAiG10lh2kckAAAABAplRYQVdHUyA4NHwAeJzbz8gAAoz/ExwMFBQUJH4woIKDULpcAAh4ODhycMi/5oAAGXR5RghtxcYCBs/Q5AEvDgoB"
+        const val BE_P3 = "TU0AKgAAAAgAEgEAAAMAAAABAAgAAAEBAAMAAAABAAQAAAECAAMAAAABACAAAAEDAAMAAAABAAgAAAEGAAMAAAABAAEAAAERAAQAAAABAAABjAEVAAMAAAABAAEAAAEWAAMAAAABAAQAAAEXAAQAAAABAAAAMgEcAAMAAAABAAEAAAE9AAMAAAABAAMAAAFTAAMAAAABAAMAAIMOAAwAAAADAAAA7ISCAAwAAAAGAAABBIevAAMAAAAgAAABNIewAAwAAAACAAABdIexAAIAAAAIAAABhKSBAAIAAAAGAAAA5gAAAAAtOTk5OQA/hHrhR64Uez+EeuFHrhR7AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAYmAAAAAAAMAyAAAAAAAAAAAAAAAAAAAAAQABAAAABwQAAAAAAQACBAEAAAABAAEIAAAAAAEQ5ggBh7EABwAACAYAAAABI44ICYewAAEAAQgLh7AAAQAAQHKkHZZ0bYhBWFSmQAAAAFdHUyA4NHwAeJxjQAMHEhwMFBQUJLYzgrmM6PIWAkDAw8Ghy4AdrOGAgLs45P+wsYDBcqjJAMewBwY="
+        const val LE_P3_TILED = "SUkqAAgAAAATAAABAwABAAAACAAAAAEBAwABAAAABAAAAAIBAwABAAAAIAAAAAMBAwABAAAACAAAAAYBAwABAAAAAQAAABUBAwABAAAAAQAAABwBAwABAAAAAQAAAD0BAwABAAAAAwAAAEIBAwABAAAAEAAAAEMBAwABAAAAEAAAAEQBBAABAAAAmAEAAEUBBAABAAAASQAAAFMBAwABAAAAAwAAAA6DDAADAAAA+AAAAIKEDAAGAAAAEAEAAK+HAwAgAAAAQAEAALCHDAACAAAAgAEAALGHAgAIAAAAkAEAAIGkAgAGAAAA8gAAAAAAAAAtOTk5OQB7FK5H4XqEP3sUrkfheoQ/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGBiQAAAAAAAADLAAAAAAAAAAAABAAEAAAAHAAAEAAABAAIAAQQAAAEAAQAACAAAAQDmEAEIsYcHAAAABggAAAEAjiMJCLCHAQABAAsIsIcBAAAAiG10lh2kckAAAABAplRYQVdHUyA4NHwAeJzbz8jAwMDAwGjPAAEHEhwMFBQUJH4wEAcOQmmYfgsBAQEBHg6OHDL1r+GAABli9TNCaDso/w8bCxg8YxgFo2AUEAIAtKoLAQ=="
+        const val LE_P2_INT16 = "SUkqAAgAAAASAAABAwABAAAACAAAAAEBAwABAAAABAAAAAIBAwABAAAAEAAAAAMBAwABAAAACAAAAAYBAwABAAAAAQAAABEBBAABAAAAjAEAABUBAwABAAAAAQAAABYBAwABAAAABAAAABcBBAABAAAAFQAAABwBAwABAAAAAQAAAD0BAwABAAAAAgAAAFMBAwABAAAAAgAAAA6DDAADAAAA7AAAAIKEDAAGAAAABAEAAK+HAwAgAAAANAEAALCHDAACAAAAdAEAALGHAgAIAAAAhAEAAIGkAgAGAAAA5gAAAAAAAAAtOTk5OQB7FK5H4XqEP3sUrkfheoQ/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGBiQAAAAAAAADLAAAAAAAAAAAABAAEAAAAHAAAEAAABAAIAAQQAAAEAAQAACAAAAQDmEAEIsYcHAAAABggAAAEAjiMJCLCHAQABAAsIsIcBAAAAiG10lh2kckAAAABAplRYQVdHUyA4NHwAeJz79x8VfEHjv0LjP0DjAwARuD+B"
+    }
+}

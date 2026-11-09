@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SeaBathy</string>
+
+    <!-- Content descriptions -->
+    <string name="cd_layers">Layers</string>
+    <string name="cd_gps">GPS</string>
+    <string name="cd_waypoint">Waypoint tool</string>
+    <string name="cd_route">Route tool</string>
+    <string name="cd_measure">Measure tool</string>
+    <string name="cd_close">Close</string>
+    <string name="cd_export_gpx">Export GPX</string>
+
+    <!-- Side panel -->
+    <string name="panel_title">Layers</string>
+    <string name="section_map_layers">Map layers</string>
+    <string name="section_waypoints">Waypoints</string>
+    <string name="section_basemap">Basemap</string>
+    <string name="action_settings">Settings</string>
+
+    <!-- Cards -->
+    <string name="route_label">ROUTE</string>
+    <string name="action_undo">UNDO</string>
+    <string name="action_clear">CLEAR</string>
+    <string name="action_speed_source_gps">GPS SPEED</string>
+    <string name="action_speed_source_custom">CRUISE</string>
+    <string name="hint_custom_speed">kt</string>
+    <string name="cd_speed_source_gps">Use live GPS speed for route ETA</string>
+    <string name="cd_speed_source_custom">Use the cruise speed from the boat profile for times and ETAs</string>
+    <string name="cd_custom_speed">Cruise speed</string>
+
+    <!-- Waypoint sheet -->
+    <string name="wpt_dialog_title">New waypoint</string>
+    <string name="wpt_name_hint">Waypoint name</string>
+    <string name="wpt_desc_hint">Description / notes</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_save_waypoint">Save waypoint</string>
+
+    <!-- Map overlay glyphs and placeholders -->
+    <string name="crosshair_glyph">✛</string>
+    <string name="placeholder_dash">—</string>
+
+    <!-- Tool hints -->
+    <string name="hint_waypoint">Tap map to drop a waypoint at the centre crosshair</string>
+    <string name="hint_route">Move the map so the crosshair is on each point, then tap to add it</string>
+    <string name="hint_measure">Tap map to measure — tap CLEAR when done</string>
+    <string name="action_route_save">SAVE</string>
+    <string name="action_route_library">ROUTES</string>
+    <string name="action_route_legs">LEGS</string>
+    <string name="action_route_reverse">REVERSE</string>
+    <string name="action_route_go">▶ GO</string>
+</resources>

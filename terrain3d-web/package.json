@@ -1,0 +1,15 @@
+{
+  "name": "seabathy-terrain3d-web",
+  "private": true,
+  "description": "3D terrain viewer bundled into the Android app's assets (app/src/main/assets/terrain3d). Rebuild with `npm run build` after editing src/.",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node test/chunks.test.mjs"
+  },
+  "dependencies": {
+    "three": "0.170.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.24.0"
+  }
+}

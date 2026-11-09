@@ -1,0 +1,46 @@
+.gradle/
+.kotlin/
+build/
+app/build/
+local.properties
+
+.idea/
+*.iml
+
+*.apk
+*.aab
+
+*.mbtiles
+*.sqlite
+*.db
+# Bundled PROJ database GDAL needs for CRS lookups -- part of the build, not user data.
+!app/src/main/assets/proj/proj.db
+*.tif
+*.tiff
+
+captures/
+*.log
+*.bak*
+*.bad*
+*~
+
+
+# Private signing and environment files
+keystore.properties
+*.jks
+*.keystore
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Anywhere in the repository
+.DS_Store
+Thumbs.db
+.vscode/
+*.exe
+
+# The ready-to-install app
+!download/*.apk

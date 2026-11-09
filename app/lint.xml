@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<lint>
+    <!-- Comes from a dependency's bundled lint checks; this app logs with
+         android.util.Log and its own DiagnosticLog, not Timber. -->
+    <issue id="LogNotTimber" severity="ignore" />
+    <!-- The UI is English-only and builds most labels in code; there are no
+         translations to break. -->
+    <issue id="SetTextI18n" severity="ignore" />
+</lint>

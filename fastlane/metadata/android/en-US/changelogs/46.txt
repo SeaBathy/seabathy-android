@@ -1,0 +1,1 @@
+First public release. Offline bathymetry for boats: your own GeoTIFF surveys and MBTiles charts, free seabed depths anywhere in the world, a 3D seabed view, offline satellite maps, tides, sea conditions, waypoints and route planning. Not for navigation.

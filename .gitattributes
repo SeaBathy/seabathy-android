@@ -1,0 +1,5 @@
+# Text files are stored with LF line endings; build scripts keep the endings their systems need.
+* text=auto
+gradlew text eol=lf
+*.bat text eol=crlf
+*.apk binary
