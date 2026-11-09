@@ -67,7 +67,7 @@ class LayerImportCoordinator(
     }
 
     fun importGeoTiff(uri: Uri) {
-        // Picking a file that is already loaded used to add it a second time.
+        // A file that is already loaded is shown again, not added a second time.
         overlays.layerWithSource(uri.toString())?.let { existing ->
             if (!existing.visible) overlays.setVisible(existing.id, true)
             overlays.boundsOf(existing.id)?.let(onShowArea)

@@ -513,8 +513,8 @@ class OverlayLayerController(
             if (source.colourTileSize == size) null else layer to source
         }
         if (changed.isEmpty()) return
-        // Emptying a big tile cache takes a while: off the main thread, which
-        // it used to freeze long enough for Android to report the app stuck.
+        // Emptying a big tile cache takes a while, so it runs off the main
+        // thread; on it, Android would report the app as not responding.
         scope.launch {
             withContext(Dispatchers.IO) { changed.forEach { (_, source) -> source.setColourTileSize(size) } }
             changed.forEach { (layer, _) ->

@@ -6,9 +6,9 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 
 /**
- * The planned route, saved as it is edited. It used to live only in memory,
- * so the system closing the app in the background (or a dark-mode switch
- * rebuilding the screen) lost it.
+ * The planned route, saved as it is edited, so it survives the system closing
+ * the app in the background or a configuration change (such as a dark-mode
+ * switch) rebuilding the screen.
  */
 class RouteRepository(
     private val preferences: SharedPreferences,

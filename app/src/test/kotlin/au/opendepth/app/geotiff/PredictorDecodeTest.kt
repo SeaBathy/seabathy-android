@@ -7,10 +7,10 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 
 /**
- * Reproduces the reported bug directly: a small TIFF (no predictor) works,
- * a larger real-world-shaped TIFF (Deflate + a predictor, exactly what
- * GDAL/QGIS write by default for compressed Float32 depth grids) previously
- * decoded to nothing, silently.
+ * Checks that TIFFs written with a predictor (Deflate with predictor 3 is what
+ * GDAL and QGIS write by default for compressed Float32 depth grids) decode to
+ * the original depths, and that an unsupported combination fails with an error
+ * instead of silently decoding to nothing.
  *
  * These fixtures are genuinely predictor-encoded (see
  * [PredictorEncodedGeoTiff]'s class doc for why that matters) so a passing

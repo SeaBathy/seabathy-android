@@ -236,5 +236,6 @@ project.
 - **Building from source, architecture and tests:** [DEVELOPMENT.md](DEVELOPMENT.md) and [BUILD_AND_TEST.md](BUILD_AND_TEST.md).
 - **Changes:** [CHANGELOG.md](CHANGELOG.md). Contributions welcome: [CONTRIBUTING.md](CONTRIBUTING.md).
 
-Screenshots use a 10 m survey of reefs off Townsville and IMAS bathymetry of the
-Whitsundays (CC BY 4.0).
+Screenshots use a 10 m survey of reefs off Townsville, and IMAS bathymetry (CC BY 4.0) of the
+Whitsundays and of Hardy and Heart Reefs made with BathyPicker. IMAS covers the seafloor only,
+so in the Whitsundays shots the island heights come from GMRT (CC BY 4.0).

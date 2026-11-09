@@ -11,10 +11,9 @@ object MapStyleFactory {
 
     // OpenFreeMap: OpenStreetMap data, free, with no account or key.
     private const val DARK_STYLE_URL = "https://tiles.openfreemap.org/styles/dark"
-    // Real OpenStreetMap detail (coastline, harbours, roads, place names) to
-    // street zoom. This used to be MapLibre's demotiles style, which only has
-    // country outlines and stops at zoom 6 — a featureless block at any
-    // useful navigation scale.
+    // Real OpenStreetMap detail (coastline, harbours, roads, place names) down
+    // to street zoom. MapLibre's demo style only has country outlines and
+    // stops at zoom 6, which is too coarse for use on the water.
     private const val OSM_STYLE_URL = "https://tiles.openfreemap.org/styles/liberty"
     private const val EMPTY_BACKGROUND = "#111418"
 

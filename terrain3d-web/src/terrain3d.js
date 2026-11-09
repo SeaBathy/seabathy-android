@@ -1245,8 +1245,8 @@ if (uContour > 0.0) {
   // ---------------------------------------------------------------- loop
 
   /**
-   * Starts drawing. Safe to call repeatedly: there is only ever one loop
-   * (calling it on every reload used to stack a new 60 fps loop each time).
+   * Starts drawing. Safe to call repeatedly, for example on every reload:
+   * there is only ever one loop running.
    */
   activate() {
     this.active = true;

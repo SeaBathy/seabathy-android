@@ -13,7 +13,8 @@ class TiffBlockCacheCapacityTest {
 
     @Test
     fun `a wide tiled image caches a whole row of tiles so rows are not re-decoded`() {
-        // 8,000 px wide in 256 px tiles = 32 across; the old fixed 8 thrashed here.
+        // 8,000 px wide in 256 px tiles = 32 across; a smaller cache would
+        // evict each tile before the next row needs it.
         assertEquals(33, blockCacheCapacity(blocksPerRow = 32, blockBytes = tile256Float32))
     }
 

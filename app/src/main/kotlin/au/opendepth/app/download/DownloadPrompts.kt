@@ -43,9 +43,9 @@ class DownloadPrompts(
     }
 
     /**
-     * A download the system stopped (the app was closed under memory
-     * pressure, or the phone restarted) used to vanish without a word,
-     * leaving a partial file behind. Removes it and says so.
+     * Handles a download the system stopped (the app was closed under memory
+     * pressure, or the phone restarted): removes the partial file it left
+     * behind and tells the user, rather than letting it disappear silently.
      */
     private fun reportInterrupted() {
         if (OfflineTileDownloadService.isRunning) return

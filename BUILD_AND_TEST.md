@@ -2,9 +2,11 @@
 
 ## Requirements
 
-- Java 21
+- JDK 21
 - Android SDK with platform 34 and build-tools 34.0.0
 - `local.properties` pointing at the SDK, for example `sdk.dir=/home/you/android-sdk`
+
+Gradle 8.4, the Android Gradle Plugin and Kotlin come with the wrapper.
 
 ## Build and verify
 
@@ -13,18 +15,22 @@ chmod +x gradlew tools/*.sh
 ./tools/build_and_verify.sh
 ```
 
-That runs the unit tests, builds the debug APK and runs Android lint. The APK
-lands at:
+This runs the unit tests, builds the debug APK and runs Android lint. The APK is written to
+`app/build/outputs/apk/debug/app-debug.apk`.
 
-```text
-app/build/outputs/apk/debug/app-debug.apk
+The same steps one at a time:
+
+```bash
+./gradlew testDebugUnitTest   # unit tests
+./gradlew assembleDebug       # debug APK
+./gradlew lintDebug           # Android lint
+./gradlew assembleRelease     # release APK, see below
 ```
 
-## Release build and signing
+## Release builds and signing
 
-`assembleRelease` needs a keystore. It's deliberately not bundled or
-generated automatically — create `keystore.properties` at the repo root
-(gitignored, never commit it):
+A signed release build needs a keystore, which is never part of the repository. Create
+`keystore.properties` at the repository root (it is gitignored):
 
 ```properties
 storeFile=keystore/seabathy-release.jks
@@ -33,7 +39,7 @@ keyAlias=seabathy
 keyPassword=...
 ```
 
-Generate the keystore it points to, if you don't have one:
+If you don't have a keystore yet, create one:
 
 ```bash
 mkdir -p keystore
@@ -41,79 +47,40 @@ keytool -genkeypair -v -keystore keystore/seabathy-release.jks \
   -alias seabathy -keyalg RSA -keysize 2048 -validity 10000
 ```
 
-Then:
+`./gradlew assembleRelease` then writes a signed
+`app/build/outputs/apk/release/app-release.apk`. Without `keystore.properties` the release
+APK is unsigned and won't install.
 
-```bash
-./gradlew assembleRelease
-```
-
-produces `app/build/outputs/apk/release/app-release.apk`, signed with that
-key. Without `keystore.properties` present, `assembleRelease` still builds
-but produces an **unsigned** APK (no `signingConfig` is attached) — install
-will fail until it's signed.
-
-**Keep the keystore.** A release APK is only installable over a previous
-one, without the user uninstalling first, if both are signed with the same
-key. Losing the keystore means every future release needs a fresh key,
-which forces every existing install to be manually uninstalled and
-reinstalled. Back it up somewhere outside this repo; `keystore.properties`
-and `*.jks` are both gitignored so neither the file nor its passwords ever
-reach version control.
-
-**A release build's signature differs from every debug build.** All test
-APKs built during development (`assembleDebug`, or via
-`tools/build_and_verify.sh`) are signed with the Android SDK's shared debug
-key (`~/.android/debug.keystore`). A release build signed with a real
-project key is a *different* signer, so Android refuses to install it over
-an existing debug-signed install with `INSTALL_FAILED_UPDATE_INCOMPATIBLE`
-— **uninstall any debug build already on the test device first.**
-
-Individual tasks:
-
-```bash
-./gradlew testDebugUnitTest   # JVM unit tests
-./gradlew assembleDebug       # debug APK
-./gradlew assembleRelease     # release APK (needs keystore.properties, see above)
-./gradlew lintDebug           # Android lint
-```
-
-## Unit tests
-
-The JVM suite covers the parts that do not need a device: GPX generation and
-XML escaping, coordinate parsing and formatting, great-circle maths, the depth
-ramp model, and the GeoTIFF reader. The GeoTIFF tests synthesise small
-single-band float TIFFs at build time (see `SyntheticGeoTiff`), so they exercise
-real georeferencing, reprojection, no-data handling and downsampling without
-any sample data checked in.
-
-Not covered by JVM tests, because they need Android graphics or a live map:
-bitmap rendering of depth grids, the RGB GeoTIFF path, and all view binding.
-Verify those on device with the smoke test below.
+- **Back up the keystore.** Android only installs an update over an existing install when
+  both are signed with the same key. A lost key means every user has to uninstall before
+  installing the next release.
+- **Debug and release builds don't mix.** Debug builds are signed with the SDK's shared
+  debug key, so installing a release build over one fails with
+  `INSTALL_FAILED_UPDATE_INCOMPATIBLE`. Uninstall the debug build first.
 
 ## Device smoke test
 
-1. Open the app and confirm the previous camera position and waypoints load.
-2. Switch all basemaps, including custom XYZ if configured.
-3. Import raster and vector MBTiles; toggle visibility, opacity, order and
-   base-layer position.
-4. Import the same filename twice and confirm both layers remain available.
-5. Import a GeoTIFF depth raster. Confirm it lands in the right place, then
-   open COLOURS and change the palette and the min/max range; the layer should
-   recolour immediately without re-importing.
-6. Import an RGB GeoTIFF and confirm it appears as an imagery overlay with no
-   depth-colour control.
-7. Add a satellite overlay, then drop its opacity and confirm bathymetry
-   underneath blends through.
-8. Open Settings, then Online map layers. Confirm the URL and attribution fields
-   have a visible dark fill and a border, and that the border highlights while
-   editing. Quick-add several presets.
-9. Delete imported layers and confirm the app stays stable and the files are
-   removed.
-10. Create, edit, jump to and delete waypoints. Confirm the description field
-    is saved with a new waypoint.
-11. Test DD, DDM, DMS and Google-style coordinate input.
-12. Create route and measurement points; confirm distance, bearing and ETA.
-13. Export GPX and confirm the file opens in another app with waypoint names
-    intact, including names containing `&`, `<` and `"`.
-14. Test GPS off, locate and follow modes; background and resume the app.
-15. Rotate or recreate the activity and verify layers and waypoints restore.
+The unit tests cover the logic that runs on the JVM (see
+[DEVELOPMENT.md](DEVELOPMENT.md#tests)). Map rendering, the native GDAL path and the
+screens need a device or emulator (`arm64-v8a` or `x86_64`):
+
+1. Open the app and check the last map position and waypoints are restored.
+2. Switch through the basemaps, including a custom XYZ map if one is set up.
+3. Import raster and vector MBTiles. Change visibility, opacity and order.
+4. Import the same file name twice and check both layers stay available.
+5. Import a GeoTIFF depth survey. Check it is in the right place, then open **Colours** and
+   change the palette and depth range: the layer should recolour without reimporting.
+6. Import a GeoTIFF over 300 MB, or a BigTIFF, and check it draws and sharpens as you zoom
+   in (the GDAL path).
+7. Import an RGB GeoTIFF and check it appears as imagery, with no depth colours.
+8. Add a satellite layer, lower its opacity and check the depths show through.
+9. In **Settings → Online map layers**, add a few presets.
+10. Delete the imported layers and check the app stays stable.
+11. Create, edit, jump to and delete waypoints, including a note.
+12. Enter coordinates as DD, DDM and DMS.
+13. Plan a route and check distance, bearing and ETA.
+14. Export GPX and open it in another app. Names containing `&`, `<` and `"` should come
+    through intact.
+15. Turn GPS off and on, try locate and follow, and send the app to the background and back.
+16. Rotate the screen and check the layers and waypoints are restored.
+17. Open a depth layer in 3D and check it renders and rotates smoothly.
