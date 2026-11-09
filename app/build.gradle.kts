@@ -25,8 +25,8 @@ android {
         applicationId = "au.opendepth.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 46
-        versionName = "1.0.0"
+        versionCode = 47
+        versionName = "1.0.1"
     }
     signingConfigs {
         if (keystorePropertiesFile.exists()) {

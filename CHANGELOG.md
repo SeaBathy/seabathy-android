@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.1 — 2026-11-09
+
+Maintenance update. Everything works as before.
+
+- **3D view:** rebuilt with the latest esbuild (0.28); `npm audit` reports no known vulnerabilities in the 3D viewer's build.
+
 ## 1.0.0 — 2026-11-09
 
 First public release.

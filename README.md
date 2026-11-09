@@ -4,7 +4,7 @@
 Offline depth charts, a 3D seabed, tides and sea conditions, for Android.</p>
 
 <p align="center">
-  <img alt="Version 1.0.0" src="https://img.shields.io/badge/version-1.0.0-0f766e">
+  <img alt="Version 1.0.1" src="https://img.shields.io/badge/version-1.0.1-0f766e">
   <img alt="Android 8.0+" src="https://img.shields.io/badge/Android-8.0%2B-3ddc84?logo=android&logoColor=white">
   <img alt="MIT licence" src="https://img.shields.io/badge/licence-MIT-blue">
   <img alt="No ads, no tracking" src="https://img.shields.io/badge/ads%20%26%20tracking-none-success">
@@ -43,7 +43,7 @@ once it's on the phone. Free and open source, with no account, ads or tracking.
 |---|---|
 | 🗺️ **Your surveys, sharp** | GeoTIFF depth surveys, even multi-gigabyte BigTIFFs, coloured by depth with relief shading. The depth under the crosshair as you pan. |
 | 🌊 **Free depths anywhere** | Download seabed depths for the area on screen, anywhere in the world (GMRT). |
-| 🏝️ **3D seabed** | Rotate and fly over any depth layer. Exaggerate the height up to 100×, drape satellite or offline maps over it, tap for depth and slope. |
+| 🏝️ **3D seabed** | Rotate and fly over any depth layer. Exaggerate the height up to 100× so every reef wall stands out, drape satellite or offline maps over it, tap for depth and slope. |
 | 📶 **Works offline** | Save satellite maps, tides and sea conditions for the area you fish, then use them with no signal. |
 | 🌡️ **Tides and sea conditions** | Tide charts, wind, waves, swell, currents with moving flow lines, sea temperature and its breaks, chlorophyll, sea level and salinity. |
 | 🧭 **Plan the trip** | Waypoints, routes with the least depth on every leg against your draft, tracks, anchor and depth alarms, GPX in and out. |
@@ -55,9 +55,20 @@ once it's on the phone. Free and open source, with no account, ads or tracking.
 | <img src="screenshots/3d-satellite.jpg" width="240"><br>**Satellite on the 3D seabed**<br>Whitehaven Beach and Hill Inlet | <img src="screenshots/3d.jpg" width="240"><br>**The seabed in 3D**<br>Tap anywhere for depth and slope | <img src="screenshots/chart.jpg" width="240"><br>**Every reef in detail**<br>A 10 m survey, coloured by depth |
 | <img src="screenshots/overview.jpg" width="240"><br>**Your survey on the chart**<br>Over the basemap, with the depth at the crosshair | <img src="screenshots/tides.jpg" width="240"><br>**Tides**<br>Highs, lows, sun and moon, offline | <img src="screenshots/conditions.jpg" width="240"><br>**Sea conditions**<br>Currents with flow lines, wind and waves |
 
+### Vertical exaggeration
+
+Hardy Reef and Heart Reef on the Great Barrier Reef, a 10 m survey made with
+[BathyPicker](https://github.com/SeaBathy/BathyPicker). Exaggerate the height to make every
+reef wall, channel and bommie stand out, with depth colours or satellite on top.
+
+| 10× | 100× | |
+|:---:|:---:|:---:|
+| <img src="screenshots/3d-depth-10x.jpg" width="240"><br>Depth colours at 10× | <img src="screenshots/3d-depth-100x.jpg" width="240"><br>Depth colours at 100× | <img src="screenshots/3d-reef-closeup.jpg" width="240"><br>**Zoomed into the reef** with satellite, tapped for depth |
+| <img src="screenshots/3d-satellite-10x.jpg" width="240"><br>Satellite at 10× | <img src="screenshots/3d-satellite-100x.jpg" width="240"><br>Satellite at 100× | |
+
 ## Install
 
-1. Download **[`SeaBathy-1.0.0.apk`](download/SeaBathy-1.0.0.apk)** onto your phone (or
+1. Download **[`SeaBathy-1.0.1.apk`](download/SeaBathy-1.0.1.apk)** onto your phone (or
    from the Releases page).
 2. Open it. If Android asks, allow your browser or file manager to *install unknown apps*.
 3. Open SeaBathy. The first start shows the whole world; zoom in to where you go.
