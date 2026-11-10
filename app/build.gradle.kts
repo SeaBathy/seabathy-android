@@ -90,7 +90,7 @@ dependencies {
     implementation("com.google.android.material:material:1.11.0")
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     implementation("com.google.code.gson:gson:2.10.1")
     // Pure-Java TIFF reader: no native GDAL dependency, and it exposes the
     // GeoTIFF tags needed to georeference an imported raster.

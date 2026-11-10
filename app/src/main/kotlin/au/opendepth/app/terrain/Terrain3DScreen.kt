@@ -417,20 +417,30 @@ class Terrain3DScreen(
             "maxzoom" to it.maxZoom,
             "group" to it.group.key,
             "offline" to it.isOffline,
-            // Only an online map can be downloaded for the area.
-            "savable" to (it.urlTemplate != null),
+            // Only an online map whose provider allows offline copies can be downloaded for the area.
+            "savable" to it.isSavable,
             "colour" to it.colour,
             "attribution" to it.attribution,
             "bounds" to it.bounds?.let { b -> mapOf("west" to b.west, "south" to b.south, "east" to b.east, "north" to b.north) }
         )
     }
 
-    /** The one online map offered: Esri satellite, shown with its credit. */
+    /**
+     * The online maps offered: Esri satellite (view only, under Esri's terms)
+     * and Sentinel-2 cloudless, whose licence allows saving it offline.
+     */
     private fun defaultDrapes(): List<TerrainDrape> = listOfNotNull(
         XyzTilePresets.DEFAULT_SATELLITE.let {
             TerrainDrape(
                 "online-${it.id}", "Esri satellite", 0, it.maxZoom, urlTemplate = it.urlTemplate,
                 group = TerrainDrape.Group.DEFAULT, attribution = it.attribution, colour = "#15803d"
+            )
+        },
+        DataSource.DEFAULT_PRESET.let {
+            TerrainDrape(
+                "online-${it.id}", "Sentinel-2 satellite (saves offline)", 0, SENTINEL2_MAX_ZOOM,
+                urlTemplate = it.urlTemplate, group = TerrainDrape.Group.DEFAULT,
+                attribution = it.attribution, colour = "#0e7490"
             )
         }
     )
@@ -656,7 +666,7 @@ class Terrain3DScreen(
         @JavascriptInterface
         fun saveOffline(id: String) {
             activity.runOnUiThread {
-                val drape = drapes[id] ?: return@runOnUiThread
+                val drape = drapes[id]?.takeIf { it.isSavable } ?: return@runOnUiThread
                 val template = drape.urlTemplate ?: return@runOnUiThread
                 val bounds = grid?.bounds ?: return@runOnUiThread
                 val source = DataSource(id = drape.id, name = drape.label, urlTemplate = template, attribution = drape.attribution)
@@ -761,6 +771,8 @@ class Terrain3DScreen(
         const val NO_SIGNAL_MS = 20_000L
         /** Saving an area offline suggests no deeper than this (about 1 m per pixel). */
         const val MAX_SAVE_ZOOM = 17
+        /** Sentinel-2 cloudless is 10 m imagery: zoom 14 is its full detail. */
+        const val SENTINEL2_MAX_ZOOM = 14
         const val MAX_NAME_LENGTH = 60
         const val CUSTOM_PREFS = "terrain3d"
         const val CUSTOM_KEY = "custom_drapes"

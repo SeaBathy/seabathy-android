@@ -5,6 +5,7 @@
 Maintenance update. Everything works as before.
 
 - **3D view:** rebuilt with the latest esbuild (0.28); `npm audit` reports no known vulnerabilities in the 3D viewer's build.
+- **3D view:** a new **Sentinel-2 satellite** map that can be saved offline with "Save this area offline". Esri satellite stays in the list to look at, but can no longer be saved offline, because Esri's terms don't allow offline copies.
 
 ## 1.0.0 — 2026-11-09
 

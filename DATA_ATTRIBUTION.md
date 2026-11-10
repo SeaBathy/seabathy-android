@@ -32,11 +32,14 @@ on the chart and in the 3D view.
 | OpenTopoMap | © OpenStreetMap contributors, SRTM, OpenTopoMap (CC-BY-SA) | Asks for no bulk downloads |
 | USGS Imagery | USGS The National Map | Allowed (US public domain) |
 | OpenSeaMap seamarks | © OpenSeaMap contributors | Shown online only |
-| Sentinel-2 cloudless 2024 (EOX), the built-in offline source | Sentinel-2 cloudless - https://s2maps.eu by EOX IT Services GmbH (Contains modified Copernicus Sentinel data 2024) | Allowed under [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/): non-commercial use, keep the credit, share packs under the same licence |
+| Sentinel-2 cloudless 2024 (EOX), the built-in offline source (also in 3D) | Sentinel-2 cloudless - https://s2maps.eu by EOX IT Services GmbH (Contains modified Copernicus Sentinel data 2024) | Allowed under [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/): non-commercial use, keep the credit, share packs under the same licence |
 
 The apps' built-in offline download source is Sentinel-2 cloudless, whose
-licence allows offline copies. The offline downloader and the 3D view's
-"Save this area offline" will download from any map or link you choose:
+licence allows offline copies. In the 3D view, "Save this area offline" is
+offered for Sentinel-2 and other maps that allow it, but not for Esri,
+OpenStreetMap or OpenTopoMap, whose terms don't allow offline copies: those
+can be looked at online only. For a map or link you add yourself, the
+offline downloader will download from whatever you choose:
 **the choice is yours, and so is checking whether a provider's terms allow it**.
 SeaBathy is a tool: what you download with it, and from where, is up to you. The
 table above says what the listed providers' terms say. The phone's 3D view keeps

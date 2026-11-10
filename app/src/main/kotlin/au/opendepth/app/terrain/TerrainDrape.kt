@@ -26,4 +26,21 @@ class TerrainDrape(
     enum class Group(val key: String) { DEFAULT("default"), LAYER("layer"), CUSTOM("custom") }
 
     val isOffline: Boolean get() = readTile != null
+
+    /**
+     * Whether "Save this area offline" is offered: an online map whose
+     * provider allows offline copies. Esri, OpenStreetMap and OpenTopoMap
+     * tiles are for viewing only under their terms, so they are not offered.
+     */
+    val isSavable: Boolean get() = urlTemplate != null && allowsOfflineCopies(urlTemplate)
+
+    companion object {
+        /** Tile hosts whose terms don't allow bulk or offline copies (see DATA_ATTRIBUTION.md). */
+        private val VIEW_ONLY_HOSTS = listOf("arcgisonline.com", "arcgis.com", "openstreetmap.org", "opentopomap.org")
+
+        fun allowsOfflineCopies(urlTemplate: String): Boolean {
+            val host = urlTemplate.substringAfter("://", "").substringBefore('/').substringBefore(':').lowercase()
+            return VIEW_ONLY_HOSTS.none { host == it || host.endsWith(".$it") }
+        }
+    }
 }
