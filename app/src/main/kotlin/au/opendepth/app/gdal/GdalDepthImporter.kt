@@ -28,10 +28,11 @@ import kotlin.math.min
 object GdalDepthImporter {
 
     /**
-     * GDAL init, path sanity logging and `gdal.Open`. [sourcePath] must be a
-     * real, absolute filesystem path — see
-     * [au.opendepth.app.storage.RealPathResolver]'s doc for why GDAL's
-     * native `open()` cannot use a `/proc/self/fd/` descriptor path.
+     * GDAL init, path sanity logging and `gdal.Open`. [sourcePath] is a real,
+     * absolute filesystem path, or a `/vsiseabathyfd/` path to a picked
+     * document GDAL reads in place (see
+     * [au.opendepth.app.storage.DescriptorPaths]; Android won't let GDAL
+     * reopen a picked document through a `/proc/self/fd/` path).
      */
     internal fun openDataset(context: Context, sourcePath: String): Dataset {
         GdalSupport.ensureInitialized(context)

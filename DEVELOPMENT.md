@@ -99,11 +99,20 @@ To update it, replace the AAR with a newer release and change the file name in
 | `USE_FULL_SCREEN_INTENT`, `WAKE_LOCK` | The anchor alarm can wake the screen when the anchor drags |
 
 There are no storage permissions (Google Play restricts them). Surveys and charts are picked
-with the system file picker. GDAL needs a real file path (it reopens files itself and can't
-use the picker's `content://` descriptor), so when Android allows the app to open the picked
-file by its path it is read in place; otherwise it is copied once into the app's own storage
-(`files/surveys` for GeoTIFFs, `files/mbtiles` for MBTiles) and opened from there, which also
-keeps it working offline. See
+with the system file picker, and Android won't let the app reopen a picked file by its path.
+So:
+
+- **Big GeoTIFFs (over 300 MB) and BigTIFFs** are read **in place**, at any size, never copied:
+  the app keeps the picked document open and GDAL reads it through a small native virtual file
+  system, `/vsiseabathyfd/` ([`seabathy_fd_vsi.c`](app/src/main/cpp/seabathy_fd_vsi.c),
+  [`DescriptorPaths`](app/src/main/kotlin/au/opendepth/app/storage/DescriptorPaths.kt)).
+  After a restart the layer reopens the same way from its saved URI grant.
+- **Smaller GeoTIFFs** are copied once into `files/surveys` (quick, and the in-memory Kotlin
+  reader needs a normal file); **MBTiles** into `files/mbtiles`. Removing the layer removes
+  the copy.
+
+When the app can open the picked file by its real path (older Android versions), it reads it
+there instead. See
 [`GeoTiffImporter`](app/src/main/kotlin/au/opendepth/app/storage/GeoTiffImporter.kt) and
 [`RealPathResolver`](app/src/main/kotlin/au/opendepth/app/storage/RealPathResolver.kt).
 

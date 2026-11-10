@@ -17,6 +17,7 @@ import au.opendepth.app.data.OverlayLayerRepository
 import au.opendepth.app.diagnostics.DiagnosticLog
 import au.opendepth.app.diagnostics.ResourceTracker
 import au.opendepth.app.download.redactUrl
+import au.opendepth.app.gdal.GdalSupport
 import au.opendepth.app.gdal.GdalTileSource
 import au.opendepth.app.geotiff.DepthGrid
 import au.opendepth.app.geotiff.DepthGridRenderer
@@ -30,6 +31,7 @@ import au.opendepth.app.model.LayerKind
 import au.opendepth.app.model.OverlayLayer
 import au.opendepth.app.settings.XyzTilePreset
 import au.opendepth.app.storage.AppOwnedArtifacts
+import au.opendepth.app.storage.DescriptorPaths
 import au.opendepth.app.storage.GeoTiffImporter
 import au.opendepth.app.storage.MbtilesImporter
 import au.opendepth.app.storage.RealPathResolver
@@ -983,11 +985,18 @@ class OverlayLayerController(
         // resolves content:// URIs, so only those are passed through it.
         val isContentUri = record.source.startsWith("content://")
         val realPath = if (isContentUri) {
-            withContext(Dispatchers.IO) { RealPathResolver.readablePath(context, Uri.parse(record.source)) }
+            withContext(Dispatchers.IO) {
+                val uri = Uri.parse(record.source)
+                RealPathResolver.readablePath(context, uri) ?: runCatching {
+                    GdalSupport.ensureInitialized(context)
+                    DescriptorPaths.gdalPathFor(context, uri)
+                }.getOrNull()
+            }
         } else {
             record.source
         }
-        if (realPath == null || !withContext(Dispatchers.IO) { RealPathResolver.canOpen(realPath) }) {
+        val isInPlace = realPath?.startsWith("/vsiseabathyfd/") == true
+        if (realPath == null || (!isInPlace && !withContext(Dispatchers.IO) { RealPathResolver.canOpen(realPath) })) {
             Log.e(TAG, "Reopening GDAL layer ${record.name} failed: no readable real path")
             DiagnosticLog.log(TAG, "restore GDAL ${record.name}: no readable real path (source=${record.source})")
             onMessage("Could not reload ${record.name} — its access permission may have been revoked")

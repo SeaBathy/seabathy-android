@@ -84,6 +84,15 @@ android {
         buildConfig = true
     }
     testOptions { unitTests.isReturnDefaultValues = true }
+    // The small native GDAL plugin that reads picked files in place
+    // (src/main/cpp). NDK r28 builds 16 KB-aligned libraries by default.
+    ndkVersion = "28.1.13356709"
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
+    }
     // Native libraries stay uncompressed and 16 KB-aligned in the APK and
     // bundle, as Google Play requires for Android 15+ devices.
     packaging {

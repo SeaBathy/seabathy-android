@@ -44,3 +44,7 @@ Thumbs.db
 
 # The ready-to-install app
 !download/*.apk
+
+# CMake build output for the native GDAL plugin
+.cxx/
+app/.cxx/

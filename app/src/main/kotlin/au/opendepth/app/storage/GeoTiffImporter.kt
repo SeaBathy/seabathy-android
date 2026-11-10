@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
 import au.opendepth.app.diagnostics.DiagnosticLog
+import au.opendepth.app.gdal.GdalSupport
 import au.opendepth.app.gdal.GdalTileCache
 import au.opendepth.app.gdal.GdalTileSource
 import au.opendepth.app.geotiff.GeoTiffImportRouter
@@ -27,9 +28,10 @@ import java.util.UUID
  * position and depth range are read); the rest are decoded by
  * [GeoTiffReader] ([ImportedGeoTiff.InMemory]), falling back to GDAL if that
  * fails. When Android gives no readable path for the picked file (the app
- * has no storage permission, as Google Play requires), the file is copied
- * once into the app's own [SURVEY_COPY_DIR] and opened from there, in place,
- * like a downloaded seabed file: it then works offline and after restarts.
+ * has no storage permission, as Google Play requires): a BigTIFF or a file
+ * over the GDAL threshold is read in place by GDAL through [DescriptorPaths],
+ * never copied; a smaller one is copied once into the app's own
+ * [SURVEY_COPY_DIR] and opened from there, like a downloaded seabed file.
  *
  * [uri] must come from `ACTION_OPEN_DOCUMENT` with a persisted permission,
  * so the layer can be reopened after a restart.
@@ -60,6 +62,13 @@ class GeoTiffImporter(private val context: Context, private val tileCacheDir: Fi
     fun import(uri: Uri): ImportedGeoTiff {
         val displayName = displayNameFor(contentResolver, uri)
         if (RealPathResolver.readablePath(context, uri) == null) {
+            // Big surveys and BigTIFFs: GDAL reads the picked document in place
+            // (see DescriptorPaths). Smaller ones are quick to copy into the app,
+            // which also lets the in-memory Kotlin reader decode them.
+            inPlaceGdalPath(uri)?.let { gdalPath ->
+                DiagnosticLog.log(TAG, "reading $displayName in place through GDAL, no copy")
+                return importViaGdal(gdalPath, sourceLabel = uri.toString(), displayName = displayName)
+            }
             return importFile(copyIntoApp(uri, displayName))
         }
         val (path, tempFile) = resolvePath(context, uri, displayName)
@@ -72,6 +81,27 @@ class GeoTiffImporter(private val context: Context, private val tileCacheDir: Fi
         } finally {
             tempFile?.delete()
         }
+    }
+
+    /**
+     * A GDAL path that reads [uri] in place, for a BigTIFF or a file over
+     * [GeoTiffImportRouter.GDAL_SIZE_THRESHOLD_BYTES] (both go to GDAL anyway);
+     * null for smaller classic TIFFs, or when GDAL isn't available.
+     */
+    private fun inPlaceGdalPath(uri: Uri): String? {
+        val size = querySize(context, uri) ?: return null
+        val bigTiff = runCatching {
+            contentResolver.openInputStream(uri)?.use { input ->
+                val header = ByteArray(GeoTiffImportRouter.HEADER_BYTES_NEEDED)
+                input.read(header) == header.size &&
+                    GeoTiffImportRouter.detectFormat(header) == GeoTiffImportRouter.TiffFormat.BIG_TIFF
+            } ?: false
+        }.getOrDefault(false)
+        if (!bigTiff && size <= GeoTiffImportRouter.GDAL_SIZE_THRESHOLD_BYTES) return null
+        return runCatching {
+            GdalSupport.ensureInitialized(context)
+            DescriptorPaths.gdalPathFor(context, uri)
+        }.getOrNull()
     }
 
     /**

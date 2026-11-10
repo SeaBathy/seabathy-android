@@ -36,6 +36,8 @@ object GdalSupport {
             )
 
             gdal.AllRegister()
+            // Lets GDAL read picked files in place without a storage permission.
+            FdFileSystem.install()
             gdal.SetConfigOption("PROJ_DATA", projDir.absolutePath)
             gdal.SetConfigOption("PROJ_LIB", projDir.absolutePath)
             DiagnosticLog.log(

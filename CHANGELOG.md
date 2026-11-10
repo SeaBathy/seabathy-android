@@ -8,8 +8,9 @@ Ready for Google Play. Everything you use works as before.
   closes the 3D view, the waypoint sheet and the side panel first, with Android's predictive
   back animation.
 - **No storage permission:** SeaBathy no longer asks for "All files access". Pick a survey
-  with the file picker as before: when Android allows, it's read in place; otherwise it's
-  copied once into the app, where it also works offline. Removing the layer removes the copy.
+  with the file picker as before. Big surveys (over 300 MB) and BigTIFFs, of any size, are
+  read straight from where they are, never copied. Smaller ones are copied once into the app,
+  where they also work offline; removing the layer removes the copy.
 - **Built-in maps:** the Esri satellite, ocean and topographic maps are no longer built in,
   because Esri's terms need an ArcGIS licence for use in apps. The built-in satellite map is
   now Sentinel-2 cloudless (10 m, can be saved offline). You can still add any map you're
