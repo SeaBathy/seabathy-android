@@ -28,7 +28,8 @@ services are listed separately in [`DATA_ATTRIBUTION.md`](DATA_ATTRIBUTION.md).
 
 ### Native GDAL (`app/libs/gdal-3.7.0.aar`)
 
-Built by [GDAL4Android](https://github.com/kikitte/GDAL4Android). It holds these
+Built with [GDAL4Android](https://github.com/kikitte/GDAL4Android) (commit `efebe20`,
+its 16 KB page-size build, `docker/Dockerfile_16kb` with Android NDK r28). It holds these
 shared libraries, each loaded as a separate `.so`:
 
 | Library | Licence | Source |

@@ -128,7 +128,10 @@ dependencies {
     // Native GDAL, for BigTIFF / files too large for the Kotlin decode path.
     // No Maven/JitPack coordinates are published for this project (see
     // https://github.com/kikitte/GDAL4Android) -- the AAR is downloaded by
-    // hand from its GitHub release and vendored at app/libs/gdal-3.7.0.aar.
+    // hand and vendored at app/libs/gdal-3.7.0.aar: built from GDAL4Android
+    // commit efebe20 ("Enable 16kb page size support") with its
+    // docker/Dockerfile_16kb (Android NDK r28), so every library is 16 KB-aligned
+    // as Google Play requires.
     // It ships native libs for arm64-v8a and x86_64 only (not armeabi-v7a or
     // x86, both of which MapLibre above still covers), so the GDAL import
     // path is only reachable on those two architectures; see GdalSupport.kt.
