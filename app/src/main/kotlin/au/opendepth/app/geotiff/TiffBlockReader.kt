@@ -417,7 +417,7 @@ internal class TiffBlockReader(
         /** Ceiling on decoded blocks held by one reader's LRU. */
         internal const val CACHE_BUDGET_BYTES = 64L * 1024 * 1024
 
-        /** The pre-existing fixed capacity, kept as a floor for small blocks (see [blockCacheCapacity]). */
+        /** The smallest number of blocks kept, for files with small blocks (see [blockCacheCapacity]). */
         internal const val MIN_CACHE_BLOCKS = 8
 
         /**

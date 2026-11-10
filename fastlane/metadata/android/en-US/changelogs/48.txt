@@ -1,0 +1,1 @@
+Ready for Google Play: targets Android 16 and needs no storage permission. Big surveys and BigTIFFs open straight from where they are, at any size. Built-in satellite map is now Sentinel-2 (can be saved offline); add any other map with "Add a map link". Privacy policy in Settings.

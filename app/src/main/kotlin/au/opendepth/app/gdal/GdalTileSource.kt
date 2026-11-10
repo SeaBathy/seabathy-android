@@ -729,8 +729,7 @@ class GdalTileSource private constructor(
 
         /**
          * Opens a GDAL [Dataset] and resolves its raster info once, up
-         * front — fast (no tile pixels are read), unlike the previous
-         * eager pyramid build this replaces for new imports.
+         * front. Fast: no tile pixels are read until tiles are asked for.
          */
         fun open(context: Context, sourcePath: String, cacheFile: File): GdalTileSource {
             val dataset = GdalDepthImporter.openDataset(context, sourcePath)

@@ -109,9 +109,8 @@ android {
     }
 }
 dependencies {
-    // At least 13.1.0 for the upstream fix to TileSet.setBounds()'s
-    // infinite-recursion StackOverflowError (PR #4252) -- see
-    // attachGdalOnDemand's call to it. Uses the "-opengl" artifact because
+    // 13.1.0 or newer: earlier versions overflow the stack in
+    // TileSet.setBounds(), which attachGdalOnDemand calls. Uses the "-opengl" artifact because
     // the plain "android-sdk" artifact defaults to Vulkan from v13.0.0;
     // this keeps rendering on OpenGL ES.
     implementation("org.maplibre.gl:android-sdk-opengl:13.6.1")
