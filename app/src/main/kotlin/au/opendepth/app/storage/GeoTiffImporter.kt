@@ -26,8 +26,10 @@ import java.util.UUID
  * [GdalTileSource] ([ImportedGeoTiff.OnDemand], quick, as only the size,
  * position and depth range are read); the rest are decoded by
  * [GeoTiffReader] ([ImportedGeoTiff.InMemory]), falling back to GDAL if that
- * fails. With no real path, only files up to
- * [SMALL_FILE_FALLBACK_MAX_BYTES] can be opened, from a private copy.
+ * fails. When Android gives no readable path for the picked file (the app
+ * has no storage permission, as Google Play requires), the file is copied
+ * once into the app's own [SURVEY_COPY_DIR] and opened from there, in place,
+ * like a downloaded seabed file: it then works offline and after restarts.
  *
  * [uri] must come from `ACTION_OPEN_DOCUMENT` with a persisted permission,
  * so the layer can be reopened after a restart.
@@ -57,6 +59,9 @@ class GeoTiffImporter(private val context: Context, private val tileCacheDir: Fi
 
     fun import(uri: Uri): ImportedGeoTiff {
         val displayName = displayNameFor(contentResolver, uri)
+        if (RealPathResolver.readablePath(context, uri) == null) {
+            return importFile(copyIntoApp(uri, displayName))
+        }
         val (path, tempFile) = resolvePath(context, uri, displayName)
 
         try {
@@ -67,6 +72,27 @@ class GeoTiffImporter(private val context: Context, private val tileCacheDir: Fi
         } finally {
             tempFile?.delete()
         }
+    }
+
+    /**
+     * Copies a picked survey into [SURVEY_COPY_DIR] (a same-named copy of the
+     * same size is reused rather than copied again). Refuses up front when the
+     * phone hasn't the room, rather than filling it.
+     */
+    private fun copyIntoApp(uri: Uri, displayName: String): File {
+        val dir = File(context.filesDir, SURVEY_COPY_DIR).apply { mkdirs() }
+        val size = querySize(context, uri)
+        val safeName = FilenamePolicy.safeBaseName(displayName, FilenamePolicy.timestampedFallback("survey"))
+        File(dir, "$safeName.$EXTENSION").takeIf { it.isFile && size != null && it.length() == size }?.let {
+            DiagnosticLog.log(TAG, "reusing the app's copy of $displayName: ${it.name}")
+            return it
+        }
+        if (size != null && dir.usableSpace < size + FREE_SPACE_MARGIN_BYTES) {
+            val needGb = String.format(java.util.Locale.US, "%.1f", (size + FREE_SPACE_MARGIN_BYTES) / 1e9)
+            throw IOException("Not enough free space on the phone to open this file: it needs about $needGb GB.")
+        }
+        DiagnosticLog.log(TAG, "no readable path: copying $displayName into the app (sizeBytes=$size)")
+        return PrivateFileImporter(contentResolver, dir, EXTENSION, "survey", context).import(uri).file
     }
 
     /** Opens a file the app itself saved: the layer records its plain path. */
@@ -177,6 +203,12 @@ class GeoTiffImporter(private val context: Context, private val tileCacheDir: Fi
         /** With no real file path, files up to this size are opened from a private copy; bigger ones are refused. */
         private const val SMALL_FILE_FALLBACK_MAX_BYTES = 50L * 1024 * 1024
 
+        /** App-owned copies of picked surveys (see the class doc); removed with their layer. */
+        const val SURVEY_COPY_DIR = "surveys"
+
+        /** Room left over after a copy, so the phone isn't filled to the brim. */
+        private const val FREE_SPACE_MARGIN_BYTES = 300L * 1024 * 1024
+
         /** MIME types the system document picker should surface. */
         val ACCEPTED_MIME_TYPES = arrayOf(
             "image/tiff",
@@ -211,8 +243,8 @@ class GeoTiffImporter(private val context: Context, private val tileCacheDir: Fi
          * one was made.
          */
         private fun resolvePath(context: Context, uri: Uri, displayName: String): Pair<String, File?> {
-            val realPath = RealPathResolver.resolve(context, uri)
-            val realPathReadable = realPath?.let { File(it).canRead() } == true
+            val realPath = RealPathResolver.readablePath(context, uri)
+            val realPathReadable = realPath?.let { RealPathResolver.canOpen(it) } == true
             DiagnosticLog.log(
                 TAG,
                 "real path resolution: uri=$uri resolvedPath=$realPath readable=$realPathReadable file=$displayName"

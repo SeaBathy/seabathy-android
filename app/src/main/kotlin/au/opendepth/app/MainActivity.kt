@@ -10,11 +10,11 @@ import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.os.Environment
-import android.os.StrictMode
 import android.provider.Settings
+import android.os.StrictMode
 import android.util.Log
 import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.core.app.ActivityCompat
@@ -213,25 +213,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private val manageStorageSettings = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) {
-        if (hasManageExternalStorage()) {
-            launchGeoTiffFilePicker()
-        } else {
-            toast("Full file access was not granted — cannot import large GeoTIFF files")
-        }
-    }
-
-    private val legacyStoragePermission = registerForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { granted ->
-        if (granted.values.all { it }) {
-            launchGeoTiffFilePicker()
-        } else {
-            toast("Storage permission is needed to import GeoTIFF files")
-        }
-    }
 
     private val locationPermission = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -279,6 +260,23 @@ class MainActivity : AppCompatActivity() {
         styleCoordinator.loadSettings()
 
         InsetBinder.bind(views)
+        // Back closes the 3D view, the waypoint sheet and the side panel first. A
+        // callback (not onBackPressed, which Android 16 no longer calls for apps
+        // targeting it) also gives the system's predictive back animation.
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                when {
+                    terrain3d.isOpen -> terrain3d.close()
+                    waypointSheet.isVisible -> waypointSheet.hide()
+                    sidePanel.isOpen -> sidePanel.close()
+                    else -> {
+                        isEnabled = false
+                        onBackPressedDispatcher.onBackPressed()
+                        isEnabled = true
+                    }
+                }
+            }
+        })
         sidePanel.bind()
         basemapSelector.bind()
         waypointSheet.bind()
@@ -949,19 +947,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * GDAL needs a real filesystem path for the file the user picks (see
-     * [au.opendepth.app.storage.RealPathResolver]), so importing a GeoTIFF
-     * needs full file access first. That's asked for here, on first import
-     * tap, rather than at app startup — most sessions never touch this
-     * feature at all.
+     * Opens the system file picker. No storage permission is needed: a picked
+     * file is read in place when Android allows it, or copied into the app
+     * once (see [au.opendepth.app.storage.GeoTiffImporter]).
      */
-    private fun launchGeoTiffPicker() {
-        if (hasManageExternalStorage()) {
-            launchGeoTiffFilePicker()
-        } else {
-            showManageStorageExplanation()
-        }
-    }
+    private fun launchGeoTiffPicker() = launchGeoTiffFilePicker()
 
     private fun launchGeoTiffFilePicker() {
         // ACTION_OPEN_DOCUMENT (not ACTION_GET_CONTENT) is what lets the
@@ -975,46 +965,6 @@ class MainActivity : AppCompatActivity() {
                 putExtra(Intent.EXTRA_MIME_TYPES, GeoTiffImporter.ACCEPTED_MIME_TYPES)
             }
         )
-    }
-
-    private fun hasManageExternalStorage(): Boolean = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-        Environment.isExternalStorageManager()
-    } else {
-        ContextCompat.checkSelfPermission(
-            this,
-            Manifest.permission.READ_EXTERNAL_STORAGE
-        ) == PackageManager.PERMISSION_GRANTED &&
-            ContextCompat.checkSelfPermission(
-                this,
-                Manifest.permission.WRITE_EXTERNAL_STORAGE
-            ) == PackageManager.PERMISSION_GRANTED
-    }
-
-    private fun showManageStorageExplanation() {
-        AlertDialog.Builder(this, ALERT_THEME)
-            .setTitle("Full file access needed")
-            .setMessage("SeaBathy needs full file access to read large depth survey files directly.")
-            .setPositiveButton("Continue") { _, _ -> requestManageExternalStorage() }
-            .setNegativeButton("Not now", null)
-            .show()
-    }
-
-    private fun requestManageExternalStorage() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            manageStorageSettings.launch(
-                Intent(
-                    Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
-                    Uri.parse("package:$packageName")
-                )
-            )
-        } else {
-            legacyStoragePermission.launch(
-                arrayOf(
-                    Manifest.permission.READ_EXTERNAL_STORAGE,
-                    Manifest.permission.WRITE_EXTERNAL_STORAGE
-                )
-            )
-        }
     }
 
     private fun pickFileIntent(extensionHint: String): Intent =
@@ -1515,17 +1465,6 @@ class MainActivity : AppCompatActivity() {
     override fun onLowMemory() {
         super.onLowMemory()
         views.mapView.onLowMemory()
-    }
-
-    @Deprecated("Overridden so back dismisses the sheet and panel first")
-    @Suppress("DEPRECATION")
-    override fun onBackPressed() {
-        when {
-            terrain3d.isOpen -> terrain3d.close()
-            waypointSheet.isVisible -> waypointSheet.hide()
-            sidePanel.isOpen -> sidePanel.close()
-            else -> super.onBackPressed()
-        }
     }
 
     /** Public: the download service uses these to build its notification's intent. */

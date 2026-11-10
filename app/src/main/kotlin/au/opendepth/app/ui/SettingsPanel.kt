@@ -318,6 +318,12 @@ class SettingsPanel(
         )
         panels.addRow(
             body,
+            panels.row("Privacy policy", "No account, no ads, no tracking: what the app sends and why") {
+                openPrivacyPolicy()
+            }
+        )
+        panels.addRow(
+            body,
             panels.row("Licences and credits", "Open-source libraries and data sources") {
                 showLicences()
             }
@@ -325,6 +331,14 @@ class SettingsPanel(
 
         refresh()
         settingsDialog = panels.showPanel("Settings", body)
+    }
+
+    private fun openPrivacyPolicy() {
+        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(PRIVACY_POLICY_URL))
+            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        runCatching { context.startActivity(intent) }.onFailure {
+            android.widget.Toast.makeText(context, "Privacy policy: $PRIVACY_POLICY_URL", android.widget.Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun showLicences() {
@@ -342,6 +356,7 @@ class SettingsPanel(
     }
 
     private companion object {
+        const val PRIVACY_POLICY_URL = "https://seabathy.com/privacy"
         const val ROW_CROSSHAIR = "crosshair"
         const val ROW_COORDINATE = "coordinate"
         const val ROW_DEPTH_MODE = "depthMode"

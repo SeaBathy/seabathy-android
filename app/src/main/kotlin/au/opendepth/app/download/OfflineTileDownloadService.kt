@@ -153,6 +153,25 @@ class OfflineTileDownloadService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    /**
+     * Android 15+ allows a data-sync foreground service about 6 hours a day.
+     * When that runs out, stop cleanly (the partial file is tidied up as for a
+     * cancel) instead of letting the system kill the app.
+     */
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        DiagnosticLog.log(TAG, "download reached Android's foreground-service time limit; stopping")
+        downloadJob?.cancel()
+        runner.cancelInFlight()
+        notify(
+            buildSimpleNotification(
+                "Download stopped",
+                "Android's daily time limit for background downloads was reached. Start it again later to carry on."
+            )
+        )
+        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_DETACH)
+        stopSelf(startId)
+    }
+
     private fun notify(notification: Notification) {
         runCatching { notificationManager.notify(NOTIFICATION_ID, notification) }
     }

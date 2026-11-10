@@ -7,9 +7,9 @@ Bug reports, fixes and improvements are welcome.
 - Build and run the tests as described in [BUILD_AND_TEST.md](BUILD_AND_TEST.md):
 
   ```bash
-  ./gradlew testDebugUnitTest
-  ./gradlew assembleDebug
-  ./gradlew lintDebug
+  ./gradlew testGithubDebugUnitTest
+  ./gradlew assembleGithubDebug
+  ./gradlew lintGithubDebug
   ```
 
 - If the change touches GDAL, large-file import or tiling, also run the device smoke test

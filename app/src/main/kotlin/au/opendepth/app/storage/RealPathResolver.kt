@@ -13,9 +13,10 @@ import au.opendepth.app.diagnostics.DiagnosticLog
 import java.io.File
 
 /**
- * Finds the real file path behind a picked `content://` document. GDAL
- * reopens files by path, which Android refuses for a document even when its
- * descriptor reads fine, so the app asks for all-files access.
+ * Finds the real file path behind a picked `content://` document. Without a
+ * storage permission (the app has none, as Google Play requires) Android
+ * usually won't let it be opened by path; [readablePath] says when it can,
+ * and callers otherwise copy the file into the app (see GeoTiffImporter).
  *
  * Tries, in order: the path inside an `externalstorage.documents` ID
  * (`<volume>:<path>`, a "This device" pick), the Downloads provider (see
@@ -23,6 +24,17 @@ import java.io.File
  * when the provider has no real path; callers handle that.
  */
 object RealPathResolver {
+
+    /**
+     * The real path for [uri] when this app can actually open it; null when
+     * there is none or Android won't allow it (no storage permission).
+     */
+    fun readablePath(context: Context, uri: Uri): String? =
+        resolve(context, uri)?.takeIf { canOpen(it) }
+
+    /** Whether [path] really opens for reading (asked by opening it, not by `File.canRead()`). */
+    fun canOpen(path: String): Boolean =
+        runCatching { java.io.RandomAccessFile(path, "r").close(); true }.getOrDefault(false)
 
     fun resolve(context: Context, uri: Uri): String? {
         if (uri.authority == DOWNLOADS_AUTHORITY) {

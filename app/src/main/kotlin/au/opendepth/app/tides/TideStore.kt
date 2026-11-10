@@ -354,7 +354,7 @@ class TideStore(context: Context) {
      * suggest a name. Null offshore or without a connection.
      */
     suspend fun nearbyName(lat: Double, lng: Double): String? = withContext(Dispatchers.IO) {
-        val url = String.format(Locale.US, "https://nominatim.openstreetmap.org/reverse?lat=%.5f&lon=%.5f&format=json&zoom=14", lat, lng)
+        val url = String.format(Locale.US, "https://nominatim.openstreetmap.org/reverse?lat=%.4f&lon=%.4f&format=json&zoom=14", lat, lng)
         val body = client.newCall(
             Request.Builder().url(url).header("User-Agent", "SeaBathy/${BuildConfig.VERSION_NAME} (Android tide places)").build()
         ).execute().use { if (it.isSuccessful) it.body?.string() else null } ?: return@withContext null

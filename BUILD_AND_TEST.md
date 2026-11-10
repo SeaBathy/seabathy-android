@@ -16,15 +16,23 @@ chmod +x gradlew tools/*.sh
 ```
 
 This runs the unit tests, builds the debug APK and runs Android lint. The APK is written to
-`app/build/outputs/apk/debug/app-debug.apk`.
+`app/build/outputs/apk/github/debug/app-github-debug.apk`.
+
+There are two flavours of the same app:
+
+| Flavour | Application id | For |
+|---|---|---|
+| `github` | `au.opendepth.app` | The APK in this repository's `download/` folder and GitHub releases |
+| `play` | `com.seabathy.app` | The Google Play listing |
 
 The same steps one at a time:
 
 ```bash
-./gradlew testDebugUnitTest   # unit tests
-./gradlew assembleDebug       # debug APK
-./gradlew lintDebug           # Android lint
-./gradlew assembleRelease     # release APK, see below
+./gradlew testGithubDebugUnitTest   # unit tests
+./gradlew assembleGithubDebug       # debug APK
+./gradlew lintGithubDebug           # Android lint
+./gradlew assembleGithubPhone       # the GitHub APK (release-fast, signed with this computer's debug key)
+./gradlew bundlePlayRelease         # the Google Play bundle (.aab), signed with the upload key, see below
 ```
 
 ## Release builds and signing
@@ -47,9 +55,10 @@ keytool -genkeypair -v -keystore keystore/seabathy-release.jks \
   -alias seabathy -keyalg RSA -keysize 2048 -validity 10000
 ```
 
-`./gradlew assembleRelease` then writes a signed
-`app/build/outputs/apk/release/app-release.apk`. Without `keystore.properties` the release
-APK is unsigned and won't install.
+`./gradlew bundlePlayRelease` then writes a signed
+`app/build/outputs/bundle/playRelease/app-play-release.aab`, ready to upload to Google Play
+(with Play App Signing, Google re-signs it for users; this key is your upload key). Without
+`keystore.properties` the release build is unsigned and won't upload or install.
 
 - **Back up the keystore.** Android only installs an update over an existing install when
   both are signed with the same key. A lost key means every user has to uninstall before

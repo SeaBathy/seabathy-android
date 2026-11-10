@@ -3,9 +3,12 @@ package au.opendepth.app.settings
 /**
  * A well-known XYZ raster tile endpoint offered as a quick-add overlay.
  *
- * Every entry here is a public endpoint whose provider permits general use
- * with attribution. The attribution string is applied to the layer
- * automatically so the on-map credit is never left blank.
+ * Every entry here is a public endpoint whose provider permits use in a free
+ * app with attribution. The attribution string is applied to the layer
+ * automatically so the on-map credit is never left blank. Services whose
+ * terms need an account or licence for app use (Esri's basemaps, for one)
+ * are not built in; people can still add any of them themselves as a
+ * custom XYZ link, under their own terms.
  */
 data class XyzTilePreset(
     val id: String,
@@ -29,14 +32,14 @@ object XyzTilePresets {
 
     val ALL: List<XyzTilePreset> = listOf(
         XyzTilePreset(
-            id = "esri_world_imagery",
-            label = "Esri World Imagery",
-            description = "High resolution satellite and aerial imagery",
-            urlTemplate = "https://server.arcgisonline.com/ArcGIS/rest/services/" +
-                "World_Imagery/MapServer/tile/{z}/{y}/{x}",
-            attribution = "Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community · Powered by Esri",
+            id = "eox_s2cloudless",
+            label = "Sentinel-2 satellite",
+            description = "Cloud-free satellite picture of the world, 10 m detail (EOX, 2024). Can be saved offline",
+            urlTemplate = "https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2024_3857/default/g/{z}/{y}/{x}.jpg",
+            attribution = "Sentinel-2 cloudless - https://s2maps.eu by EOX IT Services GmbH " +
+                "(Contains modified Copernicus Sentinel data 2024)",
             category = XyzTilePreset.Category.SATELLITE,
-            maxZoom = 19
+            maxZoom = 15
         ),
         XyzTilePreset(
             id = "gibs_true_colour_n20",
@@ -55,16 +58,6 @@ object XyzTilePresets {
             attribution = GIBS_CREDIT,
             category = XyzTilePreset.Category.SATELLITE,
             maxZoom = 9
-        ),
-        XyzTilePreset(
-            id = "esri_world_ocean",
-            label = "Esri Ocean Basemap",
-            description = "Bathymetric shaded relief and ocean features",
-            urlTemplate = "https://server.arcgisonline.com/ArcGIS/rest/services/" +
-                "Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}",
-            attribution = "Esri, GEBCO, NOAA, National Geographic · Powered by Esri",
-            category = XyzTilePreset.Category.NAUTICAL,
-            maxZoom = 13
         ),
         XyzTilePreset(
             id = "usgs_imagery",
@@ -93,21 +86,11 @@ object XyzTilePresets {
             attribution = "(c) OpenStreetMap contributors, SRTM, OpenTopoMap (CC-BY-SA)",
             category = XyzTilePreset.Category.TOPOGRAPHIC,
             maxZoom = 17
-        ),
-        XyzTilePreset(
-            id = "esri_world_topo",
-            label = "Esri World Topographic",
-            description = "Land detail, roads and place names",
-            urlTemplate = "https://server.arcgisonline.com/ArcGIS/rest/services/" +
-                "World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
-            attribution = "Esri, HERE, Garmin, USGS, NGA · Powered by Esri",
-            category = XyzTilePreset.Category.TOPOGRAPHIC,
-            maxZoom = 19
         )
     )
 
     /** The preset used by the one-tap satellite overlay action. */
-    val DEFAULT_SATELLITE: XyzTilePreset = ALL.first { it.id == "esri_world_imagery" }
+    val DEFAULT_SATELLITE: XyzTilePreset = ALL.first { it.id == "eox_s2cloudless" }
 
     val SATELLITE: List<XyzTilePreset> =
         ALL.filter { it.category == XyzTilePreset.Category.SATELLITE }

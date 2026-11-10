@@ -25,9 +25,6 @@ on the chart and in the 3D view.
 | Map | Credit shown | Provider's terms on offline copies |
 | --- | --- | --- |
 | OpenFreeMap Dark / Liberty (basemaps; free, no account or key) | OpenFreeMap © OpenMapTiles, © OpenStreetMap contributors | Basemap only: not offered for download |
-| Esri World Imagery (satellite, also in 3D) | Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community · Powered by Esri | Esri's terms don't allow offline copies outside ArcGIS |
-| Esri Ocean Basemap | Esri, GEBCO, NOAA, National Geographic · Powered by Esri | As Esri World Imagery |
-| Esri World Topographic | Esri, HERE, Garmin, USGS, NGA · Powered by Esri | As Esri World Imagery |
 | OpenStreetMap | © OpenStreetMap contributors | The [tile usage policy](https://operations.osmfoundation.org/policies/tiles/) bans bulk downloads |
 | OpenTopoMap | © OpenStreetMap contributors, SRTM, OpenTopoMap (CC-BY-SA) | Asks for no bulk downloads |
 | USGS Imagery | USGS The National Map | Allowed (US public domain) |
@@ -36,9 +33,13 @@ on the chart and in the 3D view.
 
 The apps' built-in offline download source is Sentinel-2 cloudless, whose
 licence allows offline copies. In the 3D view, "Save this area offline" is
-offered for Sentinel-2 and other maps that allow it, but not for Esri,
-OpenStreetMap or OpenTopoMap, whose terms don't allow offline copies: those
-can be looked at online only. For a map or link you add yourself, the
+offered for Sentinel-2 and other maps that allow it, but not for
+OpenStreetMap or OpenTopoMap (or Esri, if you add it yourself), whose terms
+don't allow offline copies: those can be looked at online only.
+
+Esri's basemaps are not built in, because Esri's terms need an ArcGIS licence
+for use in apps. You can still add one yourself with "Add a map link" if your
+own Esri terms allow it; the app then shows "Powered by Esri" with it. For a map or link you add yourself, the
 offline downloader will download from whatever you choose:
 **the choice is yours, and so is checking whether a provider's terms allow it**.
 SeaBathy is a tool: what you download with it, and from where, is up to you. The

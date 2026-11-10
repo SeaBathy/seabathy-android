@@ -31,11 +31,12 @@ app, see the [README](README.md). For building, signing and the device test, see
 
 ## Quick start
 
-Needs JDK 21 and the Android SDK (platform 34, build-tools 34.0.0), with `sdk.dir` set in
-`local.properties`. Gradle, the Android Gradle Plugin and Kotlin come with the wrapper.
+Needs JDK 21 and the Android SDK (platform 36), with `sdk.dir` set in `local.properties`.
+Gradle, the Android Gradle Plugin and Kotlin come with the wrapper. The app targets Android 16
+(API 36), as Google Play requires.
 
-    ./gradlew testDebugUnitTest   # unit tests
-    ./gradlew assembleDebug       # app/build/outputs/apk/debug/app-debug.apk
+    ./gradlew testGithubDebugUnitTest   # unit tests
+    ./gradlew assembleGithubDebug       # app/build/outputs/apk/github/debug/app-github-debug.apk
 
 The 3D viewer is prebuilt into `app/src/main/assets/terrain3d/`. After changing
 `terrain3d-web/src/`, rebuild it with Node 18 or newer:
@@ -94,13 +95,17 @@ To update it, replace the AAR with a newer release and change the file name in
 | `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_DATA_SYNC`, `POST_NOTIFICATIONS` | Offline downloads in the background, with a progress notification |
 | `ACCESS_FINE_LOCATION`, `ACCESS_COARSE_LOCATION` | Locate, follow, tracks and navigation |
 | `VIBRATE` | Navigation and anchor alarms |
-| `READ_EXTERNAL_STORAGE`, `WRITE_EXTERNAL_STORAGE` (API 29 and below), `MANAGE_EXTERNAL_STORAGE` (API 30+) | Opening surveys and charts by their real path |
+| `FOREGROUND_SERVICE_LOCATION` | Track recording and the anchor alarm keep running with the screen off |
+| `USE_FULL_SCREEN_INTENT`, `WAKE_LOCK` | The anchor alarm can wake the screen when the anchor drags |
 
-GDAL needs a real file path: it reopens files itself and cannot use the `content://`
-descriptor the system file picker returns. The doc comment on
-[`RealPathResolver`](app/src/main/kotlin/au/opendepth/app/storage/RealPathResolver.kt)
-explains the details. When the path can't be resolved, MBTiles and smaller GeoTIFFs fall
-back to a private copy.
+There are no storage permissions (Google Play restricts them). Surveys and charts are picked
+with the system file picker. GDAL needs a real file path (it reopens files itself and can't
+use the picker's `content://` descriptor), so when Android allows the app to open the picked
+file by its path it is read in place; otherwise it is copied once into the app's own storage
+(`files/surveys` for GeoTIFFs, `files/mbtiles` for MBTiles) and opened from there, which also
+keeps it working offline. See
+[`GeoTiffImporter`](app/src/main/kotlin/au/opendepth/app/storage/GeoTiffImporter.kt) and
+[`RealPathResolver`](app/src/main/kotlin/au/opendepth/app/storage/RealPathResolver.kt).
 
 ## Tests
 

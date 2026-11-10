@@ -10,7 +10,7 @@ services are listed separately in [`DATA_ATTRIBUTION.md`](DATA_ATTRIBUTION.md).
 
 | Component | Version | Licence | Source |
 | --- | --- | --- | --- |
-| MapLibre Native for Android | 13.6.1 | BSD 2-Clause | https://github.com/maplibre/maplibre-native |
+| MapLibre Native for Android | 13.6.1 | BSD 2-Clause; the map engine also contains Boost, RapidJSON, earcut, protozero, HarfBuzz, FreeType and about 25 more components, each listed with its licence in Licences and credits ([LICENSES.core.md](https://github.com/maplibre/maplibre-native/blob/main/LICENSES.core.md)) | https://github.com/maplibre/maplibre-native |
 | MapLibre Java (GeoJSON, Turf) | 6.0.1 | MIT | https://github.com/maplibre/maplibre-java |
 | MapLibre Gestures | 0.0.4 | BSD 2-Clause | https://github.com/maplibre/maplibre-gestures-android |
 | Timber | 5.0.1 | Apache 2.0 | https://github.com/JakeWharton/timber |

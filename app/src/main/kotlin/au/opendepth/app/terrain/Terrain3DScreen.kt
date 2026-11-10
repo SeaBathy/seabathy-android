@@ -426,19 +426,13 @@ class Terrain3DScreen(
     }
 
     /**
-     * The online maps offered: Esri satellite (view only, under Esri's terms)
-     * and Sentinel-2 cloudless, whose licence allows saving it offline.
+     * The built-in online map: Sentinel-2 cloudless, whose licence allows
+     * saving it offline. Other satellite maps can be added as custom links.
      */
     private fun defaultDrapes(): List<TerrainDrape> = listOfNotNull(
-        XyzTilePresets.DEFAULT_SATELLITE.let {
-            TerrainDrape(
-                "online-${it.id}", "Esri satellite", 0, it.maxZoom, urlTemplate = it.urlTemplate,
-                group = TerrainDrape.Group.DEFAULT, attribution = it.attribution, colour = "#15803d"
-            )
-        },
         DataSource.DEFAULT_PRESET.let {
             TerrainDrape(
-                "online-${it.id}", "Sentinel-2 satellite (saves offline)", 0, SENTINEL2_MAX_ZOOM,
+                "online-${it.id}", "Sentinel-2 satellite", 0, SENTINEL2_MAX_ZOOM,
                 urlTemplate = it.urlTemplate, group = TerrainDrape.Group.DEFAULT,
                 attribution = it.attribution, colour = "#0e7490"
             )

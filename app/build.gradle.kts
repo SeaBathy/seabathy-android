@@ -20,13 +20,29 @@ val keystoreProperties = Properties().apply {
 
 android {
     namespace = "au.opendepth.app"
-    compileSdk = 34
+    compileSdk = 36
     defaultConfig {
         applicationId = "au.opendepth.app"
         minSdk = 26
-        targetSdk = 34
-        versionCode = 47
-        versionName = "1.0.1"
+        // Google Play requires apps and updates to target Android 16 (API 36)
+        // from 31 August 2026.
+        targetSdk = 36
+        versionCode = 48
+        versionName = "1.1.0"
+    }
+    // Two builds of the same app. "github" keeps the original application id,
+    // so the APKs already installed from GitHub keep updating. "play" is the
+    // Google Play listing, under SeaBathy's own id (it can never change once
+    // published there).
+    flavorDimensions += "store"
+    productFlavors {
+        create("github") {
+            dimension = "store"
+        }
+        create("play") {
+            dimension = "store"
+            applicationId = "com.seabathy.app"
+        }
     }
     signingConfigs {
         if (keystorePropertiesFile.exists()) {
@@ -68,6 +84,11 @@ android {
         buildConfig = true
     }
     testOptions { unitTests.isReturnDefaultValues = true }
+    // Native libraries stay uncompressed and 16 KB-aligned in the APK and
+    // bundle, as Google Play requires for Android 15+ devices.
+    packaging {
+        jniLibs { useLegacyPackaging = false }
+    }
     // The release deliverable is a plain SeaBathy.apk (versioning lives in
     // versionName/versionCode, not the filename).
     applicationVariants.all {

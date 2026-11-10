@@ -6,15 +6,15 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 echo "[1/3] Unit tests"
-./gradlew testDebugUnitTest
+./gradlew testGithubDebugUnitTest
 
 echo "[2/3] Debug APK"
-./gradlew assembleDebug
+./gradlew assembleGithubDebug
 
 echo "[3/3] Android lint"
-./gradlew lintDebug
+./gradlew lintGithubDebug
 
-APK="$ROOT/app/build/outputs/apk/debug/app-debug.apk"
+APK="$ROOT/app/build/outputs/apk/github/debug/app-github-debug.apk"
 test -f "$APK"
 ls -lh "$APK"
 echo "SeaBathy verification passed."

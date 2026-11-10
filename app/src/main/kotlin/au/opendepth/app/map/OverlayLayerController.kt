@@ -101,7 +101,10 @@ class OverlayLayerController(
     /** Decides which files [remove] and the post-restore sweep may delete; see its doc. */
     private val artifacts = AppOwnedArtifacts(
         context.filesDir,
-        listOf(MBTILES_DIR, GEOTIFF_TILE_CACHE_DIR, SEABED_DIR, LEGACY_GEOTIFF_DIR, LEGACY_GEOTIFF_PYRAMID_DIR)
+        listOf(
+            MBTILES_DIR, GEOTIFF_TILE_CACHE_DIR, SEABED_DIR, GeoTiffImporter.SURVEY_COPY_DIR,
+            LEGACY_GEOTIFF_DIR, LEGACY_GEOTIFF_PYRAMID_DIR
+        )
     )
 
     /** While the first restore runs: the stack it is reloading, and layers added before it began. */
@@ -980,11 +983,11 @@ class OverlayLayerController(
         // resolves content:// URIs, so only those are passed through it.
         val isContentUri = record.source.startsWith("content://")
         val realPath = if (isContentUri) {
-            withContext(Dispatchers.IO) { RealPathResolver.resolve(context, Uri.parse(record.source)) }
+            withContext(Dispatchers.IO) { RealPathResolver.readablePath(context, Uri.parse(record.source)) }
         } else {
             record.source
         }
-        if (realPath == null || !withContext(Dispatchers.IO) { File(realPath).canRead() }) {
+        if (realPath == null || !withContext(Dispatchers.IO) { RealPathResolver.canOpen(realPath) }) {
             Log.e(TAG, "Reopening GDAL layer ${record.name} failed: no readable real path")
             DiagnosticLog.log(TAG, "restore GDAL ${record.name}: no readable real path (source=${record.source})")
             onMessage("Could not reload ${record.name} — its access permission may have been revoked")
