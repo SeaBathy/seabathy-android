@@ -132,7 +132,19 @@ plain Kotlin and has its own test (`GdalDepthImporterWktTest`).
 
 ## F-Droid
 
-F-Droid builds every app from source, including native code, and doesn't normally accept
-prebuilt binaries such as the GDAL AAR. Publishing there would need GDAL built from source
-as part of the Gradle build, or an exception from the F-Droid maintainers. The APK on the
-Releases page is the supported way to install.
+F-Droid builds every app from source. The `fdroid` build (`com.seabathy.app`, the same app
+as `play`) has no prebuilt parts there: its recipe, [`fdroid/com.seabathy.app.yml`](fdroid/com.seabathy.app.yml),
+deletes the bundled GDAL AAR, `proj.db` and the 3D viewer bundle, then rebuilds them:
+
+- [`tools/build-gdal.sh`](tools/build-gdal.sh) `<ndk>` builds GDAL 3.7.0 (with its Java
+  bindings), PROJ 9.2.1, SQLite, Expat and GNU libiconv from their source releases (checked
+  against pinned SHA-256 hashes) into `app/libs/gdal-3.7.0.aar`, and regenerates
+  `app/src/main/assets/proj/proj.db`. Linux only; needs Android NDK r28, a JDK, cmake, make,
+  swig, ant, sqlite3 and curl.
+- `npm ci && npm run build` in `terrain3d-web/` rebuilds the 3D viewer.
+
+Then `./gradlew assembleFdroidRelease`. To submit, the recipe goes into F-Droid's
+[fdroiddata](https://gitlab.com/fdroid/fdroiddata) repository as `metadata/com.seabathy.app.yml`
+(merge request), after the matching `fdroid-vX.Y.Z` tag is pushed. F-Droid releases live on the
+`fdroid` branch; `main` is the GitHub and Google Play build. The store text, icon and
+screenshots come from `fastlane/metadata/android/`.

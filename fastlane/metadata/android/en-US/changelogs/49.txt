@@ -1,0 +1,1 @@
+Builds entirely from source, ready for F-Droid. No changes to how the app works.

@@ -1,0 +1,40 @@
+Categories:
+  - Navigation
+  - Science & Education
+License: MIT
+AuthorName: SeaBathy
+WebSite: https://seabathy.com
+SourceCode: https://github.com/SeaBathy/seabathy-android
+IssueTracker: https://github.com/SeaBathy/seabathy-android/issues
+Changelog: https://github.com/SeaBathy/seabathy-android/blob/HEAD/CHANGELOG.md
+
+AutoName: SeaBathy
+
+RepoType: git
+Repo: https://github.com/SeaBathy/seabathy-android.git
+
+Builds:
+  - versionName: 1.1.1
+    versionCode: 49
+    commit: fdroid-v1.1.1
+    subdir: app
+    sudo:
+      - apt-get update
+      - apt-get install -y cmake make swig ant sqlite3 curl nodejs npm
+    gradle:
+      - fdroid
+    rm:
+      - app/libs/gdal-3.7.0.aar
+      - app/src/main/assets/proj/proj.db
+      - app/src/main/assets/terrain3d/terrain.js
+      - download
+    prebuild: sdkmanager 'cmake;3.22.1'
+    build:
+      - ../tools/build-gdal.sh $$NDK$$
+      - cd ../terrain3d-web && npm ci --no-audit --no-fund && npm run build
+    ndk: 28.1.13356709
+
+AutoUpdateMode: Version
+UpdateCheckMode: Tags ^fdroid-v[0-9.]+$
+CurrentVersion: 1.1.1
+CurrentVersionCode: 49

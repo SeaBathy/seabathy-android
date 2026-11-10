@@ -27,19 +27,25 @@ android {
         // Google Play requires apps and updates to target Android 16 (API 36)
         // from 31 August 2026.
         targetSdk = 36
-        versionCode = 48
-        versionName = "1.1.0"
+        versionCode = 49
+        versionName = "1.1.1"
     }
-    // Two builds of the same app. "github" keeps the original application id,
-    // so the APKs already installed from GitHub keep updating. "play" is the
-    // Google Play listing, under SeaBathy's own id (it can never change once
-    // published there).
+    // Three builds of the same app. "github" keeps the original application
+    // id, so the APKs already installed from GitHub keep updating. "play" is
+    // the Google Play listing, under SeaBathy's own id (it can never change
+    // once published there). "fdroid" is the same app as "play", built by
+    // F-Droid entirely from source (see tools/build-gdal.sh and
+    // fdroid/com.seabathy.app.yml); F-Droid signs it with its own key.
     flavorDimensions += "store"
     productFlavors {
         create("github") {
             dimension = "store"
         }
         create("play") {
+            dimension = "store"
+            applicationId = "com.seabathy.app"
+        }
+        create("fdroid") {
             dimension = "store"
             applicationId = "com.seabathy.app"
         }
@@ -125,12 +131,12 @@ dependencies {
     // GeoTIFF tags needed to georeference an imported raster.
     implementation("mil.nga:tiff:3.0.0")
     // Native GDAL, for BigTIFF / files too large for the Kotlin decode path.
-    // No Maven/JitPack coordinates are published for this project (see
-    // https://github.com/kikitte/GDAL4Android) -- the AAR is downloaded by
-    // hand and vendored at app/libs/gdal-3.7.0.aar: built from GDAL4Android
-    // commit efebe20 ("Enable 16kb page size support") with its
-    // docker/Dockerfile_16kb (Android NDK r28), so every library is 16 KB-aligned
-    // as Google Play requires.
+    // GDAL publishes no Android build, so app/libs/gdal-3.7.0.aar is built
+    // from the original source releases by tools/build-gdal.sh (Android NDK
+    // r28, so every library is 16 KB-aligned as Google Play requires). The
+    // copy in the repository was built the same way with GDAL4Android
+    // (https://github.com/kikitte/GDAL4Android, commit efebe20); F-Droid
+    // rebuilds it with the script.
     // It ships native libs for arm64-v8a and x86_64 only (not armeabi-v7a or
     // x86, both of which MapLibre above still covers), so the GDAL import
     // path is only reachable on those two architectures; see GdalSupport.kt.
