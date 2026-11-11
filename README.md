@@ -72,7 +72,7 @@ reef wall, channel and bommie stand out, with depth colours or satellite on top.
 2. Open it. If Android asks, allow your browser or file manager to *install unknown apps*.
 3. Open SeaBathy. The first start shows the whole world; zoom in to where you go.
 
-Needs Android 8.0 or newer. Large GeoTIFFs (over about 1 GB) use the app's built-in GDAL,
+Needs Android 8.0 or newer. Big GeoTIFFs (over about 300 MB) and BigTIFFs use the app's built-in GDAL,
 which runs on 64-bit phones (almost every phone from the last several years).
 
 ## How to
