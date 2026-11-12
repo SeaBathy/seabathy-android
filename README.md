@@ -4,7 +4,7 @@
 Offline depth charts, a 3D seabed, tides and sea conditions, for Android.</p>
 
 <p align="center">
-  <img alt="Version 1.1.0" src="https://img.shields.io/badge/version-1.1.0-0f766e">
+  <img alt="Version 1.1.2" src="https://img.shields.io/badge/version-1.1.2-0f766e">
   <img alt="Android 8.0+" src="https://img.shields.io/badge/Android-8.0%2B-3ddc84?logo=android&logoColor=white">
   <img alt="MIT licence" src="https://img.shields.io/badge/licence-MIT-blue">
   <img alt="No ads, no tracking" src="https://img.shields.io/badge/ads%20%26%20tracking-none-success">
@@ -67,7 +67,7 @@ reef wall, channel and bommie stand out, with depth colours or satellite on top.
 
 ## Install
 
-1. Download **[`SeaBathy-1.1.0.apk`](download/SeaBathy-1.1.0.apk)** onto your phone (or
+1. Download **[`SeaBathy-1.1.2.apk`](download/SeaBathy-1.1.2.apk)** onto your phone (or
    from the Releases page).
 2. Open it. If Android asks, allow your browser or file manager to *install unknown apps*.
 3. Open SeaBathy. The first start shows the whole world; zoom in to where you go.

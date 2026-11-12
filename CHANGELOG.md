@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.1.2 — 2026-11-12
+
+Small improvements to sea conditions. Everything else works as before.
+
+- **Temperature at depth updates straight away:** choosing a new "How far down" now downloads just that
+  layer for the area on the map, instead of waiting for the next full update.
+- **Clearer values box:** "Surface 24.1 °C · chlorophyll 0.20 mg/m³", then "50 m down 22.0 °C", then
+  salinity and sea level, so surface and deeper readings can't be mixed up.
+- **Clearer names:** "Temperature at depth (model)" and "Sea level and eddies (satellite)", and a one-line
+  explanation of temperature breaks (where warm and cold water meet, often where fish gather).
+
 ## 1.1.0 — 2026-11-10
 
 Ready for Google Play. Everything you use works as before.

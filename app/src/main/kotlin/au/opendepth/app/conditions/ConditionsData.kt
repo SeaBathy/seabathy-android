@@ -219,7 +219,7 @@ enum class SatelliteKind(val label: String, val unit: String, val required: Bool
     /** Height of the sea against its long-term average: eddies stand out. Stored in cm. */
     SEA_LEVEL("Sea level", "cm"),
     SALINITY("Salinity", "PSU"),
-    TEMP_BELOW("Temperature below the surface", "°C")
+    TEMP_BELOW("Temperature at depth", "°C")
 }
 
 class SatelliteGrid(val kind: SatelliteKind, val grid: GeoGrid, val dateMillis: Long, val values: FloatArray) {

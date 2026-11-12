@@ -1,0 +1,1 @@
+Sea conditions: temperature at depth updates straight away when you change the depth. Clearer values box (surface vs. depth readings) and clearer layer names.

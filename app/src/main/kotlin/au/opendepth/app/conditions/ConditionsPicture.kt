@@ -20,9 +20,9 @@ enum class ColourChoice(val label: String, val forecast: Boolean, val fixedRange
     SEA_TEMP_SATELLITE("Sea temperature (satellite)", false),
     SEA_TEMP_BREAKS("Temperature breaks (satellite)", false),
     SEA_TEMP_FORECAST("Sea temperature (forecast)", true),
-    TEMP_BELOW("Temperature below the surface (model)", false),
+    TEMP_BELOW("Temperature at depth (model)", false),
     CHLOROPHYLL("Chlorophyll (satellite, 5-day blend)", false),
-    SEA_LEVEL("Sea level, eddies (satellite altimetry)", false),
+    SEA_LEVEL("Sea level and eddies (satellite)", false),
     SALINITY("Salinity (satellite)", false);
 
     val satellite: SatelliteKind?

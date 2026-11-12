@@ -1347,7 +1347,7 @@ class ConditionsFeature(
         body.removeAllViews()
         body.addView(panels.caption(
             "Wind, waves, swell and currents (tidal flow included) for up to 8 days, plus sea temperature and its " +
-                "breaks, chlorophyll, sea level and salinity from satellites, and temperature below the surface. " +
+                "breaks, chlorophyll, sea level and salinity from satellites, and temperature at depth from an ocean model. " +
                 "Worldwide, and saved on the phone for use offline.",
             topPaddingDp = 8
         ))
@@ -1367,7 +1367,11 @@ class ConditionsFeature(
                 refreshDialog()
             }
         })
-        body.addView(panels.caption("Or tap a line in the box on the chart. Each shows its own direction lines; sea temperature and chlorophyll show the current's.", topPaddingDp = 0))
+        body.addView(panels.caption(
+            "Or tap a line in the box on the chart. Each shows its own direction lines; sea temperature and chlorophyll " +
+                "show the current's. Temperature breaks are where warm and cold water meet, often where fish gather.",
+            topPaddingDp = 0
+        ))
 
         body.addView(panels.sectionHeader("SPOT"))
         panels.addRow(body, panels.row("Spot", spotLabel()) { setSpot() })
@@ -1418,7 +1422,7 @@ class ConditionsFeature(
             refreshDialog()
         })
         panels.addRow(body, panels.row("Sea temperature colours", temperatureRangeLabel()) { pickTemperatureRange() })
-        panels.addRow(body, panels.row("Temperature below the surface", "${NavFormat(units()).depth(belowDepthM.toDouble())} down") {
+        panels.addRow(body, panels.row("Temperature at depth", "${NavFormat(units()).depth(belowDepthM.toDouble())} down") {
             val choices = BELOW_DEPTHS
             val format = NavFormat(units())
             panels.showChoicePanel("How far down", choices.map { format.depth(it.toDouble()) }, choices.indexOf(belowDepthM)) { i ->
@@ -1426,7 +1430,7 @@ class ConditionsFeature(
                 belowDepthM = choices[i]
                 preferences.edit().putInt(KEY_BELOW_DEPTH, belowDepthM).apply()
                 refreshDialog()
-                callbacks.toast("The next update of an area gets this depth")
+                refreshBelowDepth()
             }
         })
         val opacityLabel = panels.caption("Colour opacity ${(opacity * 100).roundToInt()}%", topPaddingDp = 4)
@@ -1675,6 +1679,54 @@ class ConditionsFeature(
     }
 
     /** Downloads an area; [replacingId] updates that saved area (otherwise one with the same bounds is replaced). */
+    /**
+     * After "How far down" changes: downloads only the temperature at the new depth for the area on the map (or
+     * the spot's), so it shows straight away without downloading the whole forecast again.
+     */
+    private fun refreshBelowDepth() {
+        val target = area ?: spotArea
+        val depthText = NavFormat(units()).depth(belowDepthM.toDouble())
+        when {
+            target == null -> { callbacks.toast("Saved: the next download gets the temperature $depthText down"); return }
+            downloading -> { callbacks.toast("Saved: the next download gets the temperature $depthText down"); return }
+            !callbacks.isOnline() -> { callbacks.toast("No internet: the temperature $depthText down comes with the next update"); return }
+        }
+        val a = target ?: return
+        val depth = belowDepthM
+        downloading = true
+        status = "Downloading the temperature $depthText down…"
+        refreshDialog()
+        downloadJob = scope.launch {
+            val updated = withContext(downloads) {
+                runCatching {
+                    val grid = client.satellite(SatelliteKind.TEMP_BELOW, a.south, a.west, a.north, a.east, depth)
+                    ConditionsArea(
+                        id = a.id, name = a.name, south = a.south, west = a.west, north = a.north, east = a.east,
+                        fetchedMillis = System.currentTimeMillis(), forecast = a.forecast,
+                        satellites = a.satellites + (SatelliteKind.TEMP_BELOW to grid), belowDepthM = depth
+                    ).also { store.save(it) }
+                }
+            }
+            status = null
+            downloading = false
+            updated.onSuccess { fresh ->
+                if (spotArea?.id == fresh.id) spotArea = fresh
+                if (area?.id == fresh.id) {
+                    area = fresh
+                    lastPictureKey = null
+                    scaleCache = null
+                }
+                if (shown) redraw() else updateBox()
+                callbacks.toast("Temperature $depthText down updated for ${fresh.name}")
+            }.onFailure {
+                DiagnosticLog.logError(TAG, "temperature at depth download FAILED", it)
+                callbacks.toast("Couldn't get the temperature $depthText down: ${message(it)}")
+            }
+            refreshDialog()
+        }
+        downloadJob?.invokeOnCompletion { downloading = false }
+    }
+
     private fun download(
         south: Double, west: Double, north: Double, east: Double, replacingId: String?, note: String? = null,
         /** An automatic update: no messages unless it gets nothing. */
@@ -2029,23 +2081,25 @@ class ConditionsFeature(
             val satTemp = a.satellites[SatelliteKind.SEA_TEMP]?.sample(lat, lng)
             val modelTemp = f?.sample(ForecastField.SEA_TEMP, lat, lng, time, masked)
             when {
-                satTemp != null && satTemp.isFinite() -> water += "Sea ${format.temperature(satTemp.toDouble())}"
-                modelTemp != null && modelTemp.isFinite() -> water += "Sea ${format.temperature(modelTemp.toDouble())}"
+                satTemp != null && satTemp.isFinite() -> water += "Surface ${format.temperature(satTemp.toDouble())}"
+                modelTemp != null && modelTemp.isFinite() -> water += "Surface ${format.temperature(modelTemp.toDouble())}"
             }
             a.satellites[SatelliteKind.CHLOROPHYLL]?.sample(lat, lng)?.takeIf { it.isFinite() && a.isSea(lat, lng) != false }?.let {
-                water += String.format(Locale.US, if (it < 1) "chl %.2f mg/m³" else "chl %.1f mg/m³", it)
+                water += String.format(Locale.US, if (it < 1) "chlorophyll %.2f mg/m³" else "chlorophyll %.1f mg/m³", it)
             }
             if (water.isNotEmpty()) out += Value(null, water.joinToString(" · "))
 
             // The coarser layers: one line, as they change slowly.
             if (a.isSea(lat, lng) != false) {
                 fun coarse(kind: SatelliteKind) = a.satellites[kind]?.let { if (masked) it.sampleToShore(lat, lng) else it.sample(lat, lng) }?.takeIf { it.isFinite() }
-                val deeper = listOfNotNull(
-                    coarse(SatelliteKind.TEMP_BELOW)?.let { "${format.temperature(it.toDouble())} ${format.depth(a.belowDepthM.toDouble())} down" },
-                    coarse(SatelliteKind.SALINITY)?.let { String.format(Locale.US, "salinity %.1f", it) },
-                    coarse(SatelliteKind.SEA_LEVEL)?.let { "level ${format.seaLevel(it.toDouble())}" }
+                coarse(SatelliteKind.TEMP_BELOW)?.let {
+                    out += Value(null, "${format.depth(a.belowDepthM.toDouble())} down ${format.temperature(it.toDouble())}")
+                }
+                val surface = listOfNotNull(
+                    coarse(SatelliteKind.SALINITY)?.let { String.format(Locale.US, "Salinity %.1f", it) },
+                    coarse(SatelliteKind.SEA_LEVEL)?.let { "sea level ${format.seaLevel(it.toDouble())}" }
                 )
-                if (deeper.isNotEmpty()) out += Value(null, "Water " + deeper.joinToString(" · "))
+                if (surface.isNotEmpty()) out += Value(null, surface.joinToString(" · "))
             }
             return out
         }
