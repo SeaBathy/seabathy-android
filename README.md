@@ -26,6 +26,8 @@ once it's on the phone. Free and open source, with no account, ads or tracking.
 > **Not for navigation.** SeaBathy does not include official nautical charts. Use it
 > alongside proper charts and navigation equipment, never instead of them.
 
+**New here?** The [how-to guide](https://seabathy.com/guide) shows the whole path in a few minutes: get a free depth file with BathyPicker, open it on your phone or PC, and put it on your chartplotter with AT5 Chart Maker.
+
 ## Contents
 
 - [Highlights](#highlights)
@@ -82,7 +84,8 @@ which runs on 64-bit phones (almost every phone from the last several years).
 
 1. Copy the file to the phone (a GeoTIFF `.tif` survey, or an `.mbtiles` chart pack).
 2. Open the menu (☰) → **Settings** → **Load GeoTIFF** or **Load MBTiles file**.
-3. Pick the file. A GeoTIFF is checked, then appears as a depth layer and the map flies to it.
+3. Pick the file. Files from the BathyPicker app are under **This device → Download → BathyPicker**.
+   A GeoTIFF is checked, then appears as a depth layer and the map flies to it.
 4. In the **Layers** drawer, tap **Colours** to choose a palette and depth range. The presets
    (reef and shallows, inshore, coastal, offshore) are a quick start.
 
@@ -130,17 +133,57 @@ moon. Save weeks or months ahead for offline use.
 <summary><b>Sea conditions</b></summary>
 
 **Settings** → **Sea conditions**. Pick what to show on the map (wind, current, waves, swell,
-sea temperature, temperature breaks, chlorophyll, sea level, salinity). Data for 200 km round
-your spot is downloaded and kept up to date, with a time slider, Play, and a values box at
-the boat or the crosshair.
+sea temperature, temperature breaks, chlorophyll, sea level, salinity, or the temperature at a
+depth you choose). Data for 200 km round your spot is downloaded and kept up to date, with a
+time slider and Play.
+
+The values box shows the readings at the boat, or at the crosshair while a layer is on: surface
+temperature and chlorophyll, then the temperature at your chosen depth, then salinity and sea
+level. Tap a line to show that layer on the map. **Save the area on screen** keeps another fishing
+ground, up to about 500 km across. Temperature breaks are where warm and cold water meet, often
+where fish gather.
 </details>
 
 <details>
 <summary><b>Plan a route</b></summary>
 
-Tap the route button, then tap the chart to add points (or tap waypoints). **Legs** lists
-each leg's bearing, distance, time, fuel and the least survey depth against your draft plus
-safety margin. Save, reverse, export as GPX, or start navigating it.
+Tap the route button, then move the map so the crosshair is on each point and tap to add it
+(or tap waypoints). **Legs** lists each leg's bearing, distance, time, fuel and the least survey
+depth against your draft plus safety margin.
+
+**Settings** → **Saved routes**: load, reverse, rename, export as GPX, or **Go** to navigate it.
+While navigating you get distance and bearing to the next point, cross-track error and ETA, with
+arrival, off-course and shallow-water alarms. Set your draft and margin in **Boat & navigation**.
+</details>
+
+<details>
+<summary><b>Waypoints</b></summary>
+
+Tap the waypoint button, move the map so the crosshair is on the spot, and tap the map. Give it a
+name, icon, colour and notes. Tap a waypoint on the chart to see or edit it, and search them all
+from the Layers drawer.
+</details>
+
+<details>
+<summary><b>Anchor alarm</b></summary>
+
+**Settings** → **Anchor alarm** → **Drop anchor at the boat**. Set the alarm circle to your anchor
+line plus a boat length. It keeps watching with the screen off, and sounds if the boat drags out
+of the circle or the GPS goes quiet for a minute. **Stop anchor alarm** ends it.
+</details>
+
+<details>
+<summary><b>Record a track</b></summary>
+
+**Settings** → **Tracks** → **Start recording**. It records with the screen off, shown by a
+notification. **Stop and save** when you're done, then show it on the chart or **Share GPX**.
+</details>
+
+<details>
+<summary><b>Swap marks with a plotter or PC (GPX)</b></summary>
+
+**Settings** → **Import GPX** reads waypoints and routes from a chartplotter, SeaBathy Desktop or
+another app. **Export waypoints and route** shares yours as a GPX file.
 </details>
 
 <details>
@@ -196,7 +239,7 @@ height, wind (including Beaufort), waves and swell, current and sea temperature.
 
 - Tide curves, highs and lows, heights above the lowest tide, tide-corrected depths; saved offline for up to two years
 - Currents (with the tide's flow), waves, swell and wind, hourly for up to 8 days
-- Satellite sea temperature, temperature breaks, chlorophyll, sea level and salinity; temperature below the surface at a depth you choose
+- Satellite sea temperature, temperature breaks, chlorophyll, sea level and salinity; temperature at a depth you choose (10 to 300 m)
 - Colour layers with moving flow lines, a time slider and values at the crosshair
 </details>
 
