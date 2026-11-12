@@ -1010,8 +1010,8 @@ class ConditionsFeature(
         if (shown && a === shownArea) boxWarning.visibility = View.GONE else showWarning(boxWarning, a)
         // Wind first (it's what the box shows closed), then the rest in a fixed order.
         val values = values(a, lat, lng, time, NavFormat(units()))
-            .filter { wanted == null || it.text.substringBefore(' ') in wanted }
-            .sortedBy { ROW_ORDER.indexOf(it.text.substringBefore(' ')).let { i -> if (i < 0) ROW_ORDER.size else i } }
+            .filter { wanted == null || it.row in wanted }
+            .sortedBy { ROW_ORDER.indexOf(it.row).let { i -> if (i < 0) ROW_ORDER.size else i } }
         val bearing = map.cameraPosition.bearing
         boxRows.forEachIndexed { i, row ->
             val value = values.getOrNull(i)
@@ -1021,7 +1021,7 @@ class ConditionsFeature(
             }
             row.view.visibility = View.VISIBLE
             row.text.text = value.text
-            row.layer = layerOfRow(value.text.substringBefore(' '), a)
+            row.layer = layerOfRow(value.row, a)
             row.from = a
             row.highlight(shown && row.layer != null && (row.layer == colour || (colour == ColourChoice.CHLOROPHYLL && row.layer?.satellite != null)))
             if (value.towardsDegrees == null) {
@@ -1083,14 +1083,15 @@ class ConditionsFeature(
     private fun spotLabel(): String =
         if (followGps) "Following the GPS" else fixedSpot?.let { (lat, lng) -> defaultName(lat, lng, lat, lng) } ?: "Not set"
 
-    /** The box line that shows [layer], by its first word. */
+    /** The box line ([Value.row]) that shows [layer]. */
     private fun rowNameOf(layer: ColourChoice): String? = when (layer) {
         ColourChoice.WIND -> "Wind"
         ColourChoice.CURRENT -> "Current"
         ColourChoice.WAVES -> "Waves"
         ColourChoice.SWELL -> "Swell"
         ColourChoice.SEA_TEMP_SATELLITE, ColourChoice.SEA_TEMP_BREAKS, ColourChoice.SEA_TEMP_FORECAST, ColourChoice.CHLOROPHYLL -> "Sea"
-        ColourChoice.TEMP_BELOW, ColourChoice.SEA_LEVEL, ColourChoice.SALINITY -> "Water"
+        ColourChoice.TEMP_BELOW -> "Depth"
+        ColourChoice.SEA_LEVEL, ColourChoice.SALINITY -> "Water"
         ColourChoice.NONE -> null
     }
 
@@ -1102,8 +1103,8 @@ class ConditionsFeature(
         "Swell" -> ColourChoice.SWELL
         "Sea" -> if (SatelliteKind.SEA_TEMP in a.satellites) ColourChoice.SEA_TEMP_SATELLITE else ColourChoice.SEA_TEMP_FORECAST
         // Keeps the layer showing when it's one of this line's.
+        "Depth" -> ColourChoice.TEMP_BELOW
         "Water" -> if (rowNameOf(colour) == "Water" && a.satellites[colour.satellite] != null) colour else when {
-            SatelliteKind.TEMP_BELOW in a.satellites -> ColourChoice.TEMP_BELOW
             SatelliteKind.SEA_LEVEL in a.satellites -> ColourChoice.SEA_LEVEL
             else -> ColourChoice.SALINITY
         }
@@ -1923,7 +1924,7 @@ class ConditionsFeature(
         private const val ONLINE_CHECK_MS = 5_000L
         private const val LAST_KNOWN_MS = 30_000L
         private const val CLOSED_MARK = "▾"
-        private val ROW_ORDER = listOf("Wind", "Current", "Waves", "Swell", "Sea", "Water")
+        private val ROW_ORDER = listOf("Wind", "Current", "Waves", "Swell", "Sea", "Depth", "Water")
         /** What "Show on the map" offers, in order (the forecast's own sea temperature is left out: the satellite's is better). */
         private val MAP_CHOICES = listOf(
             ColourChoice.WIND, ColourChoice.CURRENT, ColourChoice.WAVES, ColourChoice.SWELL,
@@ -1962,7 +1963,7 @@ class ConditionsFeature(
         /** Between downloads, so two never land in the same minute of Open-Meteo's limit. */
         private const val MIN_DOWNLOAD_GAP_MS = 75_000L
         private const val MAX_ARROWS_PER_SIDE = 12
-        private const val BOX_ROWS = 6
+        private const val BOX_ROWS = 7
         private const val PLAY_STEP_MS = 650L
         private const val PLAY = "Play"
         private const val PAUSE = "Pause"
@@ -2050,8 +2051,11 @@ class ConditionsFeature(
 
         fun compass(degrees: Double): String = POINTS[(((degrees % 360) + 360) % 360 / 45 + 0.5).toInt() % 8]
 
-        /** One line of the values box: an arrow pointing [towardsDegrees] (none for null) and its text. */
-        data class Value(val towardsDegrees: Double?, val text: String)
+        /**
+         * One line of the values box: an arrow pointing [towardsDegrees] (none for null), its text, and which
+         * [row] it is ("Wind", "Sea", "Depth", "Water"...), which picks the layer a tap on it shows.
+         */
+        data class Value(val towardsDegrees: Double?, val text: String, val row: String = text.substringBefore(' '))
 
         /**
          * The values at a point and time, in the user's units. With satellite
@@ -2087,19 +2091,19 @@ class ConditionsFeature(
             a.satellites[SatelliteKind.CHLOROPHYLL]?.sample(lat, lng)?.takeIf { it.isFinite() && a.isSea(lat, lng) != false }?.let {
                 water += String.format(Locale.US, if (it < 1) "chlorophyll %.2f mg/m³" else "chlorophyll %.1f mg/m³", it)
             }
-            if (water.isNotEmpty()) out += Value(null, water.joinToString(" · "))
+            if (water.isNotEmpty()) out += Value(null, water.joinToString(" · "), "Sea")
 
-            // The coarser layers: one line, as they change slowly.
+            // The coarser layers, which change slowly: the temperature at depth, then salinity and sea level.
             if (a.isSea(lat, lng) != false) {
                 fun coarse(kind: SatelliteKind) = a.satellites[kind]?.let { if (masked) it.sampleToShore(lat, lng) else it.sample(lat, lng) }?.takeIf { it.isFinite() }
                 coarse(SatelliteKind.TEMP_BELOW)?.let {
-                    out += Value(null, "${format.depth(a.belowDepthM.toDouble())} down ${format.temperature(it.toDouble())}")
+                    out += Value(null, "${format.depth(a.belowDepthM.toDouble())} down ${format.temperature(it.toDouble())}", "Depth")
                 }
                 val surface = listOfNotNull(
                     coarse(SatelliteKind.SALINITY)?.let { String.format(Locale.US, "Salinity %.1f", it) },
                     coarse(SatelliteKind.SEA_LEVEL)?.let { "sea level ${format.seaLevel(it.toDouble())}" }
                 )
-                if (surface.isNotEmpty()) out += Value(null, surface.joinToString(" · "))
+                if (surface.isNotEmpty()) out += Value(null, surface.joinToString(" · "), "Water")
             }
             return out
         }
