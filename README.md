@@ -1,7 +1,7 @@
 <h1 align="center">SeaBathy</h1>
 
 <p align="center"><b>See what's under the boat.</b><br>
-Offline depth charts, a 3D seabed, tides and sea conditions, for Android.</p>
+Your depth maps in 3D, offline charts, tides and sea conditions. Works anywhere in the world.</p>
 
 <p align="center">
   <img alt="Version 1.1.2" src="https://img.shields.io/badge/version-1.1.2-0f766e">
