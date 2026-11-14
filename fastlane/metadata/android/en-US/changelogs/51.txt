@@ -1,0 +1,1 @@
+New: Buoys, beacons, pipelines (beta) map layer in Settings, off by default, with a not-for-navigation warning each time it is turned on. Sea temperature and heights now default to Celsius and metres, and temperature at depth starts at 10 m.

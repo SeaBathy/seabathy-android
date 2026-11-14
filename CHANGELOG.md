@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.0 — 2026-11-15
 
 - **Buoys, beacons, pipelines (beta):** a new map layer in Settings → Map display, off by default.
   It shows channel markers, cardinals, special marks, lights, moorings, offshore pipelines,

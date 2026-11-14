@@ -88,14 +88,13 @@ types mapped to IALA region A symbols):
 
 - Navigation aids and public moorings: Transport for NSW (CC BY); WA Department of Transport,
   Navigation Aids DOT-004 and Abrolhos Islands public moorings (CC BY 3.0 AU); Vicmap Hydro
-  navigation points (CC BY 4.0) and the Victorian eMapWater marine infrastructure service
-  (Victorian Government); Queensland lighthouses and Queensland Parks marine moorings and reef
-  protection markers (State of Queensland); AMSA aids to navigation (CC BY 4.0).
+  navigation points (CC BY 4.0); Queensland lighthouses (State of Queensland, CC BY 4.0); AMSA
+  aids to navigation (CC BY 4.0).
 - Offshore petroleum pipelines: NOPTA, and Geoscience Australia Oil and Gas Pipelines (CC BY 4.0).
 - Submarine cable protection zones: ACMA (via the CSIRO/NESP data service).
 - Mooring areas, anchorages, marinas and some mooring buoys: © OpenStreetMap contributors (ODbL).
 
-Many marks are missing (Queensland marks, SA, NT and Tasmania), some are out of date, and some
+Many marks are missing (most Queensland marks, SA, NT and Tasmania; Victorian marks have no port or starboard type), some are out of date, and some
 types are guessed from the data. Not for navigation.
 
 ## Not for navigation
