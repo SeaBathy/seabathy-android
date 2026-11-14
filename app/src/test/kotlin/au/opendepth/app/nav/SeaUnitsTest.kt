@@ -63,6 +63,7 @@ class SeaUnitsTest {
         assertEquals(SeaSpeedUnit.MPH, SeaSpeedUnit.like(SpeedUnit.MPH))
         assertEquals(HeightUnit.METRES, HeightUnit.defaultFor(DepthUnit.METRES, "AU"))
         assertEquals(HeightUnit.FEET, HeightUnit.defaultFor(DepthUnit.FATHOMS, "AU"))
-        assertEquals(HeightUnit.FEET, HeightUnit.defaultFor(DepthUnit.METRES, "us"))
+        assertEquals(HeightUnit.METRES, HeightUnit.defaultFor(DepthUnit.METRES, "us"))
+        assertEquals(TemperatureUnit.CELSIUS, TemperatureUnit.defaultFor("US"))
     }
 }

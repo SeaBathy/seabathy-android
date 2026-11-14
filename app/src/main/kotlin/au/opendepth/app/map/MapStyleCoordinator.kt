@@ -25,7 +25,8 @@ class MapStyleCoordinator(
     private val isOnline: () -> Boolean = { true },
     /** Credits for data drawn outside the overlay stack (sea conditions). */
     private val extraAttributions: () -> List<String> = { emptyList() },
-    private val graticule: GraticuleController? = null
+    private val graticule: GraticuleController? = null,
+    private val navMarks: NavMarksController? = null
 ) {
     /** Showing the blank offline canvas instead of the chosen online basemap. */
     var usingOfflineFallback = false
@@ -167,7 +168,7 @@ class MapStyleCoordinator(
         mapHolder.style = loadedStyle
         mapHolder.map?.cameraPosition = preservedCamera
 
-        BaseMapLayers.install(loadedStyle, graticule)
+        BaseMapLayers.install(loadedStyle, graticule, navMarks)
         overlays.attachOrRestore(generation) {
             if (!mapHolder.isCurrent(generation)) return@attachOrRestore
             DiagnosticLog.log(TAG, "overlays ready: path=$path generation=$generation")

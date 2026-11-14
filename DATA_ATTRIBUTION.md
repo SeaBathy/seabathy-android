@@ -80,6 +80,24 @@ phone or PC only. SeaBathy shows their credit on the map while they're shown.
 The forecasts come from models about 8 km apart. Near the shore, round
 headlands and in narrow channels the real current can be very different.
 
+## Buoys, beacons, pipelines and cables (beta layer)
+
+Off by default. Shown only after the user ticks that it is not for navigation. Built from
+these free datasets (positions rounded to about 1 m, lines simplified to about 15 m, mark
+types mapped to IALA region A symbols):
+
+- Navigation aids and public moorings: Transport for NSW (CC BY); WA Department of Transport,
+  Navigation Aids DOT-004 and Abrolhos Islands public moorings (CC BY 3.0 AU); Vicmap Hydro
+  navigation points (CC BY 4.0) and the Victorian eMapWater marine infrastructure service
+  (Victorian Government); Queensland lighthouses and Queensland Parks marine moorings and reef
+  protection markers (State of Queensland); AMSA aids to navigation (CC BY 4.0).
+- Offshore petroleum pipelines: NOPTA, and Geoscience Australia Oil and Gas Pipelines (CC BY 4.0).
+- Submarine cable protection zones: ACMA (via the CSIRO/NESP data service).
+- Mooring areas, anchorages, marinas and some mooring buoys: © OpenStreetMap contributors (ODbL).
+
+Many marks are missing (Queensland marks, SA, NT and Tasmania), some are out of date, and some
+types are guessed from the data. Not for navigation.
+
 ## Not for navigation
 
 SeaBathy and any supplied map data are for research, planning, educational, and situational-awareness use only.

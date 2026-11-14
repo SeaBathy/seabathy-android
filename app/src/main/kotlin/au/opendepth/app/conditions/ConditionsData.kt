@@ -319,7 +319,7 @@ class ConditionsArea(
         abs(south - s) < 0.01 && abs(west - w) < 0.01 && abs(north - n) < 0.01 && abs(east - e) < 0.01
 
     companion object {
-        const val DEFAULT_BELOW_DEPTH_M = 50
+        const val DEFAULT_BELOW_DEPTH_M = 10
         /** Sea conditions stop here: the forecast models don't go nearer the poles. */
         const val MAX_LAT = 80.0
         const val MAX_LNG = 180.0

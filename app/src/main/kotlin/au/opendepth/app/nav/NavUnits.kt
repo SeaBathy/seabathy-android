@@ -48,14 +48,11 @@ enum class TemperatureUnit(val label: String) {
     fun ofDifference(celsius: Double): Double = if (this == FAHRENHEIT) celsius * 9 / 5 else celsius
 
     companion object {
-        /** Fahrenheit where people use it, Celsius everywhere else. */
-        fun defaultFor(country: String): TemperatureUnit =
-            if (country.uppercase(Locale.US) in setOf("US", "BS", "BZ", "KY", "PW", "FM", "MH", "LR")) FAHRENHEIT else CELSIUS
+        /** Celsius until the user picks otherwise, wherever the phone is set to. */
+        @Suppress("UNUSED_PARAMETER")
+        fun defaultFor(country: String): TemperatureUnit = CELSIUS
     }
 }
-
-/** Countries that use feet and Fahrenheit day to day. */
-private val IMPERIAL_COUNTRIES = setOf("US", "BS", "BZ", "KY", "PW", "FM", "MH", "LR")
 
 /** Heights at sea: tides, waves and swell. */
 enum class HeightUnit(val label: String, val perMetre: Double) {
@@ -67,9 +64,10 @@ enum class HeightUnit(val label: String, val perMetre: Double) {
     fun toMetres(value: Double): Double = value / perMetre
 
     companion object {
-        /** Feet for anyone already using feet or fathoms for depth, or where people use them. */
+        /** Metres, unless depths are already shown in feet or fathoms. */
+        @Suppress("UNUSED_PARAMETER")
         fun defaultFor(depth: DepthUnit, country: String): HeightUnit =
-            if (depth != DepthUnit.METRES || country.uppercase(Locale.US) in IMPERIAL_COUNTRIES) FEET else METRES
+            if (depth != DepthUnit.METRES) FEET else METRES
     }
 }
 

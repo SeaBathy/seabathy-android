@@ -43,6 +43,9 @@ class SettingsPanel(
         val onImportGpx: () -> Unit,
         val showGrid: () -> Boolean,
         val onShowGridChanged: (Boolean) -> Unit,
+        val showNavMarks: () -> Boolean,
+        /** Turning on asks for the not-for-navigation confirmation first; [done] gets the new state. */
+        val onShowNavMarksChanged: (Boolean, done: (Boolean) -> Unit) -> Unit,
         val onGetSeabed: () -> Unit
     )
 
@@ -71,6 +74,8 @@ class SettingsPanel(
                 if (callbacks.showWaypointNames()) "On" else "Off"
             rows[ROW_GRID]?.text = "Latitude and longitude grid\n" +
                 if (callbacks.showGrid()) "On" else "Off"
+            rows[ROW_NAV_MARKS]?.text = "Buoys, beacons, pipelines (beta)\n" +
+                if (callbacks.showNavMarks()) "On" else "Off"
         }
 
         body.addView(panels.sectionHeader("MAP DISPLAY"))
@@ -180,6 +185,19 @@ class SettingsPanel(
             ) { index ->
                 callbacks.onShowGridChanged(index == 1)
                 refresh()
+            }
+        }.also { panels.addRow(body, it) }
+
+        rows[ROW_NAV_MARKS] = panels.row(
+            "Buoys, beacons, pipelines (beta)",
+            if (callbacks.showNavMarks()) "On" else "Off"
+        ) {
+            panels.showChoicePanel(
+                title = "Buoys, beacons, pipelines (beta)",
+                labels = listOf("Off", "On"),
+                selectedIndex = if (callbacks.showNavMarks()) 1 else 0
+            ) { index ->
+                callbacks.onShowNavMarksChanged(index == 1) { refresh() }
             }
         }.also { panels.addRow(body, it) }
 
@@ -365,6 +383,7 @@ class SettingsPanel(
         const val ROW_XYZ = "xyz"
         const val ROW_WAYPOINT_NAMES = "waypointNames"
         const val ROW_GRID = "grid"
+        const val ROW_NAV_MARKS = "nav_marks"
 
         val COLOUR_NAMES = listOf(
             "Marine teal",

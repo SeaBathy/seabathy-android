@@ -136,6 +136,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var styleCoordinator: MapStyleCoordinator
     private lateinit var waypointOverlay: WaypointOverlayController
     private lateinit var graticule: GraticuleController
+    private lateinit var navMarks: au.opendepth.app.map.NavMarksController
     private lateinit var navFeature: NavigationFeature
     private lateinit var conditions: au.opendepth.app.conditions.ConditionsFeature
     private val routeController: RouteController get() = navFeature.routes
@@ -418,9 +419,12 @@ class MainActivity : AppCompatActivity() {
         graticule = GraticuleController(mapHolder).apply {
             setVisible(settingsRepository.loadShowGrid())
         }
+        // Always starts off: turning it on asks for the not-for-navigation tick again.
+        navMarks = au.opendepth.app.map.NavMarksController(mapHolder)
 
         styleCoordinator = MapStyleCoordinator(
             graticule = graticule,
+            navMarks = navMarks,
             mapHolder = mapHolder,
             settings = settingsRepository,
             overlays = overlays,
@@ -428,7 +432,10 @@ class MainActivity : AppCompatActivity() {
             onAttributionChanged = { text -> hud.showAttribution(text) },
             onMessage = ::toast,
             isOnline = ::hasWorkingInternet,
-            extraAttributions = { if (::conditions.isInitialized) conditions.credits() else emptyList() }
+            extraAttributions = {
+                (if (::conditions.isInitialized) conditions.credits() else emptyList()) +
+                    (if (::navMarks.isInitialized && navMarks.visible) listOf(au.opendepth.app.map.NavMarksController.CREDIT) else emptyList())
+            }
         )
         watchConnectivity()
 
@@ -762,8 +769,59 @@ class MainActivity : AppCompatActivity() {
                 hud.showMeasureSummary(measureController.summary())
             }
 
-            ToolMode.NONE -> Unit
+            ToolMode.NONE -> showNavMarkAt(lat, lng)
         }
+    }
+
+    private fun setNavMarksVisible(value: Boolean) {
+        navMarks.setVisible(value)
+        styleCoordinator.refreshAttribution()
+    }
+
+    /** The nav marks layer is only shown once the user has ticked that it is not for navigation. */
+    private fun confirmNavMarks(onResult: (Boolean) -> Unit) {
+        if (isFinishing || isDestroyed) return onResult(false)
+        val pad = (20 * resources.displayMetrics.density).toInt()
+        val tick = android.widget.CheckBox(this).apply {
+            text = "I understand this is not for navigation"
+            setPadding(pad / 4, pad / 2, 0, 0)
+        }
+        val box = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(pad, pad / 2, pad, 0)
+            addView(android.widget.TextView(this@MainActivity).apply {
+                text = "This layer shows buoys, beacons, lights, moorings, pipelines and submarine cables " +
+                    "gathered from free government data and OpenStreetMap.\n\n" +
+                    "It is NOT a nautical chart and must not be used for navigation. Marks can be moved, " +
+                    "removed or added at any time, positions may be old or wrong, many marks are missing, " +
+                    "and some types are guessed from the data. Always use official charts, notices to " +
+                    "mariners and your own eyes."
+            })
+            addView(tick)
+        }
+        var answered = false
+        val dialog = AlertDialog.Builder(this, ALERT_THEME)
+            .setTitle("Not for navigation")
+            .setView(box)
+            .setPositiveButton("Show layer") { _, _ ->
+                answered = true
+                onResult(true)
+            }
+            .setNegativeButton("Cancel", null)
+            .setOnDismissListener { if (!answered) onResult(false) }
+            .show()
+        val ok = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+        ok.isEnabled = false
+        tick.setOnCheckedChangeListener { _, checked -> ok.isEnabled = checked }
+    }
+
+    private fun showNavMarkAt(lat: Double, lng: Double) {
+        if (!navMarks.visible) return
+        val map = mapHolder.map ?: return
+        val point = map.projection.toScreenLocation(org.maplibre.android.geometry.LatLng(lat, lng))
+        val (title, detail) = navMarks.describeAt(point) ?: return
+        if (isFinishing || isDestroyed) return
+        AlertDialog.Builder(this, ALERT_THEME).setTitle(title).setMessage(detail).setPositiveButton("OK", null).show()
     }
 
     private fun showWaypointSheetAtCentre(fallbackLat: Double, fallbackLng: Double) {
@@ -901,6 +959,16 @@ class MainActivity : AppCompatActivity() {
                     onShowGridChanged = { visible ->
                         settingsRepository.saveShowGrid(visible)
                         graticule.setVisible(visible)
+                    },
+                    showNavMarks = { navMarks.visible },
+                    onShowNavMarksChanged = { wanted, done ->
+                        // The warning is shown, and must be ticked, every time the layer is turned on.
+                        if (!wanted) {
+                            setNavMarksVisible(false)
+                            done(false)
+                        } else {
+                            confirmNavMarks { accepted -> if (accepted) setNavMarksVisible(true); done(accepted) }
+                        }
                     },
                     onGetSeabed = ::getSeabedDepths,
                     dataSources = DataSourceDialog.Callbacks(
