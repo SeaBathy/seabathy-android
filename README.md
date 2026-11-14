@@ -122,6 +122,19 @@ Sentinel-2 cloudless satellite imagery.
 </details>
 
 <details>
+<summary><b>Sharper satellite pictures</b></summary>
+
+The built-in satellite map is free Sentinel-2 imagery, about 10 m per pixel: good for reefs,
+sand and channels, but soft up close. For more detail you can add any online satellite map
+that gives an XYZ tile link (a web address with `{z}`, `{x}` and `{y}` in it) under
+**Settings → Online map layers → Your own tile link**. Some providers, Esri World Imagery for example, have sub-metre imagery of most
+coastlines. Those services are run by their owners under their own terms, which usually limit
+how they may be used: check them before adding one, and use it on your own account. SeaBathy
+shows the provider's credit with any map you add, and doesn't save maps offline from
+providers whose terms don't allow it.
+</details>
+
+<details>
 <summary><b>Tides</b></summary>
 
 Tap the **Tide** chip at the top right. Choose a place, or let it follow the GPS. You get the
