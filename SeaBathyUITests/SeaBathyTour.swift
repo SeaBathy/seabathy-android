@@ -103,8 +103,8 @@ final class SeaBathyTour: XCTestCase {
 
     /// Moves the chart a little, so the crosshair sits on a new spot.
     func panMap(dx: CGFloat, dy: CGFloat) {
-        let from = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.6))
-        let to = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5 + dx, dy: 0.6 + dy))
+        let from = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.38))
+        let to = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5 + dx, dy: 0.38 + dy))
         from.press(forDuration: 0.1, thenDragTo: to, withVelocity: .slow, thenHoldForDuration: 0.3)
         sleep(1)
     }
@@ -367,6 +367,8 @@ final class SeaBathyTour: XCTestCase {
         settingsRow("Anchor alarm")
         tap("Stop anchor alarm", wait: 12)
         sleep(1)
+        let stop = app.alerts.buttons.matching(NSPredicate(format: "label BEGINSWITH[c] 'Stop'")).firstMatch
+        if stop.exists { stop.tap() }
         done()
         tap("GPS"); tap("GPS")
     }

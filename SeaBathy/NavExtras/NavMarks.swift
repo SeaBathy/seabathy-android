@@ -167,21 +167,16 @@ final class NavMarksController: ObservableObject {
     // The not-for-navigation tick ------------------------------------------------------------
 
     /// Shown over the Settings sheet with UIKit, since the toggle lives in a sheet.
+    /// Shown as the app's own sheet: a UIKit page sheet raised over (or just after) the
+    /// Settings sheet was silently refused, so the layer could never be turned on.
     private func confirm(_ onResult: @escaping (Bool) -> Void) {
-        guard let top = AppModel.topViewController() else { return onResult(false) }
-        let holder = NavMarksHostHolder()
-        let view = NavMarksConfirmView { accepted in
-            holder.host?.dismiss(animated: true)
-            onResult(accepted)
+        app.present(detents: [.medium, .large]) {
+            NavMarksConfirmView { [weak app] accepted in
+                app?.dismissSheet()
+                onResult(accepted)
+            }
+            .interactiveDismissDisabled(true)
         }
-        let host = UIHostingController(rootView: view)
-        holder.host = host
-        host.modalPresentationStyle = .pageSheet
-        host.isModalInPresentation = true
-        if let sheet = host.sheetPresentationController {
-            sheet.detents = [.medium(), .large()]
-        }
-        top.present(host, animated: true)
     }
 }
 
