@@ -110,8 +110,9 @@ class BackupFeature(
             toast("That isn't a SeaBathy backup")
             return
         }
-        val what = "${summary.waypoints} waypoints, ${summary.routes} routes" +
-            (if (summary.app == "android") ", ${summary.tracks} tracks, ${summary.photos} photos" else "")
+        fun count(n: Int, what: String) = "$n $what${if (n == 1) "" else "s"}"
+        val what = count(summary.waypoints, "waypoint") + ", " + count(summary.routes, "route") +
+            (if (summary.app == "android") ", " + count(summary.tracks, "track") + ", " + count(summary.photos, "photo") else "")
         val message = if (summary.app == "desktop") {
             "A SeaBathy Desktop backup from ${day(summary.createdMillis)}: $what. They are added to the ones on this phone. The app restarts."
         } else {

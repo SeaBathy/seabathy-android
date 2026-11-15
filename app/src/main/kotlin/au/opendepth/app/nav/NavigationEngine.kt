@@ -69,6 +69,9 @@ class NavigationEngine(
     var finished: Boolean = false
         private set
     private var announcedIndex = -1
+    /** Going to a single point from on top of it (a man-overboard mark): it only counts as reached after leaving it. */
+    private var startedOnPoint = false
+    private var leftPoint = false
 
     /**
      * Picks the first point to steer to from the boat's position: the second
@@ -78,6 +81,8 @@ class NavigationEngine(
         if (targetIndex >= 0) return
         val atStart = NavGeo.distanceM(fix.lat, fix.lng, points[0].lat, points[0].lng) <= settings.arrivalRadiusM
         targetIndex = if (atStart && points.size > 1) 1 else 0
+        startedOnPoint = atStart && points.size == 1
+        leftPoint = false
         if (targetIndex == 0) startOrigin = RoutePoint(fix.lat, fix.lng)
         finished = false
     }
@@ -102,6 +107,16 @@ class NavigationEngine(
     fun update(fix: NavFix): NavState {
         if (targetIndex < 0) start(fix)
         var arrivedLabel: String? = null
+        if (points.size == 1) {
+            val dtwM = NavGeo.distanceM(fix.lat, fix.lng, points[0].lat, points[0].lng)
+            if (dtwM > settings.arrivalRadiusM * 1.5) leftPoint = true
+            // Drifted well away again after reaching it: steer back to it.
+            if (finished && dtwM > settings.arrivalRadiusM * 3) {
+                finished = false
+                announcedIndex = -1
+                startOrigin = RoutePoint(fix.lat, fix.lng)
+            }
+        }
 
         // Announced once per point, even while waiting inside its circle
         // with auto-advance off.
@@ -121,6 +136,7 @@ class NavigationEngine(
 
     private fun hasArrived(fix: NavFix): Boolean {
         val target = points[targetIndex]
+        if (startedOnPoint && !leftPoint) return false
         val dtwM = NavGeo.distanceM(fix.lat, fix.lng, target.lat, target.lng)
         if (dtwM <= settings.arrivalRadiusM) return true
         // Passed abeam: further along the leg than its length, and near the line.

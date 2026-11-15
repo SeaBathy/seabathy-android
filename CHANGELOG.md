@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+- **Man overboard button** at the top of the chart: one tap marks the boat's position (or the
+  first GPS fix, if the GPS was off) as a waypoint and starts steering back to it, with a buzz.
+- **Backup and restore** (Settings → Backup and restore): one file with your waypoints and their
+  photos, routes, tracks and settings. A daily backup can go to any folder you pick, including a
+  cloud drive such as Google Drive or OneDrive, keeping the newest five. A SeaBathy Desktop backup
+  adds its waypoints and routes to the phone's.
+- **Waypoint photos:** open a waypoint and tap Take a photo. Each photo is saved with the time,
+  tide, wind, waves, swell, current, sea temperature, sun and moon at that mark.
+- **Good-weather alerts** (Sea conditions → Alerts): set the most wind and waves you'll go out in,
+  how many hours in a row, how many days ahead and which days (any, weekends or chosen days). A
+  few times a day the app checks the forecast at your spot and tells you about each good day once.
+- **Import KML and KMZ** (Google Earth) as well as GPX: points become waypoints, lines routes.
+
 ## 1.2.1 — 2026-11-16
 
 - **Temperature lines:** smooth, labelled lines over the sea temperature maps (satellite, breaks

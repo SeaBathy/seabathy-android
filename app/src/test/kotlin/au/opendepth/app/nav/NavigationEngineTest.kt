@@ -121,4 +121,19 @@ class NavigationEngineTest {
         // ~12 nm at 6 kn = 2 h at 12 L/h.
         assertEquals(24.0, state.fuelToEndLitres!!, 0.3)
     }
+
+    @Test
+    fun manOverboardMarkCountsOnlyAfterLeavingIt() {
+        // Marked where the boat is: not "arrived" straight away.
+        val engine = NavigationEngine(listOf(RoutePoint(-33.0, 151.0, "MOB")), settings)
+        assertNull(engine.update(fix(-33.0, 151.0)).arrivedLabel)
+        assertFalse(engine.finished)
+        // Drifted 300 m away, then back: arrived.
+        assertNull(engine.update(fix(-33.0027, 151.0)).arrivedLabel)
+        assertNotNull(engine.update(fix(-33.0001, 151.0)).arrivedLabel)
+        assertTrue(engine.finished)
+        // Drifted away again: steering back to it.
+        engine.update(fix(-33.003, 151.0))
+        assertFalse(engine.finished)
+    }
 }
