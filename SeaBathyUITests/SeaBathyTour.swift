@@ -64,18 +64,22 @@ final class SeaBathyTour: XCTestCase {
     @discardableResult
     func tap(_ text: String, contains: Bool = false, wait: TimeInterval = 8) -> Bool {
         let deadline = Date().addingTimeInterval(wait)
+        var swipes = 0
         repeat {
             let el = element(text, contains: contains)
             if el.exists && el.isHittable {
                 el.tap()
                 return true
             }
-            if el.exists {
-                // Off screen in a list: scroll towards it.
-                app.swipeUp(velocity: .slow)
+            // Lists only build the rows on screen: scroll down a few times, then back up.
+            let list = app.collectionViews.firstMatch.exists ? app.collectionViews.firstMatch
+                : (app.tables.firstMatch.exists ? app.tables.firstMatch : app.scrollViews.firstMatch)
+            if list.exists && swipes < 10 {
+                if swipes < 6 { list.swipeUp(velocity: .slow) } else { list.swipeDown(velocity: .fast) }
             }
-            Thread.sleep(forTimeInterval: 0.4)
-        } while Date() < deadline
+            swipes += 1
+            Thread.sleep(forTimeInterval: 0.5)
+        } while Date() < deadline || swipes < 10
         XCTFail("Couldn't find \"\(text)\"")
         shot("missing-\(text.prefix(24).replacingOccurrences(of: " ", with: "_"))")
         return false

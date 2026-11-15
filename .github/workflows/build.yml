@@ -72,7 +72,7 @@ jobs:
           d = json.load(sys.stdin)["devices"]
           print(next(x["udid"] for k in sorted(d, reverse=True) if "iOS" in k for x in d[k] if x["name"].startswith("iPhone")))')
           # A failing step is a finding, not a broken build: the screenshots say what happened.
-          xcodebuild -project SeaBathy.xcodeproj -scheme SeaBathy -destination "id=$UDID"             -derivedDataPath build/ui -resultBundlePath build/ui-tour.xcresult             -only-testing:SeaBathyUITests test 2>&1 | tee logs/ui-tour.log | grep -E "Test Case|error:|Executed" | tail -n 120 || true
+          xcodebuild -project SeaBathy.xcodeproj -scheme SeaBathy -destination "id=$UDID" -derivedDataPath build/ui -resultBundlePath build/ui-tour.xcresult             -only-testing:SeaBathyUITests test 2>&1 | tee logs/ui-tour.log | grep -E "Test Case|error:|Executed" | tail -n 120 || true
           mkdir -p raw out/ui
           xcrun xcresulttool export attachments --path build/ui-tour.xcresult --output-path raw || true
           python3 - <<'PY'
@@ -86,6 +86,10 @@ jobs:
                   name = a.get("suggestedHumanReadableName") or a.get("exportedFileName")
                   m = re.match(r"^(.*?)_\d+_[0-9A-Fa-f-]{36}\.\w+$", name)
                   base = m.group(1) if m else os.path.splitext(name)[0]
+                  # Only the tour's own numbered screenshots, with file-system-safe names.
+                  if not re.match(r"^\d\d-", base):
+                      continue
+                  base = re.sub(r'[^A-Za-z0-9._-]', "_", base)
                   dest = os.path.join("out/ui", base + ".png")
                   shutil.copy(os.path.join("raw", a["exportedFileName"]), dest)
           print(len(os.listdir("out/ui")), "screenshots")
