@@ -104,7 +104,7 @@ private struct SettingsContent: View {
 
                 Section {
                     row("Import GPX", "From a plotter or another app") { close { GpxActions.importGpx(app: app) } }
-                    row("Export waypoints and route", "Share as a GPX file") { close { GpxActions.exportAll(app: app) } }
+                    row("Export waypoints and route", "Share as a GPX file") { close { GpxActions.exportAll(app: app, route: app.navigation.planner.points, routeName: app.navigation.planner.savedName ?? "Route") } }
                     row("Export debug log", "What the app did, and any errors") { shareDebugLog() }
                     row("Privacy policy", "No account, no ads, no tracking: what the app sends and why") {
                         UIApplication.shared.open(Self.privacyPolicyURL)

@@ -254,7 +254,8 @@ final class NavSession: ObservableObject {
     private var depthBusy = false
 
     private func makeExtras(_ alarmText: String?, fix: NavFix?) -> NavExtras {
-        NavExtras(depthNowM: depthNowM, depthAheadM: depthAheadM, tideM: nil,
+        NavExtras(depthNowM: depthNowM, depthAheadM: depthAheadM,
+                  tideM: fix.flatMap { app.tides?.tideHeightNow(lat: $0.lat, lng: $0.lng) },
                   variation: fix.map { variation.variation($0.lat, $0.lng) } ?? 0, alarmText: alarmText)
     }
 

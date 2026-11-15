@@ -44,15 +44,6 @@ final class GpsController: ObservableObject {
             .dropFirst()
             .sink { [weak self] status in self?.authorizationChanged(status) }
             .store(in: &cancellables)
-        // Leaving course-up turns the chart back to north up.
-        app.navSettings.$settings
-            .map { $0.courseUp }
-            .removeDuplicates()
-            .dropFirst()
-            .sink { [weak self] courseUp in
-                if !courseUp { self?.app.map.setBearing(0) }
-            }
-            .store(in: &cancellables)
     }
 
     /// The last usable GPS speed in knots, while the GPS is on.
@@ -198,7 +189,9 @@ final class GpsController: ObservableObject {
     private func recentre(on location: CLLocation) {
         guard let map = app.map.mapView else { return }
         if let bearing = chartBearing(location) {
-            map.setCenter(location.coordinate, zoomLevel: map.zoomLevel, direction: bearing, animated: true)
+            // Jumped rather than animated: NavigationFeature also turns the chart for course-up,
+            // and a second camera animation would cut this one short.
+            map.setCenter(location.coordinate, zoomLevel: map.zoomLevel, direction: bearing, animated: false)
         } else {
             map.setCenter(location.coordinate, animated: true)
         }

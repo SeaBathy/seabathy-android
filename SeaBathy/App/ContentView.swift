@@ -42,12 +42,17 @@ private struct ChartScreen: View {
                 if app.navigation.isNavigating {
                     NavHudOverlay()
                 }
+                // The tide chip lines itself up on the right (and becomes a full-width
+                // banner while a tide spot is being picked).
+                TideChipOverlay()
                 HStack(alignment: .top) {
-                    Spacer()
-                    VStack(alignment: .trailing, spacing: 8) {
-                        TideChipOverlay()
-                        ConditionsOverlay()
+                    // Status chips at the left, as on Android: recording and anchor watch.
+                    VStack(alignment: .leading, spacing: 6) {
+                        TrackChipOverlay()
+                        AnchorChipOverlay()
                     }
+                    Spacer()
+                    ConditionsOverlay()
                 }
                 .padding(.horizontal, 10)
                 Spacer()

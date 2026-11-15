@@ -542,9 +542,9 @@ enum TideStoreIO {
         guard let url = URL(string: text) else { return nil }
         var request = URLRequest(url: url, timeoutInterval: 20)
         request.setValue(userAgent("iOS tide places"), forHTTPHeaderField: "User-Agent")
-        guard let (data, response) = try? await URLSession.shared.data(for: request),
-              let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode),
-              let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return nil }
+        guard let reply = try? await URLSession.shared.data(for: request),
+              let http = reply.1 as? HTTPURLResponse, (200..<300).contains(http.statusCode),
+              let root = (try? JSONSerialization.jsonObject(with: reply.0)) as? [String: Any] else { return nil }
         // A country or state means the spot is out at sea: no useful name.
         if let type = root["addresstype"] as? String, ["country", "state", "region"].contains(type) { return nil }
         let address = root["address"] as? [String: Any]

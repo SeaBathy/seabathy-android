@@ -257,24 +257,28 @@ enum TiffIfdReader {
     }
 
     private static func apply(tag: Int, numbers: [Double], to dir: inout TiffDirectory) {
-        guard let first = numbers.first else { return }
-        let ints = numbers.map { Int($0) }
-        let offsets = numbers.map { UInt64(max($0, 0)) }
+        guard let firstValue = numbers.first else { return }
+        // Conversions that can't trap on a damaged file's NaN or huge values.
+        func int(_ v: Double) -> Int { v.isFinite && abs(v) < 9e15 ? Int(v) : 0 }
+        func offset(_ v: Double) -> UInt64 { v.isFinite && v > 0 && v < 9e18 ? UInt64(v) : 0 }
+        var ints: [Int] { numbers.map(int) }
+        var offsets: [UInt64] { numbers.map(offset) }
+        let first = int(firstValue)
         switch tag {
-        case 256: dir.width = Int(first)
-        case 257: dir.height = Int(first)
+        case 256: dir.width = first
+        case 257: dir.height = first
         case 258: dir.bitsPerSample = ints
-        case 259: dir.compression = Int(first)
-        case 262: dir.photometric = Int(first)
-        case 277: dir.samplesPerPixel = max(1, Int(first))
-        case 278: dir.rowsPerStrip = first > Double(Int32.max) ? nil : Int(first)
+        case 259: dir.compression = first
+        case 262: dir.photometric = first
+        case 277: dir.samplesPerPixel = max(1, first)
+        case 278: dir.rowsPerStrip = firstValue > Double(Int32.max) ? nil : first
         case 273: dir.stripOffsets = offsets
         case 279: dir.stripByteCounts = offsets
-        case 284: dir.planarConfiguration = Int(first)
-        case 317: dir.predictor = Int(first)
+        case 284: dir.planarConfiguration = first
+        case 317: dir.predictor = first
         case 320: dir.colorMap = ints
-        case 322: dir.tileWidth = Int(first)
-        case 323: dir.tileHeight = Int(first)
+        case 322: dir.tileWidth = first
+        case 323: dir.tileHeight = first
         case 324: dir.tileOffsets = offsets
         case 325: dir.tileByteCounts = offsets
         case 339: dir.sampleFormat = ints

@@ -373,9 +373,9 @@ final class TerrainFeature: ObservableObject {
         let fix: [String: Any] = [
             "lat": c.latitude,
             "lng": c.longitude,
-            "heading": location.course >= 0 ? location.course : NSNull(),
-            "knots": location.speed >= 0 ? location.speed * Const.metresPerSecondToKnots : NSNull(),
-            "accuracy": location.horizontalAccuracy >= 0 ? location.horizontalAccuracy : NSNull(),
+            "heading": Self.orNull(location.course >= 0 ? location.course : nil),
+            "knots": Self.orNull(location.speed >= 0 ? location.speed * Const.metresPerSecondToKnots : nil),
+            "accuracy": Self.orNull(location.horizontalAccuracy >= 0 ? location.horizontalAccuracy : nil),
         ]
         evaluate("window.updateBoat && window.updateBoat(\(Self.json(fix)))")
     }
@@ -612,9 +612,9 @@ final class TerrainFeature: ObservableObject {
                 "offline": d.isOffline,
                 // Only an online map whose provider allows offline copies can be downloaded for the area.
                 "savable": d.isSavable,
-                "colour": d.colour ?? NSNull(),
+                "colour": Self.orNull(d.colour),
                 "attribution": d.attribution,
-                "bounds": d.bounds.map { Self.boundsJson($0) as Any } ?? NSNull(),
+                "bounds": Self.orNull(d.bounds.map { Self.boundsJson($0) }),
             ] as [String: Any]
         }
     }
@@ -707,14 +707,19 @@ final class TerrainFeature: ObservableObject {
     // Helpers ------------------------------------------------------------------------
 
     private static func waypointJson(_ w: Waypoint) -> [String: Any] {
-        ["id": w.id, "name": w.name, "color": w.color, "lat": w.lat, "lng": w.lng, "desc": w.desc ?? NSNull()]
+        ["id": w.id, "name": w.name, "color": w.color, "lat": w.lat, "lng": w.lng, "desc": Self.orNull(w.desc)]
     }
 
     private static func boundsJson(_ b: GeoBounds) -> [String: Any] {
         ["west": b.west, "south": b.south, "east": b.east, "north": b.north]
     }
 
-    private static func finite(_ d: Double) -> Any { d.isFinite ? d : NSNull() }
+    private static func finite(_ d: Double) -> Any { orNull(d.isFinite ? d : nil) }
+
+    private static func orNull(_ value: Any?) -> Any {
+        if let value { return value }
+        return NSNull()
+    }
 
     /// JSON text for a dictionary, array or string (as a JavaScript literal).
     static func json(_ value: Any) -> String {

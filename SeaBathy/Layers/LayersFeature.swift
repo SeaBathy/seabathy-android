@@ -462,6 +462,8 @@ final class LayersFeature: ObservableObject {
         publish()
         app.basemap.refreshAttribution()
         refreshCrosshairDepth()
+        // The route's least depths depend on which surveys are shown.
+        app.navigation?.layersChanged()
     }
 
     /// Adds at the top, or with `belowDepthLayers` just under the lowest depth survey

@@ -211,7 +211,7 @@ enum TrackMath {
     static func duration(_ millis: Int64) -> String {
         let total = abs(millis)
         let minutes = total / 60_000
-        if minutes >= 60 { return String(format: "%d h %02d min", Int(minutes / 60), Int(minutes % 60)) }
+        if minutes >= 60 { return String(format: "%ld h %02ld min", Int(minutes / 60), Int(minutes % 60)) }
         if minutes >= 1 { return "\(minutes) min" }
         return "\(total / 1000) s"
     }
