@@ -304,8 +304,11 @@ final class SeaBathyTour: XCTestCase {
         if tap("SAVE") {
             sleep(1)
             shot("route-save")
-            tap("Save", wait: 4)
-            sleep(1)
+            // The sheet's own Save, not the route card's SAVE behind it.
+            let save = app.buttons.matching(NSPredicate(format: "label == 'Save'")).allElementsBoundByIndex.last
+            if let save, save.exists { save.tap() } else { XCTFail("No Save in the route name sheet") }
+            sleep(2)
+            shot("route-saved")
         }
     }
 
@@ -364,7 +367,9 @@ final class SeaBathyTour: XCTestCase {
         done()
         sleep(2)
         shot("anchor-chip")
-        settingsRow("Anchor alarm")
+        // The anchor chip opens the anchor sheet.
+        tap("Anchor alarm — open", wait: 6)
+        sleep(1)
         tap("Stop anchor alarm", wait: 12)
         sleep(1)
         let stop = app.alerts.buttons.matching(NSPredicate(format: "label BEGINSWITH[c] 'Stop'")).firstMatch
