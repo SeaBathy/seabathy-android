@@ -68,7 +68,9 @@ enum ConditionsLogic {
     /// South, west, north and east of a square `radiusKm` each way, stopping at the date line (the data services do too).
     static func boxAround(lat: Double, lng: Double, radiusKm: Double) -> [Double] {
         let dLat = radiusKm / 111.0
-        let dLng = radiusKm / (111.0 * max(cos(lat * .pi / 180), 0.2))
+        let latRadians: Double = lat * Double.pi / 180.0
+        let squeeze: Double = max(cos(latRadians), 0.2)
+        let dLng: Double = radiusKm / (111.0 * squeeze)
         return [max(lat - dLat, -ConditionsArea.maxLat), max(lng - dLng, -ConditionsArea.maxLng),
                 min(lat + dLat, ConditionsArea.maxLat), min(lng + dLng, ConditionsArea.maxLng)]
     }

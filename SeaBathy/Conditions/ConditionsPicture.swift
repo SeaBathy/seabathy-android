@@ -185,7 +185,11 @@ struct ConditionsColourScale {
             let x = Double((a >> shift) & 0xFF), y = Double((b >> shift) & 0xFF)
             return UInt32((x * (1 - f) + y * f).rounded())
         }
-        return 0xFF00_0000 | mix(16) << 16 | mix(8) << 8 | mix(0)
+        let red: UInt32 = mix(16) << 16
+        let green: UInt32 = mix(8) << 8
+        let blue: UInt32 = mix(0)
+        let alpha: UInt32 = 0xFF00_0000
+        return alpha | red | green | blue
     }
 
     /// The value at `t` (0...1) along the scale, for legend labels.
@@ -296,7 +300,7 @@ enum ConditionsPicture {
         let yBottom = mercatorY(south)
         let widthDeg = east - west
         // Width and height in the same map units (radians of longitude).
-        let mapWidth = widthDeg * .pi / 180
+        let mapWidth = widthDeg * Double.pi / 180.0
         let mapHeight = yTop - yBottom
         let width: Int
         let height: Int
@@ -320,10 +324,15 @@ enum ConditionsPicture {
     }
 
     static func mercatorY(_ lat: Double) -> Double {
-        log(tan(.pi / 4 + min(max(lat, -85), 85) * .pi / 180 / 2))
+        let clamped: Double = min(max(lat, -85.0), 85.0)
+        let radians: Double = clamped * Double.pi / 180.0
+        return log(tan(Double.pi / 4.0 + radians / 2.0))
     }
 
-    static func latitudeOf(_ y: Double) -> Double { (2 * atan(exp(y)) - .pi / 2) * 180 / .pi }
+    static func latitudeOf(_ y: Double) -> Double {
+        let radians: Double = 2.0 * atan(exp(y)) - Double.pi / 2.0
+        return radians * 180.0 / Double.pi
+    }
 
     /// The pixels as an image (opaque colours or fully clear, so premultiplying changes nothing).
     static func image(_ pixels: Pixels) -> UIImage? {

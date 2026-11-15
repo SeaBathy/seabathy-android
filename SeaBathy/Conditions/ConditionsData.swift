@@ -132,13 +132,13 @@ struct ConditionsFlow: Equatable {
     var fromDegrees: Double { (towardsDegrees + 180).truncatingRemainder(dividingBy: 360) }
 
     static func of(east: Double, north: Double) -> ConditionsFlow {
-        let bearing = atan2(east, north) * 180 / .pi
+        let bearing: Double = atan2(east, north) * 180.0 / Double.pi
         return ConditionsFlow(speed: hypot(east, north), towardsDegrees: (bearing + 360).truncatingRemainder(dividingBy: 360))
     }
 
     /// East and north parts of `speed` heading towards `towardsDegrees`.
     static func parts(speed: Double, towardsDegrees: Double) -> (east: Double, north: Double) {
-        let r = towardsDegrees * .pi / 180
+        let r: Double = towardsDegrees * Double.pi / 180.0
         return (speed * sin(r), speed * cos(r))
     }
 }
@@ -284,7 +284,8 @@ final class ConditionsSatelliteGrid {
             return 0
         }
         for r in 0..<grid.rows {
-            let kmPerLng = kmPerDegree * max(cos(grid.lats[r] * .pi / 180), 0.01)
+            let latRadians: Double = grid.lats[r] * Double.pi / 180.0
+            let kmPerLng: Double = kmPerDegree * max(cos(latRadians), 0.01)
             for c in 0..<grid.cols {
                 let here = at(r, c)
                 if here.isNaN { continue }
@@ -363,8 +364,11 @@ final class ConditionsArea {
     func middleContains(lat: Double, lng: Double) -> Bool {
         let dLat = (north - south) / 4
         let dLng = (east - west) / 4
-        return (south <= -Self.maxLat || lat >= south + dLat) && (north >= Self.maxLat || lat <= north - dLat) &&
-            (west <= -Self.maxLng || lng >= west + dLng) && (east >= Self.maxLng || lng <= east - dLng)
+        let southOk: Bool = south <= -Self.maxLat || lat >= south + dLat
+        let northOk: Bool = north >= Self.maxLat || lat <= north - dLat
+        let westOk: Bool = west <= -Self.maxLng || lng >= west + dLng
+        let eastOk: Bool = east >= Self.maxLng || lng <= east - dLng
+        return southOk && northOk && westOk && eastOk
     }
 
     /// True when the given bounds cover about the same water (a re-download of this area).

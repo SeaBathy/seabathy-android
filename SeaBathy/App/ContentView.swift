@@ -65,6 +65,7 @@ private struct ChartScreen: View {
                         .padding(.horizontal, 16)
                         .allowsHitTesting(false)
                 }
+                ConditionsCardOverlay()
                 if app.toolMode == .route {
                     RouteCardOverlay()
                 } else if app.toolMode == .measure {

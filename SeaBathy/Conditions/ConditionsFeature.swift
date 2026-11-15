@@ -423,8 +423,9 @@ final class ConditionsFeature: ObservableObject {
         showFlowLines(a, time)
         // A satellite picture doesn't change with the time; a range set for the colours changes any temperature's.
         let rangeText = temperatureRange.map { "\($0.0),\($0.1)" } ?? "auto"
-        let key = "\(a.id):\(a.fetchedMillis):\(choice.rawValue):" + (choice.forecast ? "\(time / ConditionsLogic.pictureStepMs)" : "0") +
-            (choice.isTemperature ? ":\(rangeText)" : "")
+        let timePart: String = choice.forecast ? String(time / ConditionsLogic.pictureStepMs) : "0"
+        let rangePart: String = choice.isTemperature ? ":" + rangeText : ""
+        let key: String = "\(a.id):\(a.fetchedMillis):\(choice.rawValue):\(timePart)\(rangePart)"
         // Already drawing this very picture: let it finish.
         if key == drawingKey, drawTask != nil, arrowChoice == drawingArrows, style == drawingStyle { return }
         drawingKey = key

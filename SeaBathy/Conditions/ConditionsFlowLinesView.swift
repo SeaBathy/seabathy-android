@@ -138,7 +138,7 @@ final class ConditionsFlowLinesView: UIView {
             let at = i * t + head[i]
             let x = trailX[at]
             let y = trailY[at]
-            guard ages[i] <= lifetimes[i], let flow = field(ConditionsPicture.latitudeOf(y), x * 180 / .pi) else {
+            guard ages[i] <= lifetimes[i], let flow = field(ConditionsPicture.latitudeOf(y), x * 180.0 / Double.pi) else {
                 respawn(i)
                 continue
             }
@@ -157,10 +157,11 @@ final class ConditionsFlowLinesView: UIView {
             let ny = y + (-m10 * dx + m00 * dy) / det
             let screenX = m00 * nx + m01 * ny + tx
             let screenY = m10 * nx + m11 * ny + ty
-            let nLng = nx * 180 / .pi
+            let nLng = nx * 180.0 / Double.pi
             // Off the screen, or out of the area (where the colours stop): start again.
-            if screenX < 0 || screenY < 0 || screenX > width || screenY > height ||
-                nLng < west || nLng > east || ny < southY || ny > northY {
+            let offScreen: Bool = screenX < 0.0 || screenY < 0.0 || screenX > width || screenY > height
+            let offArea: Bool = nLng < west || nLng > east || ny < southY || ny > northY
+            if offScreen || offArea {
                 respawn(i)
                 continue
             }
@@ -210,14 +211,14 @@ final class ConditionsFlowLinesView: UIView {
         let lng = centre.longitude
         let d = 0.01
         let p0 = project(CLLocationCoordinate2D(latitude: lat, longitude: lng))
-        let pe = project(CLLocationCoordinate2D(latitude: lat, longitude: lng + d * 180 / .pi))
+        let pe = project(CLLocationCoordinate2D(latitude: lat, longitude: lng + d * 180.0 / Double.pi))
         let y0 = ConditionsPicture.mercatorY(lat)
         let pn = project(CLLocationCoordinate2D(latitude: ConditionsPicture.latitudeOf(y0 + d), longitude: lng))
         m00 = Double(pe.x - p0.x) / d
         m10 = Double(pe.y - p0.y) / d
         m01 = Double(pn.x - p0.x) / d
         m11 = Double(pn.y - p0.y) / d
-        let x0 = lng * .pi / 180
+        let x0 = lng * Double.pi / 180.0
         tx = Double(p0.x) - (m00 * x0 + m01 * y0)
         ty = Double(p0.y) - (m10 * x0 + m11 * y0)
         return m00.isFinite && m11.isFinite && m01.isFinite && m10.isFinite
@@ -258,8 +259,9 @@ final class ConditionsFlowLinesView: UIView {
                 let x = (m11 * sx - m01 * sy) / det
                 let y = (-m10 * sx + m00 * sy) / det
                 let lat = ConditionsPicture.latitudeOf(y)
-                let lng = x * 180 / .pi
-                if lat >= south && lat <= north && lng >= west && lng <= east && field(lat, lng) != nil {
+                let lng = x * 180.0 / Double.pi
+                let inArea: Bool = lat >= south && lat <= north && lng >= west && lng <= east
+                if inArea && field(lat, lng) != nil {
                     trailX[i * t] = x
                     trailY[i * t] = y
                     return
@@ -267,7 +269,7 @@ final class ConditionsFlowLinesView: UIView {
             }
         }
         // Nowhere found this time (the area is mostly off screen): park it off screen until next try.
-        trailX[i * t] = west * .pi / 180 - 1
+        trailX[i * t] = west * Double.pi / 180.0 - 1
         trailY[i * t] = ConditionsPicture.mercatorY(south)
         ages[i] = lifetimes[i]
         length[i] = 0
