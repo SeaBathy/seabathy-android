@@ -1,6 +1,6 @@
 # SeaBathy for iPhone (early work)
 
-[![Build](https://github.com/SeaBathy/seabathy-ios/actions/workflows/build.yml/badge.svg)](https://github.com/SeaBathy/seabathy-ios/actions/workflows/build.yml)
+[![Build](https://github.com/SeaBathy/seabathy-android/actions/workflows/build.yml/badge.svg?branch=ios)](https://github.com/SeaBathy/seabathy-android/actions/workflows/build.yml?query=branch%3Aios)
 
 The iPhone and iPad version of [SeaBathy](https://seabathy.com), the free, open-source seabed
 depth map app for boaters. The finished app is [SeaBathy for Android](https://github.com/SeaBathy/seabathy-android);
