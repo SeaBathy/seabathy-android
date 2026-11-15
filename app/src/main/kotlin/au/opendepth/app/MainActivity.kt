@@ -584,7 +584,7 @@ class MainActivity : AppCompatActivity() {
             onShowLayer = ::showLayer
         )
 
-        waypointEditDialog = WaypointEditDialog(this, panels, coordinateEditor)
+        waypointEditDialog = WaypointEditDialog(this, panels, coordinateEditor, java.io.File(filesDir, PHOTOS_DIR))
         waypointSheet = NewWaypointSheet(views, coordinateEditor, ::saveNewWaypoint)
 
         offlineDownloads = OfflineTileDownloadController(
@@ -1143,10 +1143,76 @@ class MainActivity : AppCompatActivity() {
             onChanged = ::refreshWaypoints,
             onJumpTo = onJumpTo,
             onDelete = { target ->
+                target.photos?.forEach { java.io.File(java.io.File(filesDir, PHOTOS_DIR), it.file).delete() }
                 waypointStore.remove(target)
                 refreshWaypoints()
-            }
+            },
+            onAddPhoto = ::takeWaypointPhoto
         )
+    }
+
+    // Waypoint photos ----------------------------------------------------------------
+
+    /** The waypoint and file a photo is being taken for, while the camera is open. */
+    private var photoFor: Pair<String, java.io.File>? = null
+
+    private val takePicture = registerForActivityResult(ActivityResultContracts.TakePicture()) { saved ->
+        val (id, file) = photoFor ?: return@registerForActivityResult
+        photoFor = null
+        val waypoint = waypointStore.byId(id)
+        if (!saved || waypoint == null || !file.exists() || file.length() == 0L) {
+            file.delete()
+            return@registerForActivityResult
+        }
+        scope.launch {
+            // Upright, and no bigger than needed: backups stay small.
+            val ok = withContext(Dispatchers.IO) { runCatching { shrinkPhoto(file) }.isSuccess }
+            if (!ok) {
+                file.delete()
+                toast("Couldn't save the photo")
+                return@launch
+            }
+            val now = System.currentTimeMillis()
+            val record = listOfNotNull(navFeature.tides.snapshotLine(now)) +
+                (if (::conditions.isInitialized) conditions.snapshot(waypoint.lat, waypoint.lng, now) else emptyList())
+            val list = waypoint.photos ?: mutableListOf<au.opendepth.app.model.WaypointPhoto>().also { waypoint.photos = it }
+            list += au.opendepth.app.model.WaypointPhoto(file.name, now, record)
+            refreshWaypoints()
+            showWaypointEditor(waypoint)
+        }
+    }
+
+    private fun takeWaypointPhoto(waypoint: Waypoint) {
+        val dir = java.io.File(filesDir, PHOTOS_DIR).apply { mkdirs() }
+        val file = java.io.File(dir, "${java.util.UUID.randomUUID()}.jpg")
+        val uri = androidx.core.content.FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+        photoFor = waypoint.id to file
+        runCatching { takePicture.launch(uri) }.onFailure {
+            photoFor = null
+            toast("No camera app found")
+        }
+    }
+
+    /** Re-saves a camera photo upright and at most [PHOTO_MAX_PX] across. */
+    private fun shrinkPhoto(file: java.io.File) {
+        val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        android.graphics.BitmapFactory.decodeFile(file.path, bounds)
+        var sample = 1
+        while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= PHOTO_MAX_PX) sample *= 2
+        var bitmap = android.graphics.BitmapFactory.decodeFile(file.path, android.graphics.BitmapFactory.Options().apply { inSampleSize = sample })
+            ?: error("unreadable photo")
+        val rotation = when (android.media.ExifInterface(file.path).getAttributeInt(android.media.ExifInterface.TAG_ORIENTATION, 1)) {
+            android.media.ExifInterface.ORIENTATION_ROTATE_90 -> 90f
+            android.media.ExifInterface.ORIENTATION_ROTATE_180 -> 180f
+            android.media.ExifInterface.ORIENTATION_ROTATE_270 -> 270f
+            else -> 0f
+        }
+        val scale = minOf(1f, PHOTO_MAX_PX.toFloat() / maxOf(bitmap.width, bitmap.height))
+        if (rotation != 0f || scale < 1f) {
+            val m = android.graphics.Matrix().apply { postScale(scale, scale); postRotate(rotation) }
+            bitmap = android.graphics.Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, m, true)
+        }
+        file.outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, PHOTO_QUALITY, it) }
     }
 
     // Man overboard ------------------------------------------------------------------
@@ -1592,6 +1658,10 @@ class MainActivity : AppCompatActivity() {
     companion object {
         /** A fix older than this is too stale to mark a man overboard at. */
         private const val MOB_FIX_MAX_AGE_MS = 30_000L
+        /** Waypoint photos, under the app's files folder (backed up with the rest). */
+        const val PHOTOS_DIR = "photos"
+        private const val PHOTO_MAX_PX = 1600
+        private const val PHOTO_QUALITY = 85
         const val TAG = "SeaBathy"
         const val PREFERENCES_NAME = "od"
         const val DEPTH_QUERY_DEBOUNCE_MS = 60L

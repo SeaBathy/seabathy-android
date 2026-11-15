@@ -9,18 +9,28 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
+import android.graphics.BitmapFactory
 import android.widget.Button
+import android.widget.HorizontalScrollView
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import au.opendepth.app.R
 import au.opendepth.app.model.Waypoint
+import au.opendepth.app.model.WaypointPhoto
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import au.opendepth.app.util.CoordinateFormatter
 
 /** Edits a waypoint's name, notes and position. A plain dialog like [PanelDialogs.showPanel], not a themed AlertDialog. */
 class WaypointEditDialog(
     private val context: Context,
     private val panels: PanelDialogs,
-    private val coordinateEditor: CoordinateEditorDialog
+    private val coordinateEditor: CoordinateEditorDialog,
+    /** Where waypoint photos are kept. */
+    private val photosDir: File
 ) {
     private val palette = AppTheme.palette
 
@@ -33,7 +43,9 @@ class WaypointEditDialog(
         isNameTaken: (String) -> Boolean,
         onChanged: () -> Unit,
         onJumpTo: (Waypoint) -> Unit,
-        onDelete: (Waypoint) -> Unit
+        onDelete: (Waypoint) -> Unit,
+        /** Opens the camera for a photo of [Waypoint]; null hides the button. */
+        onAddPhoto: ((Waypoint) -> Unit)? = null
     ) {
         val dialog = Dialog(context, R.style.Theme_SeaBathy_Dialog).apply {
             setCancelable(true)
@@ -105,6 +117,41 @@ class WaypointEditDialog(
             maxLines = 4
         }
         card.addView(descriptionInput)
+
+        // Photos, each with the conditions when it was taken.
+        val photos = waypoint.photos.orEmpty()
+        if (photos.isNotEmpty() || onAddPhoto != null) {
+            card.addView(panels.sectionHeader("PHOTOS"))
+            val strip = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
+            for (photo in photos.asReversed()) {
+                strip.addView(ImageView(context).apply {
+                    scaleType = ImageView.ScaleType.CENTER_CROP
+                    contentDescription = "Photo taken ${stamp(photo.takenMillis)}"
+                    setImageBitmap(decode(File(photosDir, photo.file), context.dp(THUMB_DP)))
+                    setOnClickListener { showPhoto(waypoint, photo, onChanged) { dialog.dismiss() } }
+                }, LinearLayout.LayoutParams(context.dp(THUMB_DP), context.dp(THUMB_DP)).apply { marginEnd = context.dp(6) })
+            }
+            if (photos.isNotEmpty()) {
+                card.addView(HorizontalScrollView(context).apply { addView(strip) })
+            }
+            if (onAddPhoto != null) {
+                card.addView(Button(context).apply {
+                    text = "📷  Take a photo"
+                    applySecondaryStyle(palette)
+                    contentDescription = "Take a photo of this waypoint, saved with the tide and sea conditions"
+                    setOnClickListener {
+                        // Keep what was typed before the camera opens.
+                        waypoint.desc = descriptionInput.text.toString().trim().takeIf { it.isNotBlank() }
+                        onChanged()
+                        dialog.dismiss()
+                        onAddPhoto(waypoint)
+                    }
+                }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = context.dp(8) })
+            }
+            if (photos.isEmpty()) {
+                card.addView(panels.caption("Saved with the time, tide, wind, waves, swell, sea temperature, sun and moon.", topPaddingDp = 4))
+            }
+        }
 
         val buttonRow = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -188,6 +235,45 @@ class WaypointEditDialog(
         dialog.show()
     }
 
+    /** A photo full width, with the conditions it was saved with. */
+    private fun showPhoto(waypoint: Waypoint, photo: WaypointPhoto, onChanged: () -> Unit, closeEditor: () -> Unit) {
+        val body = panels.body()
+        val file = File(photosDir, photo.file)
+        body.addView(ImageView(context).apply {
+            adjustViewBounds = true
+            contentDescription = "Photo of ${waypoint.name}"
+            setImageBitmap(decode(file, context.resources.displayMetrics.widthPixels))
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        body.addView(panels.sectionHeader(stamp(photo.takenMillis).uppercase(Locale.getDefault())))
+        body.addView(panels.caption(
+            if (photo.conditions.isEmpty()) "No conditions were saved with this photo." else photo.conditions.joinToString(separator = "\n"),
+            topPaddingDp = 0
+        ))
+        lateinit var view: Dialog
+        panels.addRow(body, panels.row("Delete this photo", destructive = true) {
+            panels.confirm("Delete this photo?", "The conditions saved with it go too.", confirmLabel = "Delete") {
+                waypoint.photos?.remove(photo)
+                if (waypoint.photos?.isEmpty() == true) waypoint.photos = null
+                file.delete()
+                onChanged()
+                view.dismiss()
+                closeEditor()
+            }
+        })
+        view = panels.showPanel(waypoint.name, body)
+    }
+
+    /** A JPEG scaled down to about [px] across, upright, or null if it can't be read. */
+    private fun decode(file: File, px: Int): android.graphics.Bitmap? = runCatching {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(file.path, bounds)
+        var sample = 1
+        while (bounds.outWidth / (sample * 2) >= px && bounds.outHeight / (sample * 2) >= px) sample *= 2
+        BitmapFactory.decodeFile(file.path, BitmapFactory.Options().apply { inSampleSize = sample })
+    }.getOrNull()
+
+    private fun stamp(millis: Long): String = SimpleDateFormat("EEE d MMM yyyy, HH:mm", Locale.getDefault()).format(Date(millis))
+
     private fun spacedParams(): LinearLayout.LayoutParams = LinearLayout.LayoutParams(
         LinearLayout.LayoutParams.WRAP_CONTENT,
         LinearLayout.LayoutParams.WRAP_CONTENT
@@ -199,5 +285,6 @@ class WaypointEditDialog(
     private companion object {
         const val DIM_AMOUNT = 0.72f
         const val WIDTH_FRACTION = 0.96f
+        const val THUMB_DP = 72
     }
 }

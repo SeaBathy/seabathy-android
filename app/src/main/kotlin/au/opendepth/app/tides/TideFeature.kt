@@ -461,6 +461,23 @@ class TideFeature(
         }
     }
 
+    /** The tide now, for a photo's record: "Tide at Mission Beach 1.26 m, rising, high 14:56"; null with none. */
+    fun snapshotLine(now: Long = System.currentTimeMillis()): String? {
+        val s = settings
+        val format = NavFormat(callbacks.units())
+        if (s.mode == TideMode.OFF) return null
+        if (s.mode == TideMode.MANUAL) return "Tide ${format.tideHeight(s.manualHeightM)} (set by hand)"
+        val curve = forecast?.curve ?: return null
+        val height = s.shownHeight(forecast, now) ?: return null
+        val rate = curve.rateMPerHour(now) ?: 0.0
+        val trend = if (rate > 0.02) "rising" else if (rate < -0.02) "falling" else "turning"
+        val next = curve.nextExtremes(now, 1).firstOrNull()?.let {
+            ", ${if (it.isHigh) "high" else "low"} ${SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(it.timeMillis))}"
+        }.orEmpty()
+        val where = place?.name?.let { " at $it" }.orEmpty()
+        return "Tide$where ${format.tideHeight(height)}, $trend$next"
+    }
+
     // Chip ------------------------------------------------------------------------------------
 
     fun refreshChip() {

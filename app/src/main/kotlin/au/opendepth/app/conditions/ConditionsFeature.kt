@@ -465,6 +465,18 @@ class ConditionsFeature(
     }
 
     /** A GPS fix: the spot follows it when set to. */
+    /**
+     * What the sea is doing at a point now, as the values box words it, for
+     * a waypoint photo's record. The sun and moon are always there; the rest
+     * when a downloaded area covers the point.
+     */
+    fun snapshot(lat: Double, lng: Double, now: Long = System.currentTimeMillis()): List<String> {
+        val format = NavFormat(units())
+        val a = listOfNotNull(area, spotArea).firstOrNull { it.contains(lat, lng) }
+        val list = if (a != null) values(a, lat, lng, now, format) else skyValues(lat, lng, now)
+        return list.map { it.text }
+    }
+
     fun onLocation(lat: Double, lng: Double) {
         gpsFix = lat to lng
         // Remembered now and then, not on every fix.
@@ -2387,7 +2399,13 @@ class ConditionsFeature(
                 if (surface.isNotEmpty()) out += Value(null, surface.joinToString(" · ").replaceFirstChar { it.uppercase() }, "Water")
             }
 
-            // Worked out here, not downloaded.
+            out += skyValues(lat, lng, time)
+            return out
+        }
+
+        /** The sun, moon and solunar lines: worked out here, not downloaded. */
+        fun skyValues(lat: Double, lng: Double, time: Long): List<Value> {
+            val out = mutableListOf<Value>()
             val sky = astroDay(lat, lng, time)
             out += Value(null, "Sun up ${hhmm(sky.sunrise)} · down ${hhmm(sky.sunset)} · first light ${hhmm(sky.firstLight)}", "Sun")
             val bites = buildList {
