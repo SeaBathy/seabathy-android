@@ -21,7 +21,9 @@ MapLibre Native for iOS is the same map engine, so styles, layers and MBTiles ca
 ## Status (15 November 2026)
 
 Every feature of SeaBathy for Android 1.2.0 has been ported. The app builds with Xcode 26 for iOS 16 and
-later, the 268 unit tests ported from Android pass, and it runs in the iPhone simulator. It has not yet
+later, the 268 unit tests ported from Android pass, and it runs in the iPhone simulator. A UI tour
+(`SeaBathyUITests`) taps through every main feature on each build and saves screenshots to the
+`seabathy-ios-build` artifact (`out/ui`). It has not yet
 been tried on a real iPhone (that needs the Apple Developer Program for signing).
 
 Differences from Android:
