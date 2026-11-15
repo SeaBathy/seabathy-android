@@ -1390,6 +1390,109 @@ class ConditionsFeature(
         })
     }
 
+    // Good-weather alerts ---------------------------------------------------------
+
+    private fun alertLabel(r: AlertRules): String {
+        if (!r.enabled) return "Off: tell me when wind and waves suit me"
+        val u = units()
+        val days = when (r.weekdays) {
+            AlertRules.ALL_DAYS -> "any day"
+            AlertRules.WEEKENDS -> "weekends"
+            else -> r.weekdays.sorted().joinToString(", ") { DAY_NAMES[it - 1] }
+        }
+        return "On: wind ≤ ${u.wind.format(r.windMaxKn)}, waves ≤ ${wavesText(r.waveMaxM)}, ${r.minHours} h+, next ${r.daysAhead} days, $days"
+    }
+
+    /** The alert's settings: limits, how far ahead, which days. */
+    private fun showAlerts() {
+        val r = ConditionsAlerts.load(preferences)
+        val u = units()
+        val format = NavFormat(u)
+        fun update(new: AlertRules) {
+            ConditionsAlerts.save(activity, preferences, new)
+            if (new.enabled && !r.enabled && android.os.Build.VERSION.SDK_INT >= 33) {
+                androidx.core.app.ActivityCompat.requestPermissions(activity, arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 41)
+            }
+            refreshDialog()
+            showAlerts()
+        }
+        val body = panels.body()
+        body.addView(panels.caption(
+            "A few times a day the app checks the forecast at your spot (${if (followGps) "the boat's last position" else "the spot you set"}) " +
+                "and tells you when a day has enough daylight hours with wind and waves inside your limits. Each day is told once.",
+            topPaddingDp = 0
+        ))
+        panels.addRow(body, panels.row("Alert", if (r.enabled) "On" else "Off") { update(r.copy(enabled = !r.enabled)) })
+        panels.addRow(body, panels.row("Wind at most", u.wind.format(r.windMaxKn)) {
+            val choices = listOf(5.0, 8.0, 10.0, 12.0, 15.0, 18.0, 20.0, 25.0)
+            panels.showChoicePanel("Wind at most", choices.map { u.wind.format(it) }, choices.indexOf(r.windMaxKn)) { i -> update(r.copy(windMaxKn = choices[i])) }
+        })
+        panels.addRow(body, panels.row("Waves at most", wavesText(r.waveMaxM)) {
+            val choices = listOf(0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 2.5, 3.0)
+            panels.showChoicePanel("Waves at most", choices.map { wavesText(it) }, choices.indexOf(r.waveMaxM)) { i -> update(r.copy(waveMaxM = choices[i])) }
+        })
+        panels.addRow(body, panels.row("For at least", "${r.minHours} hours of daylight in a row") {
+            val choices = listOf(2, 3, 4, 5, 6, 8)
+            panels.showChoicePanel("For at least", choices.map { "$it hours" }, choices.indexOf(r.minHours)) { i -> update(r.copy(minHours = choices[i])) }
+        })
+        panels.addRow(body, panels.row("Look ahead", "Today and the next ${r.daysAhead} days") {
+            val choices = (1..7).toList()
+            panels.showChoicePanel("Look ahead", choices.map { "Today and the next $it day${if (it == 1) "" else "s"}" }, choices.indexOf(r.daysAhead)) { i -> update(r.copy(daysAhead = choices[i])) }
+        })
+        val dayText = when (r.weekdays) {
+            AlertRules.ALL_DAYS -> "Any day"
+            AlertRules.WEEKENDS -> "Weekends"
+            else -> r.weekdays.sorted().joinToString(", ") { DAY_NAMES[it - 1] }
+        }
+        panels.addRow(body, panels.row("Days", dayText) {
+            val labels = listOf("Any day", "Weekends") + (1..7).map { d -> (if (d in r.weekdays && r.weekdays != AlertRules.ALL_DAYS) "✓ " else "") + DAY_NAMES_LONG[d - 1] }
+            panels.showChoicePanel("Days (tap a day to add or remove it)", labels, -1) { i ->
+                val days = when (i) {
+                    0 -> AlertRules.ALL_DAYS
+                    1 -> AlertRules.WEEKENDS
+                    else -> {
+                        val d = i - 1
+                        val from = if (r.weekdays == AlertRules.ALL_DAYS) emptySet() else r.weekdays
+                        (if (d in from) from - d else from + d).ifEmpty { AlertRules.ALL_DAYS }
+                    }
+                }
+                update(r.copy(weekdays = days))
+            }
+        })
+        panels.addRow(body, panels.row("Check now", "Look at the forecast straight away") {
+            scope.launch {
+                val result = withContext(Dispatchers.IO) { runCatching { ConditionsAlerts.check(preferences) } }
+                val found = result.getOrNull()
+                when {
+                    result.isFailure -> callbacks.toast("Couldn't get the forecast: check the connection")
+                    found == null -> callbacks.toast("Set a spot first (Sea conditions → Spot)")
+                    found.second.isEmpty() -> callbacks.toast("Nothing inside your limits in the next ${found.first.daysAhead} days")
+                    else -> {
+                        val day = java.text.SimpleDateFormat("EEE d MMM", Locale.getDefault())
+                        val clock = java.text.SimpleDateFormat("HH:mm", Locale.getDefault())
+                        panels.confirm(
+                            "Good days coming up",
+                            found.second.joinToString("\n") { "${day.format(Date(it.day))}: ${clock.format(Date(it.from))}–${clock.format(Date(it.to))}, wind up to ${u.wind.format(it.maxWindKn)}, waves up to ${wavesText(it.maxWaveM)}" } +
+                                "\n\nForecast at your spot. Check it before you go: not for navigation.",
+                            confirmLabel = "OK", destructive = false
+                        ) {}
+                    }
+                }
+            }
+        })
+        body.addView(panels.caption("Uses about 8 forecast requests a day. Not for navigation: always check the latest forecast and warnings.", topPaddingDp = 4))
+        alertsDialog?.dismiss()
+        alertsDialog = panels.showPanel("Good-weather alert", body)
+    }
+
+    private var alertsDialog: android.app.Dialog? = null
+
+    /** A wave height in the chosen unit: "1.5 m". */
+    private fun wavesText(metres: Double): String {
+        val u = units().waves
+        return String.format(Locale.US, if (u.of(metres) < 10) "%.1f %s" else "%.0f %s", u.of(metres), u.label)
+    }
+
     private fun refreshDialog() {
         dialogBody?.let { fill(it) }
     }
@@ -1455,6 +1558,9 @@ class ConditionsFeature(
             lastAutoAttempt = System.currentTimeMillis()
             download(b[0], b[1], b[2], b[3], replacingId = SPOT_ID)
         })
+
+        body.addView(panels.sectionHeader("ALERTS"))
+        panels.addRow(body, panels.row("Good-weather alert", alertLabel(ConditionsAlerts.load(preferences))) { showAlerts() })
 
         body.addView(panels.sectionHeader("ON THE MAP"))
         panels.addRow(body, panels.row("Direction shown as", directionStyle.label) {
@@ -2257,6 +2363,8 @@ class ConditionsFeature(
         private const val MIN_DOWNLOAD_GAP_MS = 75_000L
         private const val MAX_ARROWS_PER_SIDE = 12
         private const val BOX_ROWS = 9
+        private val DAY_NAMES = listOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
+        private val DAY_NAMES_LONG = listOf("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")
         private const val PLAY_STEP_MS = 650L
         private const val PLAY = "Play"
         private const val PAUSE = "Pause"

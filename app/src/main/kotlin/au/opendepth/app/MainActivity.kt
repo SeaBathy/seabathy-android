@@ -393,6 +393,8 @@ class MainActivity : AppCompatActivity() {
         panels = PanelDialogs(this)
         importProgressDialog = ImportProgressDialog(this, panels)
         backup = au.opendepth.app.backup.BackupFeature(this, panels, preferences, ::toast)
+        // Keeps the good-weather alert's check running after an update or a restored backup.
+        au.opendepth.app.conditions.ConditionsAlerts.schedule(this, au.opendepth.app.conditions.ConditionsAlerts.load(preferences).enabled)
 
         overlays = OverlayLayerController(
             context = this,
