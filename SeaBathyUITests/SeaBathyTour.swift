@@ -33,6 +33,9 @@ final class SeaBathyTour: XCTestCase {
         app.launch()
         _ = app.wait(for: .runningForeground, timeout: 20)
         sleep(4)
+        // A route left running offers to resume on the next start (as on Android): say no.
+        let resume = app.alerts.matching(NSPredicate(format: "label CONTAINS[c] 'Resume navigation'")).firstMatch
+        if resume.waitForExistence(timeout: 2) { resume.buttons["Cancel"].tap(); sleep(1) }
     }
 
     // MARK: - Helpers
@@ -319,10 +322,12 @@ final class SeaBathyTour: XCTestCase {
         if tap("Go", wait: 5) {
             sleep(4)
             shot("navigating-hud")
-            tap("stop", contains: true, wait: 4)
+            // The square button at the top of the navigation display stops it.
+            let stopButton = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'stop' OR identifier CONTAINS[c] 'stop'")).firstMatch
+            if stopButton.waitForExistence(timeout: 4) { stopButton.tap() } else { XCTFail("No stop button while navigating") }
             sleep(1)
-            let confirm = app.alerts.buttons.firstMatch
-            if confirm.waitForExistence(timeout: 2) { app.alerts.buttons.element(boundBy: 0).tap() }
+            let confirm = app.alerts.buttons.matching(NSPredicate(format: "label BEGINSWITH[c] 'Stop'")).firstMatch
+            if confirm.waitForExistence(timeout: 3) { confirm.tap() }
         } else {
             done()
         }
