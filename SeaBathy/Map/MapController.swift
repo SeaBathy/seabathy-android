@@ -266,7 +266,7 @@ enum MapExpr {
     static func byZoom(_ stops: [(Double, Double)]) -> NSExpression {
         var json: [Any] = ["interpolate", ["linear"], ["zoom"]]
         for (zoom, value) in stops { json.append(zoom); json.append(value) }
-        return NSExpression(mlnJSONObject: json)
+        return NSExpression(mglJSONObject: json)
     }
 
     /// ["match", ["get", key], case1, colour1, ..., fallback] with "#RRGGBB" colours.
@@ -274,6 +274,6 @@ enum MapExpr {
         var json: [Any] = ["match", ["get", key]]
         for (value, colour) in cases { json.append(value); json.append(colour) }
         json.append(fallback)
-        return NSExpression(mlnJSONObject: json)
+        return NSExpression(mglJSONObject: json)
     }
 }
