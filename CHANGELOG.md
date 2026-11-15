@@ -2,12 +2,14 @@
 
 ## Unreleased
 
-- **Temperature lines:** labelled lines over the sea temperature maps (satellite, breaks and at
-  depth), every 0.25, 0.5, 1 or 2 degrees or spaced automatically. Turn them off in Sea conditions.
+- **Temperature lines:** smooth, labelled lines over the sea temperature maps (satellite, breaks
+  and at depth), every 0.25, 0.5, 1 or 2 degrees or spaced automatically, with whole degrees drawn
+  heavier. Tiny rings from satellite noise are left out. Turn them off in Sea conditions.
 - **Target temperature band:** set a range, say 24 to 26 °C, and water in it shows bright with bold
   edges while the rest is dimmed, on the map and in the colour key.
 - **Eddy outlines:** the sea level map now draws lines at 10, 20 and 30 cm above (solid) and below
-  (dashed) average, and marks warm (W) and cold (C) eddy middles. Can be shown on every sea map.
+  (dashed) average, and marks warm (W) and cold (C) eddy middles with their height. Shown on every
+  sea map, they are drawn in white over the other colours, as IMOS OceanCurrent does.
 - **Sun, moon and solunar times** in the values box: sunrise, sunset, first light, moon phase, and
   solunar major and minor times (a traditional fishing guide, not a promise). Worked out on the
   phone, nothing downloaded.

@@ -711,7 +711,7 @@ class ConditionsFeature(
                     PropertyFactory.rasterFadeDuration(0f)
                 )
                 // Under the arrows, above every imported layer.
-                val above = listOf(CONTOUR_LINE_LAYER, ARROW_LAYER).firstOrNull { style.getLayer(it) != null }
+                val above = listOf(CONTOUR_CASING_LAYER, CONTOUR_LINE_LAYER, ARROW_LAYER).firstOrNull { style.getLayer(it) != null }
                 if (above != null) style.addLayerBelow(layer, above)
                 else style.addLayerAbove(layer, MapLayerIds.OVERLAY_ANCHOR)
             }
@@ -1643,24 +1643,36 @@ class ConditionsFeature(
                     val step = if (contourStep < 0) Contours.autoStep(high - low) else contourStep
                     val levels = Contours.levels(low, high, step)
                     val inCelsius = DoubleArray(levels.size) { unit.toCelsius(levels[it]) }
-                    for (line in Contours.lines(tempGrid.grid, smooth, inCelsius, minPoints = 6)) {
-                        lines += line to ("temp" to stepText(unit.of(line.level)) + "°")
+                    for (line in Contours.lines(tempGrid.grid, smooth, inCelsius, minPoints = 6, rounding = 2, minShare = MIN_LINE_SHARE)) {
+                        val inUnit = unit.of(line.level)
+                        val major = Contours.isMajor(inUnit, step, levels.size)
+                        lines += line to ((if (major) "temp" else "minor") to stepText(inUnit) + "°")
                     }
                 }
             }
             targetBand?.let { (lo, hi) ->
                 // From the unsmoothed values, so the edges sit exactly where the bright water ends.
-                for (line in Contours.lines(tempGrid.grid, tempGrid.values, doubleArrayOf(lo, hi), minPoints = 4)) {
+                for (line in Contours.lines(tempGrid.grid, tempGrid.values, doubleArrayOf(lo, hi), minPoints = 4, rounding = 1, minShare = MIN_LINE_SHARE)) {
                     lines += line to ("band" to String.format(Locale.US, "%.1f%s", unit.of(line.level), unit.label))
                 }
             }
         }
         val level = a.satellites[SatelliteKind.SEA_LEVEL]
         if (level != null && (eddyMode == EddyMode.ALWAYS || (eddyMode == EddyMode.WITH_SEA_LEVEL && choice == ColourChoice.SEA_LEVEL))) {
-            for (line in Contours.lines(level.grid, level.values, EDDY_LEVELS_CM, minPoints = 4)) {
-                lines += line to ((if (line.level > 0) "warm" else "cold") to String.format(Locale.US, "%+.0f", line.level))
+            // On the sea level map in red and blue; over other maps white, the way IMOS OceanCurrent draws them.
+            val light = choice != ColourChoice.SEA_LEVEL
+            // Kept inside the area: the coarse sea level grid reaches a little past it.
+            val g = level.grid
+            val inside = FloatArray(level.values.size) { i ->
+                val lat = g.lats[i / g.cols]
+                val lng = g.lngs[i % g.cols]
+                if (lat < a.south || lat > a.north || lng < a.west || lng > a.east) Float.NaN else level.values[i]
             }
-            eddies = Contours.eddies(level.grid, level.values)
+            for (line in Contours.lines(g, inside, EDDY_LEVELS_CM, minPoints = 4, rounding = 2)) {
+                val kind = (if (line.level > 0) "warm" else "cold") + if (light) "_light" else ""
+                lines += line to (kind to String.format(Locale.US, "%+.0f cm", line.level))
+            }
+            eddies = Contours.eddies(g, inside)
         }
         if (lines.isEmpty() && eddies.isEmpty()) return MapLayerIds.EMPTY_GEOJSON
         return Contours.geoJson(lines, eddies)
@@ -1676,37 +1688,54 @@ class ConditionsFeature(
             }
             val kind = Expression.get("kind")
             val isLine = Expression.eq(Expression.geometryType(), Expression.literal("LineString"))
+            val isCold = Expression.any(Expression.eq(kind, Expression.literal("cold")), Expression.eq(kind, Expression.literal("cold_light")))
+            // Wider with zoom, from the width at zoom 5 to twice it at zoom 11.
+            // Zoom must be the outer expression: a width for each kind at zoom 5, doubled by zoom 11.
+            fun width(default: Float, vararg cases: Pair<String, Float>): Expression {
+                fun at(k: Float) = Expression.match(kind, Expression.literal(default * k),
+                    *cases.map { Expression.stop(it.first, Expression.literal(it.second * k)) }.toTypedArray())
+                return Expression.interpolate(Expression.linear(), Expression.zoom(), Expression.stop(5, at(1f)), Expression.stop(11, at(2f)))
+            }
+            // A faint light edge under the dark temperature lines keeps them visible over dark blue water.
+            add(LineLayer(CONTOUR_CASING_LAYER, CONTOUR_SOURCE).withProperties(
+                PropertyFactory.lineColor(Expression.color(0x8CFFFFFF.toInt())),
+                PropertyFactory.lineWidth(width(1.8f, "temp" to 2.6f)),
+                PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+                PropertyFactory.lineCap(Property.LINE_CAP_ROUND)
+            ).withFilter(Expression.all(isLine, Expression.any(Expression.eq(kind, Expression.literal("temp")), Expression.eq(kind, Expression.literal("minor"))))))
             add(LineLayer(CONTOUR_LINE_LAYER, CONTOUR_SOURCE).withProperties(
-                PropertyFactory.lineColor(Expression.match(kind, Expression.color(0xD90B1622.toInt()),
+                PropertyFactory.lineColor(Expression.match(kind, Expression.color(0xE60B1622.toInt()),
+                    Expression.stop("minor", Expression.color(0xCC0B1622.toInt())),
                     Expression.stop("band", Expression.color(0xFFFFFFFF.toInt())),
-                    Expression.stop("warm", Expression.color(0xFF5A0A0A.toInt())))),
-                PropertyFactory.lineWidth(Expression.match(kind, Expression.literal(1.0f),
-                    Expression.stop("band", Expression.literal(2.6f)),
-                    Expression.stop("warm", Expression.literal(1.6f)))),
-                PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND)
-            ).withFilter(Expression.all(isLine, Expression.neq(kind, Expression.literal("cold")))))
+                    Expression.stop("warm", Expression.color(0xFF8E1616.toInt())),
+                    Expression.stop("warm_light", Expression.color(0xE6FFFFFF.toInt())))),
+                PropertyFactory.lineWidth(width(1.1f, "minor" to 0.6f, "band" to 2.4f, "warm" to 1.5f, "warm_light" to 1.3f)),
+                PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+                PropertyFactory.lineCap(Property.LINE_CAP_ROUND)
+            ).withFilter(Expression.all(isLine, Expression.not(isCold))))
             add(LineLayer(CONTOUR_DASH_LAYER, CONTOUR_SOURCE).withProperties(
-                PropertyFactory.lineColor(Expression.color(0xFF0A1E5A.toInt())),
-                PropertyFactory.lineWidth(1.6f),
+                PropertyFactory.lineColor(Expression.match(kind, Expression.color(0xFF1B3A8C.toInt()),
+                    Expression.stop("cold_light", Expression.color(0xE6FFFFFF.toInt())))),
+                PropertyFactory.lineWidth(width(1.5f, "cold_light" to 1.3f)),
                 PropertyFactory.lineDasharray(arrayOf(3f, 2f))
-            ).withFilter(Expression.all(isLine, Expression.eq(kind, Expression.literal("cold")))))
+            ).withFilter(Expression.all(isLine, isCold)))
             val font = arrayOf(MapStyleFactory.labelFont(style))
             add(SymbolLayer(CONTOUR_LABEL_LAYER, CONTOUR_SOURCE).withProperties(
                 PropertyFactory.symbolPlacement(Property.SYMBOL_PLACEMENT_LINE),
-                PropertyFactory.symbolSpacing(220f),
+                PropertyFactory.symbolSpacing(320f),
                 PropertyFactory.textField(Expression.get("label")),
                 PropertyFactory.textFont(font),
-                PropertyFactory.textSize(Expression.match(kind, Expression.literal(10f), Expression.stop("band", Expression.literal(11f)))),
+                PropertyFactory.textSize(Expression.match(kind, Expression.literal(10.5f), Expression.stop("minor", Expression.literal(9f)), Expression.stop("band", Expression.literal(11f)))),
                 PropertyFactory.textColor("#FFFFFF"),
                 PropertyFactory.textHaloColor("#0B1622"),
                 PropertyFactory.textHaloWidth(1.3f),
                 PropertyFactory.textKeepUpright(true),
                 PropertyFactory.textMaxAngle(35f)
-            ).withFilter(isLine))
+            ).withFilter(Expression.all(isLine, Expression.neq(Expression.get("label"), Expression.literal("")))))
             add(SymbolLayer(EDDY_LABEL_LAYER, CONTOUR_SOURCE).withProperties(
                 PropertyFactory.textField(Expression.get("label")),
                 PropertyFactory.textFont(font),
-                PropertyFactory.textSize(17f),
+                PropertyFactory.textSize(15f),
                 PropertyFactory.textColor(Expression.match(kind, Expression.color(0xFF1E4FD8.toInt()), Expression.stop("warm", Expression.color(0xFFD8281E.toInt())))),
                 PropertyFactory.textHaloColor("#FFFFFF"),
                 PropertyFactory.textHaloWidth(2f),
@@ -2146,6 +2175,9 @@ class ConditionsFeature(
         private const val IMAGE_SOURCE = "conditions-image-src"
         private const val CONTOUR_SOURCE = "conditions-contours-src"
         private const val CONTOUR_LINE_LAYER = "conditions-contours"
+        private const val CONTOUR_CASING_LAYER = "conditions-contours-casing"
+        /** Temperature rings smaller than this share of the area are noise, not features. */
+        private const val MIN_LINE_SHARE = 0.03
         private const val CONTOUR_DASH_LAYER = "conditions-contours-cold"
         private const val CONTOUR_LABEL_LAYER = "conditions-contour-labels"
         private const val EDDY_LABEL_LAYER = "conditions-eddy-labels"

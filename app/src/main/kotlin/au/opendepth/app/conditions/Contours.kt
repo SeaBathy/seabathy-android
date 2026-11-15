@@ -81,12 +81,66 @@ object Contours {
         return src
     }
 
-    /** Contour lines of [values] on [grid] at each of [levels]; lines shorter than [minPoints] are dropped. */
-    fun lines(grid: GeoGrid, values: FloatArray, levels: DoubleArray, minPoints: Int = 3): List<ContourLine> {
+    /**
+     * Contour lines of [values] on [grid] at each of [levels]; lines shorter
+     * than [minPoints] are dropped. [rounding] passes of corner cutting turn
+     * the grid's kinks into smooth curves.
+     */
+    fun lines(
+        grid: GeoGrid, values: FloatArray, levels: DoubleArray, minPoints: Int = 3, rounding: Int = 0,
+        /** Lines (mostly little rings round noise) spanning less than this share of the area are dropped. */
+        minShare: Double = 0.0
+    ): List<ContourLine> {
         val out = mutableListOf<ContourLine>()
         if (grid.rows < 2 || grid.cols < 2) return out
-        for (level in levels) out += linesAt(grid, values, level, minPoints)
+        val minSpan = minShare * maxOf(grid.east - grid.west, grid.north - grid.south)
+        for (level in levels) for (line in linesAt(grid, values, level, minPoints)) {
+            if (minSpan > 0 && span(line.points) < minSpan) continue
+            out += if (rounding > 0) ContourLine(level, rounded(line.points, rounding)) else line
+        }
         return out
+    }
+
+    /** The larger of a line's width and height, in degrees. */
+    private fun span(p: DoubleArray): Double {
+        var x0 = Double.MAX_VALUE; var x1 = -Double.MAX_VALUE; var y0 = Double.MAX_VALUE; var y1 = -Double.MAX_VALUE
+        for (i in 0 until p.size / 2) {
+            x0 = minOf(x0, p[2 * i]); x1 = maxOf(x1, p[2 * i]); y0 = minOf(y0, p[2 * i + 1]); y1 = maxOf(y1, p[2 * i + 1])
+        }
+        return maxOf(x1 - x0, y1 - y0)
+    }
+
+    /**
+     * Chaikin corner cutting: each pass swaps every corner for two points a
+     * quarter of the way along its sides. Ends of open lines stay put;
+     * closed lines (first point = last) stay closed.
+     */
+    fun rounded(points: DoubleArray, passes: Int): DoubleArray {
+        var p = points
+        repeat(passes) {
+            val n = p.size / 2
+            if (n < 3) return p
+            val closed = p[0] == p[p.size - 2] && p[1] == p[p.size - 1]
+            val out = ArrayList<Double>(n * 4)
+            if (!closed) { out += p[0]; out += p[1] }
+            for (i in 0 until n - 1) {
+                val x0 = p[2 * i]; val y0 = p[2 * i + 1]
+                val x1 = p[2 * i + 2]; val y1 = p[2 * i + 3]
+                out += 0.75 * x0 + 0.25 * x1; out += 0.75 * y0 + 0.25 * y1
+                out += 0.25 * x0 + 0.75 * x1; out += 0.25 * y0 + 0.75 * y1
+            }
+            if (closed) { out += out[0]; out += out[1] } else { out += p[p.size - 2]; out += p[p.size - 1] }
+            p = out.toDoubleArray()
+        }
+        return p
+    }
+
+    /** Whether [level] gets a thick, labelled line: whole degrees for fine steps, every other line for coarse ones, all when few. */
+    fun isMajor(level: Double, step: Double, count: Int): Boolean {
+        if (count <= 6) return true
+        val every = if (step < 1) 1.0 else step * 2
+        val k = level / every
+        return abs(k - Math.round(k)) < 1e-6
     }
 
     private fun linesAt(grid: GeoGrid, values: FloatArray, level: Double, minPoints: Int): List<ContourLine> {
@@ -240,8 +294,8 @@ object Contours {
         for (e in eddies) {
             if (!first) sb.append(',')
             first = false
-            sb.append(String.format(Locale.US, """{"type":"Feature","properties":{"kind":"%s","label":"%s"},"geometry":{"type":"Point","coordinates":[%.4f,%.4f]}}""",
-                if (e.warm) "warm" else "cold", if (e.warm) "W" else "C", e.lng, e.lat))
+            sb.append(String.format(Locale.US, """{"type":"Feature","properties":{"kind":"%s","label":"%s %+.0f"},"geometry":{"type":"Point","coordinates":[%.4f,%.4f]}}""",
+                if (e.warm) "warm" else "cold", if (e.warm) "W" else "C", e.valueCm, e.lng, e.lat))
         }
         return sb.append("]}").toString()
     }
