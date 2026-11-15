@@ -123,8 +123,8 @@ final class NavMarksController: ObservableObject {
         }
 
         let areaKinds = ["area_anchorage", "area_mooring", "area_marina", "area_channel"]
-        let areaColour = NSExpression(format: "MGL_MATCH(kind, 'area_channel', %@, 'area_mooring', %@, 'area_marina', %@, %@)",
-                                      UIColor(hex: "#64748B"), UIColor(hex: "#0EA5E9"), UIColor(hex: "#0EA5E9"), UIColor(hex: "#7C3AED"))
+        let areaColour = MapExpr.matchColour("kind", [("area_channel", "#64748B"), ("area_mooring", "#0EA5E9"), ("area_marina", "#0EA5E9")],
+                                              fallback: "#7C3AED")
 
         let fill = MLNFillStyleLayer(identifier: Self.areaFillLayer, source: lines)
         fill.predicate = NSPredicate(format: "kind IN %@", areaKinds)
@@ -140,8 +140,7 @@ final class NavMarksController: ObservableObject {
         let pipelines = MLNLineStyleLayer(identifier: Self.pipelinesLayer, source: lines)
         pipelines.predicate = NavExtrasStyle.kind("pipeline")
         pipelines.lineColor = NavExtrasStyle.colour("#111111")
-        pipelines.lineWidth = NSExpression(format: "mgl_interpolate:withCurveType:parameters:stops:($zoomLevel, 'linear', nil, %@)",
-                                           [5: 1.5, 12: 3])
+        pipelines.lineWidth = MapExpr.byZoom([(5, 1.5), (12, 3)])
         pipelines.lineDashPattern = NSExpression(forConstantValue: [0.1, 2])
         pipelines.lineCap = NavExtrasStyle.text("round")
 
@@ -154,8 +153,7 @@ final class NavMarksController: ObservableObject {
         symbols.iconImageName = NSExpression(forKeyPath: "icon")
         symbols.iconAnchor = NavExtrasStyle.text("bottom")
         symbols.iconAllowsOverlap = NSExpression(forConstantValue: true)
-        symbols.iconScale = NSExpression(format: "mgl_interpolate:withCurveType:parameters:stops:($zoomLevel, 'linear', nil, %@)",
-                                         [6: 0.5, 10: 0.8, 14: 1.15, 17: 1.5])
+        symbols.iconScale = MapExpr.byZoom([(6, 0.5), (10, 0.8), (14, 1.15), (17, 1.5)])
 
         // Just over the imported layers, under the grid, tracks, routes and waypoints.
         var below = MapLayerIds.overlayAnchor

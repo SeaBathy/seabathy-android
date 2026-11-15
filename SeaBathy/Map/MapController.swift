@@ -255,3 +255,25 @@ final class MapController: NSObject, ObservableObject {
         return map.visibleFeatures(in: rect, styleLayerIdentifiers: layers)
     }
 }
+
+/**
+ Style expressions built from the MapLibre style-spec JSON form. iOS 26 refuses
+ custom functions (such as MGL_MATCH or mgl_interpolate) inside
+ `NSExpression(format:)` strings and the app would stop, so never use those here.
+ */
+enum MapExpr {
+    /// ["interpolate", ["linear"], ["zoom"], z1, v1, z2, v2, ...]
+    static func byZoom(_ stops: [(Double, Double)]) -> NSExpression {
+        var json: [Any] = ["interpolate", ["linear"], ["zoom"]]
+        for (zoom, value) in stops { json.append(zoom); json.append(value) }
+        return NSExpression(mlnJSONObject: json)
+    }
+
+    /// ["match", ["get", key], case1, colour1, ..., fallback] with "#RRGGBB" colours.
+    static func matchColour(_ key: String, _ cases: [(String, String)], fallback: String) -> NSExpression {
+        var json: [Any] = ["match", ["get", key]]
+        for (value, colour) in cases { json.append(value); json.append(colour) }
+        json.append(fallback)
+        return NSExpression(mlnJSONObject: json)
+    }
+}

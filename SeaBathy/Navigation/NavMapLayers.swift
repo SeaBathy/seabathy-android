@@ -105,10 +105,8 @@ enum NavMapLayers {
         label.text = NSExpression(forKeyPath: "name")
         label.textFontNames = NSExpression(forConstantValue: [labelFont])
         // Hidden below zoom 11, fading in over the next zoom, growing to 16 pt at zoom 18.
-        label.textFontSize = NSExpression(format: "mgl_interpolate:withCurveType:parameters:stops:($zoomLevel, 'linear', nil, %@)",
-                                          [11: 10, 13: 12, 18: 16] as NSDictionary)
-        label.textOpacity = NSExpression(format: "mgl_interpolate:withCurveType:parameters:stops:($zoomLevel, 'linear', nil, %@)",
-                                         [11: 0, 12: 1] as NSDictionary)
+        label.textFontSize = MapExpr.byZoom([(11, 10), (13, 12), (18, 16)])
+        label.textOpacity = MapExpr.byZoom([(11, 0), (12, 1)])
         label.textColor = NSExpression(forConstantValue: UIColor.white)
         label.textHaloColor = NSExpression(forConstantValue: UIColor.black)
         label.textHaloWidth = NSExpression(forConstantValue: 1.2)
