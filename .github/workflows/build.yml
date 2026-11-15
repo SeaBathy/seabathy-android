@@ -11,13 +11,16 @@ permissions:
 
 jobs:
   build:
-    runs-on: macos-latest
+    runs-on: macos-26
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
 
-      - name: Tools
+      - name: Tools (Xcode 26 or newer)
         run: |
+          XCODE=$(ls -d /Applications/Xcode_2[6-9]*.app /Applications/Xcode_[3-9][0-9]*.app 2>/dev/null | grep -v -i beta | sort -V | tail -n 1)
+          if [ -z "$XCODE" ]; then echo "::error::No Xcode 26+ on this runner"; ls /Applications; exit 1; fi
+          sudo xcode-select -s "$XCODE"
           brew install xcodegen
           xcodebuild -version
           mkdir -p out logs
@@ -48,6 +51,15 @@ jobs:
           xcodebuild -project SeaBathy.xcodeproj -scheme SeaBathy -configuration Debug \
             -destination 'generic/platform=iOS Simulator' -derivedDataPath build/sim \
             build 2>&1 | tee logs/sim-build.log | tail -n 30
+
+      - name: Unit tests (simulator)
+        run: |
+          set -o pipefail
+          UDID=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          d = json.load(sys.stdin)["devices"]
+          print(next(x["udid"] for k in sorted(d, reverse=True) if "iOS" in k for x in d[k] if x["name"].startswith("iPhone")))')
+          xcodebuild -project SeaBathy.xcodeproj -scheme SeaBathy -destination "id=$UDID"             -derivedDataPath build/test test 2>&1 | tee logs/tests.log | grep -E "Test Case|error:|Executed|TEST" | tail -n 120
 
       - name: Run in the simulator and take screenshots
         run: |

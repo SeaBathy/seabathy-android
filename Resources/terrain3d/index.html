@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>SeaBathy 3D</title>
+  <link rel="stylesheet" href="terrain.css">
+</head>
+<body>
+  <div id="view"></div>
+
+  <header id="top">
+    <button id="btn-close" class="icon" aria-label="Close 3D view">✕</button>
+    <div id="title">3D terrain</div>
+    <div class="cams">
+      <button data-cam="45" aria-label="View from 45 degrees">45°</button>
+      <button data-cam="low" aria-label="View from the side">Side</button>
+      <button data-cam="top" aria-label="View from above">Top</button>
+      <button data-cam="reset" aria-label="Fit the whole area">Fit</button>
+    </div>
+  </header>
+
+  <div id="boat-chip" hidden></div>
+  <div id="readout" hidden></div>
+  <div id="map-credit" hidden></div>
+  <button id="btn-wpt-mode" class="fab" aria-pressed="false" title="Drop waypoints by tapping the seabed">📍 Waypoint</button>
+  <div id="profile" hidden>
+    <div class="profile-head"><span id="profile-title">Profile</span><button id="profile-close" class="icon small" aria-label="Close profile">✕</button></div>
+    <canvas id="profile-canvas" width="640" height="200"></canvas>
+  </div>
+
+  <section id="sheet">
+    <button id="sheet-handle" aria-label="Hide options"><span class="chev">▾</span></button>
+    <div id="panels">
+      <div class="panel" data-panel="view">
+        <div class="row">
+          <span class="label">Height <b id="exag-val">3×</b></span>
+          <input id="exag" type="range" min="0" max="1000" step="1" aria-label="Vertical exaggeration">
+        </div>
+        <div class="row chips">
+          <button id="exag-true">1:1</button>
+          <button id="exag-auto">Auto</button>
+          <button data-exag="10">10×</button>
+          <button data-exag="50">50×</button>
+          <button id="btn-profile" title="Tap two points for a depth profile">Profile</button>
+        </div>
+        <div class="row chips">
+          <button data-face="0" aria-label="Look north">N</button>
+          <button data-face="90" aria-label="Look east">E</button>
+          <button data-face="180" aria-label="Look south">S</button>
+          <button data-face="270" aria-label="Look west">W</button>
+          <button id="btn-boat" title="Show your boat from GPS">⛵ Boat</button>
+        </div>
+        <label class="check"><input type="checkbox" id="follow-boat"> Follow the boat</label>
+        <label class="check"><input type="checkbox" id="auto-rotate"> Auto-rotate</label>
+        <div class="row"><span class="label">Detail</span>
+          <select id="detail">
+            <option value="256">Fast (256)</option>
+            <option value="512">Normal (512)</option>
+            <option value="1024">High (1024)</option>
+            <option value="2048">Maximum (2048)</option>
+          </select>
+        </div>
+        <p class="hint" id="grid-info"></p>
+        <p class="hint">One finger rotates · two fingers pan and zoom · double-tap to fly in · tap for depth</p>
+      </div>
+
+      <div class="panel" data-panel="depth" hidden>
+        <div class="row">
+          <label class="inline">From <input id="clip-from" type="number" inputmode="decimal" step="0.5"></label>
+          <label class="inline">to <input id="clip-to" type="number" inputmode="decimal" step="0.5"> <span class="depth-unit">m</span></label>
+        </div>
+        <input id="clip-shallow" type="range" min="0" max="1000" value="0" aria-label="Shallowest depth shown">
+        <input id="clip-deep" type="range" min="0" max="1000" value="1000" aria-label="Deepest depth shown">
+        <label class="check"><input type="checkbox" id="clip-on"> Hide depths outside this range</label>
+        <div class="row chips">
+          <button id="btn-isolate" class="primary">Isolate &amp; zoom</button>
+          <button id="btn-show-all">Whole layer</button>
+        </div>
+        <p class="hint">Isolate &amp; zoom reloads just these depths from the survey at full detail.</p>
+      </div>
+
+      <div class="panel" data-panel="map" hidden>
+        <div id="safety-note" class="map-status warn" hidden>
+          Lighter settings are on because the phone's graphics ran short.
+          <button id="btn-full-quality" class="wide">Try full quality again</button>
+        </div>
+        <div id="map-list" class="map-list"></div>
+        <div id="custom-form" class="custom-form" hidden>
+          <input id="custom-name" type="text" placeholder="Name, e.g. Google satellite" autocomplete="off">
+          <input id="custom-url" type="url" placeholder="https://…/{z}/{x}/{y}.png" autocomplete="off" spellcheck="false">
+          <p class="hint">A tile link with {z}, {x} and {y}. Only add maps you're allowed to use.</p>
+          <p class="form-error" id="custom-error" hidden></p>
+          <div class="row chips"><button id="custom-cancel">Cancel</button><button id="custom-add" class="primary">Add map</button></div>
+        </div>
+        <div id="drape-controls" hidden>
+          <div id="drape-status" class="map-status"></div>
+          <div class="row"><span class="label">Map blend</span>
+            <input id="drape-mix" type="range" min="0" max="1" step="0.05" aria-label="How much of the map shows over the depth colours"></div>
+          <label class="check"><input type="checkbox" id="drape-detail"> Sharper map as you zoom in</label>
+          <button id="btn-save-offline" class="wide" hidden>Save this area offline</button>
+        </div>
+      </div>
+
+      <div class="panel" data-panel="colour" hidden>
+        <div class="row"><span class="label">Colour by</span>
+          <select id="color-mode">
+            <option value="depth">Depth</option>
+            <option value="slope">Slope (ledges and drop-offs)</option>
+          </select>
+        </div>
+        <div id="depth-colour-controls">
+          <div class="row"><span class="label">Palette</span><select id="palette"></select></div>
+          <div class="row">
+            <label class="inline">Shallow <input id="ramp-shallow" type="number" inputmode="decimal" step="1"></label>
+            <label class="inline">Deep <input id="ramp-deep" type="number" inputmode="decimal" step="1"> <span class="depth-unit">m</span></label>
+          </div>
+          <div class="row chips">
+            <button id="ramp-auto" title="Stretch colours over the middle 96% of depths">Auto range</button>
+            <button id="ramp-fit" title="Use the full depth range">Fit data</button>
+          </div>
+        </div>
+        <div class="row" id="slope-row" hidden><span class="label">Red from</span>
+          <select id="slope-max">
+            <option value="5">5° (gentle seabeds)</option>
+            <option value="10">10°</option>
+            <option value="20" selected>20°</option>
+            <option value="35">35°</option>
+            <option value="60">60° (cliffs only)</option>
+          </select>
+        </div>
+        <canvas id="legend" width="600" height="24"></canvas>
+        <div class="legend-labels"><span id="legend-lo"></span><span id="legend-hi"></span></div>
+      </div>
+
+      <div class="panel" data-panel="contours" hidden>
+        <label class="check"><input type="checkbox" id="contour-on" checked> Contour lines</label>
+        <div class="row"><span class="label">Interval <b id="contour-val"></b></span>
+          <input id="contour" type="range" min="0" max="11" step="1" value="6" aria-label="Contour interval"></div>
+        <label class="check"><input type="checkbox" id="contour-labels" checked> Depth labels</label>
+      </div>
+
+      <div class="panel" data-panel="light" hidden>
+        <div class="row"><span class="label">Sun</span><input id="sun-az" type="range" min="0" max="360" step="5" value="315" aria-label="Sun direction"></div>
+        <div class="row"><span class="label">Sun height</span><input id="sun-el" type="range" min="5" max="90" step="1" value="35" aria-label="Sun height"></div>
+        <label class="check"><input type="checkbox" id="shadows" checked> Shadows</label>
+        <label class="check"><input type="checkbox" id="sea-surface"> Sea surface at 0 m</label>
+        <label class="check"><input type="checkbox" id="wpt" checked> Waypoints</label>
+      </div>
+    </div>
+
+    <nav id="tabs">
+      <button data-tab="view" class="active">View</button>
+      <button data-tab="map">Map</button>
+      <button data-tab="depth">Depth</button>
+      <button data-tab="colour">Colours</button>
+      <button data-tab="contours">Contours</button>
+      <button data-tab="light">Light</button>
+    </nav>
+  </section>
+
+  <div id="busy" hidden><div class="spinner"></div><span id="busy-text">Loading…</span></div>
+  <div id="toast" hidden></div>
+  <script src="terrain.js"></script>
+</body>
+</html>

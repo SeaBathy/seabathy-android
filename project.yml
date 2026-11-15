@@ -1,11 +1,14 @@
 # XcodeGen spec: `xcodegen generate` turns this into SeaBathy.xcodeproj.
 # The .xcodeproj itself is not kept in git; CI generates it on every build.
+# Built with Xcode 26 (iOS 26 SDK). Minimum iOS 16: MapLibre 7 needs 15.5, and
+# Xcode 26 cannot target anything older than iOS 15.
 name: SeaBathy
 options:
   bundleIdPrefix: com.seabathy
   deploymentTarget:
     iOS: "16.0"
   createIntermediateGroups: true
+  xcodeVersion: "26.0"
 
 packages:
   MapLibre:
@@ -16,30 +19,108 @@ packages:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "0.1.0"
+    SWIFT_STRICT_CONCURRENCY: minimal
+    MARKETING_VERSION: "1.2.0"
     CURRENT_PROJECT_VERSION: "1"
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    DEAD_CODE_STRIPPING: YES
 
 targets:
   SeaBathy:
     type: application
     platform: iOS
     sources:
-      - SeaBathy
+      - path: SeaBathy
+      - path: Resources/terrain3d
+        type: folder
+        buildPhase: resources
+      - path: Resources/navmarks
+        type: folder
+        buildPhase: resources
+      - path: Resources/glyphs
+        type: folder
+        buildPhase: resources
     dependencies:
       - package: MapLibre
-    scheme: {}
+    scheme:
+      testTargets:
+        - SeaBathyTests
+    info:
+      path: SeaBathy/Info.plist
+      properties:
+        CFBundleDisplayName: SeaBathy
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSApplicationCategoryType: public.app-category.navigation
+        ITSAppUsesNonExemptEncryption: false
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UIStatusBarStyle: UIStatusBarStyleLightContent
+        UIUserInterfaceStyle: Dark
+        UIRequiresFullScreen: false
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        NSLocationWhenInUseUsageDescription: "SeaBathy shows your boat on the chart, the depth under it, and the tide and sea conditions where you are."
+        NSLocationAlwaysAndWhenInUseUsageDescription: "SeaBathy keeps watching your position with the screen off while you record a track, navigate a route or use the anchor alarm."
+        UIBackgroundModes:
+          - location
+          - audio
+        # Imported files live in the app's Documents folder and are visible in the Files app.
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: GeoTIFF depth survey
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes: [public.tiff]
+          - CFBundleTypeName: MBTiles map
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Owner
+            LSItemContentTypes: [com.seabathy.mbtiles]
+          - CFBundleTypeName: GPX file
+            CFBundleTypeRole: Editor
+            LSHandlerRank: Alternate
+            LSItemContentTypes: [com.topografix.gpx]
+        UTImportedTypeDeclarations:
+          - UTTypeIdentifier: com.topografix.gpx
+            UTTypeDescription: GPX file
+            UTTypeConformsTo: [public.xml]
+            UTTypeTagSpecification:
+              public.filename-extension: [gpx]
+              public.mime-type: [application/gpx+xml]
+        UTExportedTypeDeclarations:
+          - UTTypeIdentifier: com.seabathy.mbtiles
+            UTTypeDescription: MBTiles map
+            UTTypeConformsTo: [public.database, public.data]
+            UTTypeTagSpecification:
+              public.filename-extension: [mbtiles]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.seabathy.app
         TARGETED_DEVICE_FAMILY: "1,2"
-        GENERATE_INFOPLIST_FILE: YES
-        INFOPLIST_KEY_CFBundleDisplayName: SeaBathy
-        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.navigation
-        INFOPLIST_KEY_UILaunchScreen_Generation: YES
-        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
-        INFOPLIST_KEY_UIStatusBarStyle: UIStatusBarStyleLightContent
-        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
-        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         CODE_SIGN_STYLE: Automatic
+
+  SeaBathyTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: SeaBathyTests
+    dependencies:
+      - target: SeaBathy
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.seabathy.app.tests
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/SeaBathy.app/SeaBathy
+        BUNDLE_LOADER: $(TEST_HOST)
