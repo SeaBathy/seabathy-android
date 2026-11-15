@@ -320,7 +320,7 @@ class SettingsPanel(
         )
         panels.addRow(
             body,
-            panels.row("Import GPX", "From a plotter or another app") {
+            panels.row("Import GPX, KML or KMZ", "From a plotter, Google Earth or another app") {
                 callbacks.onImportGpx()
             }
         )

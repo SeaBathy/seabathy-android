@@ -467,12 +467,13 @@ class NavigationFeature(
         scope.launch {
             val result = runCatching {
                 withContext(Dispatchers.IO) {
-                    activity.contentResolver.openInputStream(uri)?.use { GpxImporter.parse(it) }
+                    // GPX, KML or KMZ: told apart by what's inside.
+                    activity.contentResolver.openInputStream(uri)?.use { au.opendepth.app.storage.KmlImporter.parseAny(it.readBytes()) }
                         ?: throw java.io.IOException("Couldn't open the file")
                 }
             }.getOrElse { error ->
                 DiagnosticLog.logError(TAG, "GPX import failed", error)
-                callbacks.alert(error.message ?: "Couldn't read that GPX file")
+                callbacks.alert(error.message ?: "Couldn't read that file")
                 return@launch
             }
             var added = 0
