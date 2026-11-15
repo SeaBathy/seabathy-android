@@ -8,6 +8,7 @@
     <string name="cd_waypoint">Waypoint tool</string>
     <string name="cd_route">Route tool</string>
     <string name="cd_measure">Measure tool</string>
+    <string name="cd_mob">Man overboard: mark here and steer back</string>
     <string name="cd_close">Close</string>
     <string name="cd_export_gpx">Export GPX</string>
 

@@ -150,6 +150,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var sidePanel: SidePanel
     private lateinit var basemapSelector: BasemapSelector
     private lateinit var panels: PanelDialogs
+    private lateinit var backup: au.opendepth.app.backup.BackupFeature
     private lateinit var importProgressDialog: ImportProgressDialog
     private lateinit var coordinateEditor: CoordinateEditorDialog
     private lateinit var layerPanel: LayerPanelBinder
@@ -391,6 +392,7 @@ class MainActivity : AppCompatActivity() {
         // no dependency on anything else this Activity builds.
         panels = PanelDialogs(this)
         importProgressDialog = ImportProgressDialog(this, panels)
+        backup = au.opendepth.app.backup.BackupFeature(this, panels, preferences, ::toast)
 
         overlays = OverlayLayerController(
             context = this,
@@ -412,6 +414,7 @@ class MainActivity : AppCompatActivity() {
                 navFeature.onLocation(location)
                 if (::conditions.isInitialized) conditions.onLocation(location.latitude, location.longitude)
                 terrain3d.updateBoat(location)
+                if (mobPending) markOverboard(location)
             },
             followBearing = { location -> navFeature.chartBearing(location) }
         )
@@ -844,6 +847,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         views.btnGps.setOnClickListener { cycleGps() }
+        findViewById<android.view.View>(R.id.btnMob).setOnClickListener { manOverboard() }
 
         views.coordinates.setOnClickListener {
             val target = mapHolder.map?.cameraPosition?.target ?: return@setOnClickListener
@@ -955,6 +959,7 @@ class MainActivity : AppCompatActivity() {
                     onTracks = { sidePanel.close(); navFeature.showTracks() },
                     onConditions = { sidePanel.close(); conditions.show() },
                     onImportGpx = ::launchGpxImportPicker,
+                    onBackup = { backup.show() },
                     showGrid = { graticule.visible },
                     onShowGridChanged = { visible ->
                         settingsRepository.saveShowGrid(visible)
@@ -1142,6 +1147,53 @@ class MainActivity : AppCompatActivity() {
                 refreshWaypoints()
             }
         )
+    }
+
+    // Man overboard ------------------------------------------------------------------
+
+    /** Waiting for a GPS fix to mark a man overboard at. */
+    private var mobPending = false
+
+    /**
+     * Man overboard: marks the boat's position (the latest GPS fix, if it's
+     * fresh) and starts steering back to it. With no fresh fix, the GPS is
+     * turned on and the mark goes down at the first fix.
+     */
+    private fun manOverboard() {
+        val fix = gpsController.last?.takeIf { System.currentTimeMillis() - it.time < MOB_FIX_MAX_AGE_MS }
+        if (fix != null) {
+            markOverboard(fix)
+            return
+        }
+        mobPending = true
+        followWithGps()
+        toast("Man overboard: waiting for GPS, the mark goes down at the first fix")
+    }
+
+    private fun markOverboard(fix: android.location.Location) {
+        mobPending = false
+        val time = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date(fix.time))
+        var name = "MOB $time"
+        if (waypointStore.isNameTaken(name)) name = waypointStore.nextDefaultName()
+        waypointStore.add(
+            name = name,
+            lat = fix.latitude,
+            lng = fix.longitude,
+            color = Waypoint.DEFAULT_COLOR,
+            description = "Man overboard, marked at $time",
+            icon = "mob"
+        )
+        refreshWaypoints()
+        navFeature.startNavigation(listOf(RoutePoint(fix.latitude, fix.longitude, name)), name)
+        runCatching {
+            val vibrator = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                getSystemService(android.os.VibratorManager::class.java)?.defaultVibrator
+            } else {
+                @Suppress("DEPRECATION") getSystemService(android.os.Vibrator::class.java)
+            }
+            vibrator?.vibrate(android.os.VibrationEffect.createWaveform(longArrayOf(0, 400, 150, 400), -1))
+        }
+        toast("Man overboard marked. Steering back to it: stop navigation when done.")
     }
 
     /** @return an error message to show on the name field, or null on success. */
@@ -1500,6 +1552,7 @@ class MainActivity : AppCompatActivity() {
         resourceSnapshotJob = null
         ResourceTracker.snapshot(this, "background", overlays.serverLayerCount)
         views.mapView.onStop()
+        backup.onStop()
         super.onStop()
     }
 
@@ -1537,6 +1590,8 @@ class MainActivity : AppCompatActivity() {
 
     /** Public: the download service uses these to build its notification's intent. */
     companion object {
+        /** A fix older than this is too stale to mark a man overboard at. */
+        private const val MOB_FIX_MAX_AGE_MS = 30_000L
         const val TAG = "SeaBathy"
         const val PREFERENCES_NAME = "od"
         const val DEPTH_QUERY_DEBOUNCE_MS = 60L

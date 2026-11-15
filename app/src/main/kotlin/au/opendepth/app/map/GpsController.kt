@@ -32,6 +32,9 @@ class GpsController(
 
     val isActive: Boolean get() = mode != Mode.OFF
 
+    /** The latest fix, if any. */
+    val last: Location? get() = lastLocation
+
     /** Advances to the next mode and reports the new one. */
     fun cycleMode(): Mode {
         mode = when (mode) {

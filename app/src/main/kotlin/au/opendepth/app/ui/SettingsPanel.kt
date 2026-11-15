@@ -41,6 +41,7 @@ class SettingsPanel(
         val onTracks: () -> Unit,
         val onConditions: () -> Unit,
         val onImportGpx: () -> Unit,
+        val onBackup: () -> Unit,
         val showGrid: () -> Boolean,
         val onShowGridChanged: (Boolean) -> Unit,
         val showNavMarks: () -> Boolean,
@@ -310,6 +311,13 @@ class SettingsPanel(
         )
 
         body.addView(panels.sectionHeader("DATA"))
+        panels.addRow(
+            body,
+            panels.row("Backup and restore", "Waypoints, photos, routes, tracks and settings; daily to a folder") {
+                settingsDialog?.dismiss()
+                callbacks.onBackup()
+            }
+        )
         panels.addRow(
             body,
             panels.row("Import GPX", "From a plotter or another app") {
