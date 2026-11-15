@@ -108,7 +108,7 @@ final class AppModel: ObservableObject {
             guard let self else { return }
             let c = self.map.centre
             self.settings.saveCamera(.init(lat: c.latitude, lng: c.longitude, zoom: self.map.zoom,
-                                           bearing: self.map.bearing, tilt: self.map.mapView?.camera.pitch ?? 0))
+                                           bearing: self.map.bearing, tilt: Double(self.map.mapView?.camera.pitch ?? 0)))
         }
     }
 
