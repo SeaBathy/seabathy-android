@@ -194,6 +194,9 @@ class ConditionsFeature(
     private var drawingKey: String? = null
     private var drawingArrows: ArrowChoice? = null
     private var drawingContours: String? = null
+    private var contourCache: Pair<String, String>? = null
+    /** The lines now on the map, so an unchanged set isn't sent again each forecast step. */
+    private var shownContours: String? = null
     private var drawingStyle: DirectionStyle? = null
     private var scaleCache: Pair<String, ColourScale>? = null
 
@@ -516,6 +519,8 @@ class ConditionsFeature(
         val a = area
         if (shown && a != null) refreshCard(a)
         updateBox()
+        // The temperature lines' labels and steps follow the unit.
+        if (shown) redraw()
     }
 
     fun release() {
@@ -553,6 +558,8 @@ class ConditionsFeature(
             }
         }.onFailure { DiagnosticLog.logError(TAG, "installing arrow layer FAILED", it) }
         installContourLayers(style)
+        // A new style starts with an empty source.
+        shownContours = null
         // A new style has none of the layers: put the picture back (drawn
         // before, or saved last time) rather than drawing it again.
         val a = area
@@ -610,6 +617,7 @@ class ConditionsFeature(
             style.getSourceAs<GeoJsonSource>(ARROW_SOURCE)?.setGeoJson(MapLayerIds.EMPTY_GEOJSON)
             style.getSourceAs<GeoJsonSource>(CONTOUR_SOURCE)?.setGeoJson(MapLayerIds.EMPTY_GEOJSON)
         }
+        shownContours = null
         lastPictureKey = null
     }
 
@@ -667,12 +675,18 @@ class ConditionsFeature(
                 }
             }
             val arrowJson = if (directionStyle.arrows) withContext(work) { arrowGeoJson(a, arrowChoice, time) } else MapLayerIds.EMPTY_GEOJSON
-            val contourJson = withContext(work) {
+            // The lines don't change with the forecast time: worked out once per area and settings.
+            val linesKey = "${a.id}:${a.fetchedMillis}:$choice:$contourKey"
+            val contourJson = contourCache?.takeIf { it.first == linesKey }?.second ?: withContext(work) {
                 runCatching { contourGeoJson(a, choice, u) }.onFailure { DiagnosticLog.logError(TAG, "contours FAILED", it) }.getOrNull()
-            } ?: MapLayerIds.EMPTY_GEOJSON
+            }?.also { contourCache = linesKey to it } ?: MapLayerIds.EMPTY_GEOJSON
+            val newLines = contourJson !== shownContours
             showPicture(a, picture, key)
             mapHolder.style?.getSourceAs<GeoJsonSource>(ARROW_SOURCE)?.setGeoJson(arrowJson)
-            mapHolder.style?.getSourceAs<GeoJsonSource>(CONTOUR_SOURCE)?.setGeoJson(contourJson)
+            if (newLines) {
+                mapHolder.style?.getSourceAs<GeoJsonSource>(CONTOUR_SOURCE)?.setGeoJson(contourJson)
+                shownContours = contourJson
+            }
             if (picture != null) savePreview(a, choice, picture)
         }
     }

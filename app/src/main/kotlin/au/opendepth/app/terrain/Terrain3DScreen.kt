@@ -180,10 +180,6 @@ class Terrain3DScreen(
         }
     }
 
-    /**
-     * Moves the boat marker to a live GPS fix. Heading is the course over
-     * ground when the fix has one; speed is reported in knots.
-     */
     /** Shows the app's current waypoints, e.g. after one was renamed or deleted. */
     fun updateWaypoints(marks: List<Waypoint>) {
         waypoints = marks.toList()
@@ -199,6 +195,10 @@ class Terrain3DScreen(
     private fun waypointJson(w: Waypoint) =
         mapOf("id" to w.id, "name" to w.name, "color" to w.color, "lat" to w.lat, "lng" to w.lng, "desc" to w.desc)
 
+    /**
+     * Moves the boat marker to a live GPS fix. Heading is the course over
+     * ground when the fix has one; speed is reported in knots.
+     */
     fun updateBoat(location: android.location.Location) {
         val view = webView ?: return
         val fix = mapOf(
