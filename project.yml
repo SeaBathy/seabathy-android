@@ -45,6 +45,7 @@ targets:
     scheme:
       testTargets:
         - SeaBathyTests
+        - SeaBathyUITests
     info:
       path: SeaBathy/Info.plist
       properties:
@@ -124,3 +125,16 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.seabathy.app.tests
         TEST_HOST: $(BUILT_PRODUCTS_DIR)/SeaBathy.app/SeaBathy
         BUNDLE_LOADER: $(TEST_HOST)
+
+  SeaBathyUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: SeaBathyUITests
+    dependencies:
+      - target: SeaBathy
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.seabathy.app.uitests
+        TEST_TARGET_NAME: SeaBathy

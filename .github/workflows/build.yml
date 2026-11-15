@@ -12,7 +12,7 @@ permissions:
 jobs:
   build:
     runs-on: macos-26
-    timeout-minutes: 60
+    timeout-minutes: 110
     steps:
       - uses: actions/checkout@v7
 
@@ -61,7 +61,35 @@ jobs:
           import json, sys
           d = json.load(sys.stdin)["devices"]
           print(next(x["udid"] for k in sorted(d, reverse=True) if "iOS" in k for x in d[k] if x["name"].startswith("iPhone")))')
-          xcodebuild -project SeaBathy.xcodeproj -scheme SeaBathy -destination "id=$UDID"             -derivedDataPath build/test test 2>&1 | tee logs/tests.log | grep -E "Test Case|error:|Executed|TEST" | tail -n 120
+          xcodebuild -project SeaBathy.xcodeproj -scheme SeaBathy -destination "id=$UDID"             -derivedDataPath build/test -only-testing:SeaBathyTests test 2>&1 | tee logs/tests.log | grep -E "Test Case|error:|Executed|TEST" | tail -n 120
+
+      - name: UI tour (taps through every feature, saves screenshots)
+        if: ${{ !cancelled() && steps.simbuild.outcome == 'success' }}
+        timeout-minutes: 45
+        run: |
+          UDID=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          d = json.load(sys.stdin)["devices"]
+          print(next(x["udid"] for k in sorted(d, reverse=True) if "iOS" in k for x in d[k] if x["name"].startswith("iPhone")))')
+          # A failing step is a finding, not a broken build: the screenshots say what happened.
+          xcodebuild -project SeaBathy.xcodeproj -scheme SeaBathy -destination "id=$UDID"             -derivedDataPath build/ui -resultBundlePath build/ui-tour.xcresult             -only-testing:SeaBathyUITests test 2>&1 | tee logs/ui-tour.log | grep -E "Test Case|error:|Executed" | tail -n 120 || true
+          mkdir -p raw out/ui
+          xcrun xcresulttool export attachments --path build/ui-tour.xcresult --output-path raw || true
+          python3 - <<'PY'
+          import json, os, re, shutil
+          try:
+              manifest = json.load(open("raw/manifest.json"))
+          except Exception as e:
+              print("no attachments manifest:", e); manifest = []
+          for test in manifest:
+              for a in test.get("attachments", []):
+                  name = a.get("suggestedHumanReadableName") or a.get("exportedFileName")
+                  m = re.match(r"^(.*?)_\d+_[0-9A-Fa-f-]{36}\.\w+$", name)
+                  base = m.group(1) if m else os.path.splitext(name)[0]
+                  dest = os.path.join("out/ui", base + ".png")
+                  shutil.copy(os.path.join("raw", a["exportedFileName"]), dest)
+          print(len(os.listdir("out/ui")), "screenshots")
+          PY
 
       - name: Run in the simulator and take screenshots
         # Screenshots are still useful when a unit test fails.
