@@ -201,6 +201,17 @@ class NavFormat(private val units: NavUnits, private val timeZone: TimeZone = Ti
         if (units.tide == HeightUnit.FEET) String.format(Locale.US, "%+.1f in", cm / 2.54)
         else String.format(Locale.US, "%+.0f cm", cm)
 
+    /** Sea level against its long-term average: "6 cm above average". */
+    fun seaLevelVsAverage(cm: Double): String {
+        val amount = if (units.tide == HeightUnit.FEET) String.format(Locale.US, "%.1f in", kotlin.math.abs(cm) / 2.54)
+        else String.format(Locale.US, "%.0f cm", kotlin.math.abs(cm))
+        return when {
+            kotlin.math.abs(cm) < 0.5 -> "about average"
+            cm > 0 -> "$amount above average"
+            else -> "$amount below average"
+        }
+    }
+
     fun fuel(litres: Double?): String =
         if (litres == null || !litres.isFinite()) "—"
         else String.format(Locale.US, "%.1f %s", litres * units.fuel.perLitre, units.fuel.label)

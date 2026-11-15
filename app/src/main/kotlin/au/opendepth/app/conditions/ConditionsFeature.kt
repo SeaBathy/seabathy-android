@@ -24,6 +24,7 @@ import androidx.coordinatorlayout.widget.CoordinatorLayout
 import au.opendepth.app.diagnostics.DiagnosticLog
 import au.opendepth.app.map.MapHolder
 import au.opendepth.app.map.MapLayerIds
+import au.opendepth.app.map.MapStyleFactory
 import au.opendepth.app.model.GeoBounds
 import au.opendepth.app.nav.NavFormat
 import au.opendepth.app.nav.SeaSpeedUnit
@@ -48,6 +49,7 @@ import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.style.expressions.Expression
 import org.maplibre.android.style.layers.Property
 import org.maplibre.android.style.layers.PropertyFactory
+import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.RasterLayer
 import org.maplibre.android.style.layers.SymbolLayer
 import org.maplibre.android.style.sources.GeoJsonSource
@@ -125,6 +127,12 @@ class ConditionsFeature(
     /** A range for the temperature colours, in °C; null stretches them to the area. */
     private var temperatureRange: Pair<Double, Double>? = preferences.getString(KEY_TEMP_RANGE, null)?.split(',')
         ?.mapNotNull { it.toDoubleOrNull() }?.takeIf { it.size == 2 && it[0] < it[1] }?.let { it[0] to it[1] }
+    /** Temperature lines: 0 off, -1 automatic, else the step in the user's degrees. */
+    private var contourStep: Double = preferences.getFloat(KEY_CONTOUR_STEP, -1f).toDouble()
+    /** A temperature band to chase, in °C: shown bright, the rest dimmed; null for none. */
+    private var targetBand: Pair<Double, Double>? = preferences.getString(KEY_BAND, null)?.split(',')
+        ?.mapNotNull { it.toDoubleOrNull() }?.takeIf { it.size == 2 && it[0] < it[1] }?.let { it[0] to it[1] }
+    private var eddyMode = runCatching { EddyMode.valueOf(preferences.getString(KEY_EDDIES, null)!!) }.getOrDefault(EddyMode.WITH_SEA_LEVEL)
     private var directionStyle = runCatching { DirectionStyle.valueOf(preferences.getString(KEY_STYLE, null)!!) }.getOrDefault(DirectionStyle.FLOW)
     private var boxShown = preferences.getBoolean(KEY_BOX, true)
 
@@ -185,6 +193,7 @@ class ConditionsFeature(
     /** What the drawing under way is of. */
     private var drawingKey: String? = null
     private var drawingArrows: ArrowChoice? = null
+    private var drawingContours: String? = null
     private var drawingStyle: DirectionStyle? = null
     private var scaleCache: Pair<String, ColourScale>? = null
 
@@ -543,6 +552,7 @@ class ConditionsFeature(
                 )
             }
         }.onFailure { DiagnosticLog.logError(TAG, "installing arrow layer FAILED", it) }
+        installContourLayers(style)
         // A new style has none of the layers: put the picture back (drawn
         // before, or saved last time) rather than drawing it again.
         val a = area
@@ -598,6 +608,7 @@ class ConditionsFeature(
             style.getLayer(IMAGE_LAYER)?.let { style.removeLayer(it) }
             style.getSource(IMAGE_SOURCE)?.let { style.removeSource(it) }
             style.getSourceAs<GeoJsonSource>(ARROW_SOURCE)?.setGeoJson(MapLayerIds.EMPTY_GEOJSON)
+            style.getSourceAs<GeoJsonSource>(CONTOUR_SOURCE)?.setGeoJson(MapLayerIds.EMPTY_GEOJSON)
         }
         lastPictureKey = null
     }
@@ -627,9 +638,12 @@ class ConditionsFeature(
         showFlowLines(a, time)
         // A satellite picture doesn't change with the time; a range set for the colours changes any temperature's.
         val key = "${a.id}:${a.fetchedMillis}:$choice:" + (if (choice.forecast) (time / PICTURE_STEP_MS) else 0) +
-            (if (choice.isTemperature) ":$temperatureRange" else "")
+            (if (choice.isTemperature) ":$temperatureRange:$targetBand" else "")
         // Already drawing this very picture (a style change asks again at start-up): let it finish.
-        if (key == drawingKey && drawJob?.isActive == true && arrowChoice == drawingArrows && directionStyle == drawingStyle) return
+        val u = units()
+        val contourKey = "$contourStep:$targetBand:$eddyMode:${u.temperature}"
+        if (key == drawingKey && drawJob?.isActive == true && arrowChoice == drawingArrows && directionStyle == drawingStyle && contourKey == drawingContours) return
+        drawingContours = contourKey
         drawingKey = key
         drawingArrows = arrowChoice
         drawingStyle = directionStyle
@@ -645,15 +659,20 @@ class ConditionsFeature(
                     val started = System.nanoTime()
                     val sampler = sampler(a, choice, time) ?: return@withContext null
                     val maxSide = satellite?.let { min(MAX_PICTURE_SIDE, max(it.grid.rows, it.grid.cols) * 2) } ?: FORECAST_PICTURE_SIDE
-                    val pixels = ConditionsPicture.render(a.south, a.west, a.north, a.east, max(64, maxSide), scaleFor(a, choice), sampler) { !isActive }
+                    val band = targetBand?.takeIf { choice.isTemperature }?.let { it.first..it.second }
+                    val pixels = ConditionsPicture.render(a.south, a.west, a.north, a.east, max(64, maxSide), scaleFor(a, choice), sampler, band) { !isActive }
                     Bitmap.createBitmap(pixels.argb, pixels.width, pixels.height, Bitmap.Config.ARGB_8888).also {
                         DiagnosticLog.log(TAG, "picture $choice ${pixels.width}x${pixels.height} in ${(System.nanoTime() - started) / 1_000_000} ms")
                     }
                 }
             }
             val arrowJson = if (directionStyle.arrows) withContext(work) { arrowGeoJson(a, arrowChoice, time) } else MapLayerIds.EMPTY_GEOJSON
+            val contourJson = withContext(work) {
+                runCatching { contourGeoJson(a, choice, u) }.onFailure { DiagnosticLog.logError(TAG, "contours FAILED", it) }.getOrNull()
+            } ?: MapLayerIds.EMPTY_GEOJSON
             showPicture(a, picture, key)
             mapHolder.style?.getSourceAs<GeoJsonSource>(ARROW_SOURCE)?.setGeoJson(arrowJson)
+            mapHolder.style?.getSourceAs<GeoJsonSource>(CONTOUR_SOURCE)?.setGeoJson(contourJson)
             if (picture != null) savePreview(a, choice, picture)
         }
     }
@@ -692,7 +711,8 @@ class ConditionsFeature(
                     PropertyFactory.rasterFadeDuration(0f)
                 )
                 // Under the arrows, above every imported layer.
-                if (style.getLayer(ARROW_LAYER) != null) style.addLayerBelow(layer, ARROW_LAYER)
+                val above = listOf(CONTOUR_LINE_LAYER, ARROW_LAYER).firstOrNull { style.getLayer(it) != null }
+                if (above != null) style.addLayerBelow(layer, above)
                 else style.addLayerAbove(layer, MapLayerIds.OVERLAY_ANCHOR)
             }
         }.onFailure { DiagnosticLog.logError(TAG, "showing the picture FAILED", it) }
@@ -903,7 +923,11 @@ class ConditionsFeature(
         } else {
             legend.visibility = View.VISIBLE
             val scale = scaleFor(a, colour)
-            legendBar.background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, IntArray(16) { scale.colourAt(it / 15.0) }).apply {
+            val band = targetBand?.takeIf { colour.isTemperature }
+            legendBar.background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, IntArray(32) {
+                val c = scale.colourAt(it / 31.0)
+                if (band == null || scale.valueAt(it / 31.0) in band.first..band.second) c else ConditionsPicture.dim(c)
+            }).apply {
                 cornerRadius = activity.dp(3).toFloat()
             }
             legendLow.text = legendValue(scale.valueAt(0.0))
@@ -1423,6 +1447,17 @@ class ConditionsFeature(
             refreshDialog()
         })
         panels.addRow(body, panels.row("Sea temperature colours", temperatureRangeLabel()) { pickTemperatureRange() })
+        panels.addRow(body, panels.row("Temperature lines", contourStepLabel()) { pickContourStep() })
+        panels.addRow(body, panels.row("Target temperature band", targetBandLabel()) { pickTargetBand() })
+        panels.addRow(body, panels.row("Eddy outlines", eddyMode.label) {
+            val choices = EddyMode.entries
+            panels.showChoicePanel("Eddy outlines", choices.map { it.label }, choices.indexOf(eddyMode)) { i ->
+                eddyMode = choices[i]
+                preferences.edit().putString(KEY_EDDIES, eddyMode.name).apply()
+                redraw()
+                refreshDialog()
+            }
+        })
         panels.addRow(body, panels.row("Temperature at depth", "${NavFormat(units()).depth(belowDepthM.toDouble())} down") {
             val choices = BELOW_DEPTHS
             val format = NavFormat(units())
@@ -1459,7 +1494,7 @@ class ConditionsFeature(
             bottomMargin = activity.dp(6)
         })
 
-        body.addView(panels.sectionHeader("SAVED AREAS"))
+        body.addView(panels.sectionHeader("DOWNLOADED AREAS"))
         if (summaries.isEmpty()) body.addView(panels.caption("None yet.", topPaddingDp = 0))
         val format = NavFormat(units())
         for (s in summaries) {
@@ -1470,7 +1505,7 @@ class ConditionsFeature(
             val satText = when (s.satellites.size) {
                 0 -> null
                 1 -> s.satellites.first().label.lowercase(Locale.US)
-                else -> "${s.satellites.size} ocean layers"
+                else -> "${s.satellites.size} satellite maps"
             }
             val detail = listOfNotNull(
                 if (active && shown) "Showing" else null,
@@ -1479,7 +1514,7 @@ class ConditionsFeature(
                 "got ${format.clock(s.fetchedMillis)}",
                 String.format(Locale.US, "%.0f KB", s.bytes / 1024.0)
             ).joinToString(" · ")
-            panels.addRow(body, panels.row((if (active) "● " else "") + s.name, detail) { areaOptions(s) })
+            panels.addRow(body, panels.row((if (active) "● " else "") + (if (s.id == SPOT_ID) SPOT_NAME else s.name), detail) { areaOptions(s) })
         }
 
         body.addView(panels.sectionHeader("DOWNLOADS"))
@@ -1495,7 +1530,7 @@ class ConditionsFeature(
                 refreshDialog()
             }
         })
-        panels.addRow(body, panels.row("Satellite and ocean layers", if (withSatellite) "Yes (usually 2 to 5 days old)" else "No") {
+        panels.addRow(body, panels.row("Satellite sea maps", if (withSatellite) "Yes: sea temp, temp breaks, chlorophyll, sea level, salinity (2 to 5 days old)" else "No: forecast only") {
             withSatellite = !withSatellite
             preferences.edit().putBoolean(KEY_SATELLITE, withSatellite).apply()
             refreshDialog()
@@ -1511,6 +1546,173 @@ class ConditionsFeature(
         val range = temperatureRange ?: return "Automatic: stretched to the area, so small breaks show"
         val format = NavFormat(units())
         return "${format.temperature(range.first)} to ${format.temperature(range.second)}"
+    }
+
+    // Temperature lines, target band and eddy outlines -------------------------------
+
+    private fun contourStepLabel(): String {
+        val unit = units().temperature
+        return when {
+            contourStep == 0.0 -> "Off"
+            contourStep < 0 -> "Automatic spacing"
+            else -> "Every ${stepText(contourStep)} ${unit.label}"
+        }
+    }
+
+    private fun pickContourStep() {
+        val unit = units().temperature
+        val values = listOf(-1.0) + Contours.STEPS.toList() + listOf(0.0)
+        val labels = values.map { if (it < 0) "Automatic spacing" else if (it == 0.0) "Off" else "Every ${stepText(it)} ${unit.label}" }
+        panels.showChoicePanel("Temperature lines", labels, values.indexOf(contourStep).coerceAtLeast(0)) { i ->
+            contourStep = values[i]
+            preferences.edit().putFloat(KEY_CONTOUR_STEP, contourStep.toFloat()).apply()
+            redraw()
+            refreshDialog()
+        }
+    }
+
+    private fun targetBandLabel(): String {
+        val band = targetBand ?: return "Off: set one to chase a temperature"
+        val format = NavFormat(units())
+        return "${format.temperature(band.first)} to ${format.temperature(band.second)}"
+    }
+
+    private fun pickTargetBand() {
+        panels.showChoicePanel("Target temperature band", listOf("Off", "Set the band"), if (targetBand == null) 0 else 1) { i ->
+            if (i == 0) applyTargetBand(null) else editTargetBand()
+        }
+    }
+
+    private fun editTargetBand() {
+        val unit = units().temperature
+        val body = panels.body()
+        val (startLow, startHigh) = targetBand
+            ?: (scaleWithoutRange()?.let { s -> val mid = (s.low + s.high) / 2; (mid - 0.5) to (mid + 0.5) } ?: (22.0 to 24.0))
+        fun field(hint: String, celsius: Double) = panels.input {
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL or android.text.InputType.TYPE_NUMBER_FLAG_SIGNED
+            setText(String.format(Locale.US, "%.1f", unit.of(celsius)))
+            this.hint = hint
+        }
+        body.addView(panels.caption("Water in this range shows bright with bold edges; the rest is dimmed. Works on the sea temperature maps.", topPaddingDp = 4))
+        body.addView(panels.caption("From (${unit.label})", topPaddingDp = 8))
+        val low = field("From", startLow)
+        panels.addRow(body, low)
+        body.addView(panels.caption("To (${unit.label})", topPaddingDp = 8))
+        val high = field("To", startHigh)
+        panels.addRow(body, high)
+        lateinit var d: Dialog
+        d = panels.showPanel("Target temperature band", body, actionLabel = "Save", onAction = {
+            val a = low.text.toString().toDoubleOrNull()
+            val b = high.text.toString().toDoubleOrNull()
+            if (a == null || b == null || a >= b) {
+                callbacks.toast("Enter two temperatures, the coolest first")
+            } else {
+                applyTargetBand(unit.toCelsius(a) to unit.toCelsius(b))
+                d.dismiss()
+            }
+        })
+    }
+
+    private fun applyTargetBand(band: Pair<Double, Double>?) {
+        targetBand = band
+        preferences.edit().apply {
+            if (band == null) remove(KEY_BAND) else putString(KEY_BAND, String.format(Locale.US, "%.3f,%.3f", band.first, band.second))
+        }.apply()
+        val a = area
+        if (shown && a != null) refreshCard(a)
+        redraw()
+        refreshDialog()
+    }
+
+    /** The map's lines for [choice]: temperature lines, the band's edges, eddy outlines. Off the main thread. */
+    private fun contourGeoJson(a: ConditionsArea, choice: ColourChoice, u: NavUnits): String {
+        val unit = u.temperature
+        val lines = mutableListOf<Pair<ContourLine, Pair<String, String>>>()
+        var eddies = emptyList<EddyCentre>()
+        val tempGrid = when (choice) {
+            ColourChoice.SEA_TEMP_SATELLITE, ColourChoice.SEA_TEMP_BREAKS -> a.satellites[SatelliteKind.SEA_TEMP]
+            ColourChoice.TEMP_BELOW -> a.satellites[SatelliteKind.TEMP_BELOW]
+            else -> null
+        }
+        if (tempGrid != null && (contourStep != 0.0 || targetBand != null)) {
+            val smooth = Contours.smooth(tempGrid.grid, tempGrid.values, if (tempGrid.grid.size > 40_000) 2 else 1)
+            if (contourStep != 0.0) {
+                Contours.range(smooth)?.let { (lo, hi) ->
+                    val low = unit.of(lo)
+                    val high = unit.of(hi)
+                    val step = if (contourStep < 0) Contours.autoStep(high - low) else contourStep
+                    val levels = Contours.levels(low, high, step)
+                    val inCelsius = DoubleArray(levels.size) { unit.toCelsius(levels[it]) }
+                    for (line in Contours.lines(tempGrid.grid, smooth, inCelsius, minPoints = 6)) {
+                        lines += line to ("temp" to stepText(unit.of(line.level)) + "°")
+                    }
+                }
+            }
+            targetBand?.let { (lo, hi) ->
+                // From the unsmoothed values, so the edges sit exactly where the bright water ends.
+                for (line in Contours.lines(tempGrid.grid, tempGrid.values, doubleArrayOf(lo, hi), minPoints = 4)) {
+                    lines += line to ("band" to String.format(Locale.US, "%.1f%s", unit.of(line.level), unit.label))
+                }
+            }
+        }
+        val level = a.satellites[SatelliteKind.SEA_LEVEL]
+        if (level != null && (eddyMode == EddyMode.ALWAYS || (eddyMode == EddyMode.WITH_SEA_LEVEL && choice == ColourChoice.SEA_LEVEL))) {
+            for (line in Contours.lines(level.grid, level.values, EDDY_LEVELS_CM, minPoints = 4)) {
+                lines += line to ((if (line.level > 0) "warm" else "cold") to String.format(Locale.US, "%+.0f", line.level))
+            }
+            eddies = Contours.eddies(level.grid, level.values)
+        }
+        if (lines.isEmpty() && eddies.isEmpty()) return MapLayerIds.EMPTY_GEOJSON
+        return Contours.geoJson(lines, eddies)
+    }
+
+    private fun installContourLayers(style: org.maplibre.android.maps.Style) {
+        runCatching {
+            if (style.getSource(CONTOUR_SOURCE) == null) style.addSource(GeoJsonSource(CONTOUR_SOURCE, MapLayerIds.EMPTY_GEOJSON))
+            val below = if (style.getLayer(ARROW_LAYER) != null) ARROW_LAYER else null
+            fun add(layer: org.maplibre.android.style.layers.Layer) {
+                if (style.getLayer(layer.id) != null) return
+                if (below != null) style.addLayerBelow(layer, below) else style.addLayerAbove(layer, MapLayerIds.OVERLAY_ANCHOR)
+            }
+            val kind = Expression.get("kind")
+            val isLine = Expression.eq(Expression.geometryType(), Expression.literal("LineString"))
+            add(LineLayer(CONTOUR_LINE_LAYER, CONTOUR_SOURCE).withProperties(
+                PropertyFactory.lineColor(Expression.match(kind, Expression.color(0xD90B1622.toInt()),
+                    Expression.stop("band", Expression.color(0xFFFFFFFF.toInt())),
+                    Expression.stop("warm", Expression.color(0xFF5A0A0A.toInt())))),
+                PropertyFactory.lineWidth(Expression.match(kind, Expression.literal(1.0f),
+                    Expression.stop("band", Expression.literal(2.6f)),
+                    Expression.stop("warm", Expression.literal(1.6f)))),
+                PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND)
+            ).withFilter(Expression.all(isLine, Expression.neq(kind, Expression.literal("cold")))))
+            add(LineLayer(CONTOUR_DASH_LAYER, CONTOUR_SOURCE).withProperties(
+                PropertyFactory.lineColor(Expression.color(0xFF0A1E5A.toInt())),
+                PropertyFactory.lineWidth(1.6f),
+                PropertyFactory.lineDasharray(arrayOf(3f, 2f))
+            ).withFilter(Expression.all(isLine, Expression.eq(kind, Expression.literal("cold")))))
+            val font = arrayOf(MapStyleFactory.labelFont(style))
+            add(SymbolLayer(CONTOUR_LABEL_LAYER, CONTOUR_SOURCE).withProperties(
+                PropertyFactory.symbolPlacement(Property.SYMBOL_PLACEMENT_LINE),
+                PropertyFactory.symbolSpacing(220f),
+                PropertyFactory.textField(Expression.get("label")),
+                PropertyFactory.textFont(font),
+                PropertyFactory.textSize(Expression.match(kind, Expression.literal(10f), Expression.stop("band", Expression.literal(11f)))),
+                PropertyFactory.textColor("#FFFFFF"),
+                PropertyFactory.textHaloColor("#0B1622"),
+                PropertyFactory.textHaloWidth(1.3f),
+                PropertyFactory.textKeepUpright(true),
+                PropertyFactory.textMaxAngle(35f)
+            ).withFilter(isLine))
+            add(SymbolLayer(EDDY_LABEL_LAYER, CONTOUR_SOURCE).withProperties(
+                PropertyFactory.textField(Expression.get("label")),
+                PropertyFactory.textFont(font),
+                PropertyFactory.textSize(17f),
+                PropertyFactory.textColor(Expression.match(kind, Expression.color(0xFF1E4FD8.toInt()), Expression.stop("warm", Expression.color(0xFFD8281E.toInt())))),
+                PropertyFactory.textHaloColor("#FFFFFF"),
+                PropertyFactory.textHaloWidth(2f),
+                PropertyFactory.textAllowOverlap(true)
+            ).withFilter(Expression.eq(Expression.geometryType(), Expression.literal("Point"))))
+        }.onFailure { DiagnosticLog.logError(TAG, "installing contour layers FAILED", it) }
     }
 
     private fun pickTemperatureRange() {
@@ -1924,7 +2126,7 @@ class ConditionsFeature(
         private const val ONLINE_CHECK_MS = 5_000L
         private const val LAST_KNOWN_MS = 30_000L
         private const val CLOSED_MARK = "▾"
-        private val ROW_ORDER = listOf("Wind", "Current", "Waves", "Swell", "Sea", "Depth", "Water")
+        private val ROW_ORDER = listOf("Wind", "Current", "Waves", "Swell", "Sea", "Depth", "Water", "Sun", "Moon")
         /** What "Show on the map" offers, in order (the forecast's own sea temperature is left out: the satellite's is better). */
         private val MAP_CHOICES = listOf(
             ColourChoice.WIND, ColourChoice.CURRENT, ColourChoice.WAVES, ColourChoice.SWELL,
@@ -1935,13 +2137,46 @@ class ConditionsFeature(
 
         /** The area kept round the spot has this id, so each update replaces it. */
         const val SPOT_ID = "spot"
-        private const val SPOT_NAME = "Round my spot"
+        private const val SPOT_NAME = "My spot"
         private const val SPOT_RADIUS_KM = 200.0
         /** Between automatic tries, so a failing service isn't asked again and again. */
         private const val AUTO_RETRY_MS = 15 * 60_000L
         private const val WARNING = 0xFFF5B942.toInt()
 
         private const val IMAGE_SOURCE = "conditions-image-src"
+        private const val CONTOUR_SOURCE = "conditions-contours-src"
+        private const val CONTOUR_LINE_LAYER = "conditions-contours"
+        private const val CONTOUR_DASH_LAYER = "conditions-contours-cold"
+        private const val CONTOUR_LABEL_LAYER = "conditions-contour-labels"
+        private const val EDDY_LABEL_LAYER = "conditions-eddy-labels"
+        /** Sea level lines drawn round eddies, cm from average. */
+        private val EDDY_LEVELS_CM = doubleArrayOf(-30.0, -20.0, -10.0, 10.0, 20.0, 30.0)
+        private const val KEY_CONTOUR_STEP = "conditions_contour_step"
+        private const val KEY_BAND = "conditions_target_band"
+        private const val KEY_EDDIES = "conditions_eddies"
+
+        /** "0.25", "0.5", "1", "24.5": no trailing zeros. */
+        private fun stepText(value: Double): String =
+            java.math.BigDecimal(value).setScale(2, java.math.RoundingMode.HALF_UP).stripTrailingZeros().toPlainString()
+
+        private var astroCache: Pair<String, Astro.Day>? = null
+
+        /** The sun and moon for the day [time] falls in, at about [lat]/[lng] (cached: the box asks often). */
+        private fun astroDay(lat: Double, lng: Double, time: Long): Astro.Day {
+            val cal = java.util.Calendar.getInstance().apply {
+                timeInMillis = time
+                set(java.util.Calendar.HOUR_OF_DAY, 0)
+                set(java.util.Calendar.MINUTE, 0)
+                set(java.util.Calendar.SECOND, 0)
+                set(java.util.Calendar.MILLISECOND, 0)
+            }
+            val key = String.format(Locale.US, "%d:%.1f:%.1f", cal.timeInMillis, lat, lng)
+            astroCache?.takeIf { it.first == key }?.let { return it.second }
+            return Astro.day(cal.timeInMillis, lat, lng).also { astroCache = key to it }
+        }
+
+        private fun hhmm(millis: Long?): String = if (millis == null) "—" else SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(millis))
+
         private const val IMAGE_LAYER = "conditions-image"
         private const val ARROW_SOURCE = "conditions-arrows-src"
         private const val ARROW_LAYER = "conditions-arrows"
@@ -1963,7 +2198,7 @@ class ConditionsFeature(
         /** Between downloads, so two never land in the same minute of Open-Meteo's limit. */
         private const val MIN_DOWNLOAD_GAP_MS = 75_000L
         private const val MAX_ARROWS_PER_SIDE = 12
-        private const val BOX_ROWS = 7
+        private const val BOX_ROWS = 9
         private const val PLAY_STEP_MS = 650L
         private const val PLAY = "Play"
         private const val PAUSE = "Pause"
@@ -2085,8 +2320,8 @@ class ConditionsFeature(
             val satTemp = a.satellites[SatelliteKind.SEA_TEMP]?.sample(lat, lng)
             val modelTemp = f?.sample(ForecastField.SEA_TEMP, lat, lng, time, masked)
             when {
-                satTemp != null && satTemp.isFinite() -> water += "Surface ${format.temperature(satTemp.toDouble())}"
-                modelTemp != null && modelTemp.isFinite() -> water += "Surface ${format.temperature(modelTemp.toDouble())}"
+                satTemp != null && satTemp.isFinite() -> water += "Surface temp ${format.temperature(satTemp.toDouble())}"
+                modelTemp != null && modelTemp.isFinite() -> water += "Surface temp ${format.temperature(modelTemp.toDouble())}"
             }
             a.satellites[SatelliteKind.CHLOROPHYLL]?.sample(lat, lng)?.takeIf { it.isFinite() && a.isSea(lat, lng) != false }?.let {
                 water += String.format(Locale.US, if (it < 1) "chlorophyll %.2f mg/m³" else "chlorophyll %.1f mg/m³", it)
@@ -2097,14 +2332,24 @@ class ConditionsFeature(
             if (a.isSea(lat, lng) != false) {
                 fun coarse(kind: SatelliteKind) = a.satellites[kind]?.let { if (masked) it.sampleToShore(lat, lng) else it.sample(lat, lng) }?.takeIf { it.isFinite() }
                 coarse(SatelliteKind.TEMP_BELOW)?.let {
-                    out += Value(null, "${format.depth(a.belowDepthM.toDouble())} down ${format.temperature(it.toDouble())}", "Depth")
+                    out += Value(null, "Sea temp ${format.depth(a.belowDepthM.toDouble())} down ${format.temperature(it.toDouble())}", "Depth")
                 }
                 val surface = listOfNotNull(
                     coarse(SatelliteKind.SALINITY)?.let { String.format(Locale.US, "Salinity %.1f", it) },
-                    coarse(SatelliteKind.SEA_LEVEL)?.let { "sea level ${format.seaLevel(it.toDouble())}" }
+                    coarse(SatelliteKind.SEA_LEVEL)?.let { "sea level ${format.seaLevelVsAverage(it.toDouble())}" }
                 )
-                if (surface.isNotEmpty()) out += Value(null, surface.joinToString(" · "), "Water")
+                if (surface.isNotEmpty()) out += Value(null, surface.joinToString(" · ").replaceFirstChar { it.uppercase() }, "Water")
             }
+
+            // Worked out here, not downloaded.
+            val sky = astroDay(lat, lng, time)
+            out += Value(null, "Sun up ${hhmm(sky.sunrise)} · down ${hhmm(sky.sunset)} · first light ${hhmm(sky.firstLight)}", "Sun")
+            val bites = buildList {
+                if (sky.majors.isNotEmpty()) add("major " + sky.majors.joinToString(", ") { hhmm(it) })
+                if (sky.minors.isNotEmpty()) add("minor " + sky.minors.joinToString(", ") { hhmm(it) })
+            }
+            out += Value(null, "Moon ${(sky.illumination * 100).roundToInt()}% ${sky.phaseName}" +
+                if (bites.isEmpty()) "" else " · solunar ${bites.joinToString(" · ")}", "Moon")
             return out
         }
 
@@ -2124,4 +2369,11 @@ class ConditionsFeature(
             )
         }
     }
+}
+
+/** When eddies are outlined on the map. */
+enum class EddyMode(val label: String) {
+    WITH_SEA_LEVEL("With the sea level map"),
+    ALWAYS("On every sea map (when saved)"),
+    OFF("Off")
 }

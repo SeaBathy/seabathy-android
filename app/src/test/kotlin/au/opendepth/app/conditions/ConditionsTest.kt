@@ -349,7 +349,7 @@ UTC,m,degrees_north,degrees_east,mg m^-3
         assertEquals(0.0, values[1].towardsDegrees!!, 1e-3)
         assertEquals("Waves 1.2 m, 7 s from E", values[2].text)
         // The satellite temperature is preferred to the model's; it has no arrow.
-        assertTrue(text, text.contains("Surface 26.4 °C"))
+        assertTrue(text, text.contains("Surface temp 26.4 °C"))
         // Each line keeps its row, whatever its wording, so a tap on it shows the right layer.
         assertEquals(listOf("Current", "Wind", "Waves"), values.take(3).map { it.row })
         assertEquals("Sea", values.first { it.text.startsWith("Surface") }.row)

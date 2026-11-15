@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+- **Temperature lines:** labelled lines over the sea temperature maps (satellite, breaks and at
+  depth), every 0.25, 0.5, 1 or 2 degrees or spaced automatically. Turn them off in Sea conditions.
+- **Target temperature band:** set a range, say 24 to 26 °C, and water in it shows bright with bold
+  edges while the rest is dimmed, on the map and in the colour key.
+- **Eddy outlines:** the sea level map now draws lines at 10, 20 and 30 cm above (solid) and below
+  (dashed) average, and marks warm (W) and cold (C) eddy middles. Can be shown on every sea map.
+- **Sun, moon and solunar times** in the values box: sunrise, sunset, first light, moon phase, and
+  solunar major and minor times (a traditional fishing guide, not a promise). Worked out on the
+  phone, nothing downloaded.
+- **Clearer labels:** "Surface temp", "Sea temp 10 m down", and sea level as "3 cm below average"
+  (satellite height against its long-term average: higher often means a warm eddy, lower a cold one).
+  "Saved areas" are now "Downloaded areas", "Round my spot" is "My spot", and the satellite switch
+  is "Satellite sea maps" and lists what it downloads.
+
 ## 1.2.0 — 2026-11-15
 
 - **Buoys, beacons, pipelines (beta):** a new map layer in Settings → Map display, off by default.

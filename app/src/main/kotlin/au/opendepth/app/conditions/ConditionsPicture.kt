@@ -247,6 +247,8 @@ object ConditionsPicture {
 
     fun render(
         south: Double, west: Double, north: Double, east: Double, maxSide: Int, scale: ColourScale, sampler: Sampler,
+        /** A target band: values outside it are dimmed. */
+        band: ClosedFloatingPointRange<Double>? = null,
         /** Checked each row: a picture nobody wants any more stops part-way. */
         cancelled: () -> Boolean = { false }
     ): Pixels {
@@ -271,10 +273,22 @@ object ConditionsPicture {
             val lat = latitudeOf(yTop - (y + 0.5) / height * mapHeight)
             for (x in 0 until width) {
                 val lng = west + (x + 0.5) / width * widthDeg
-                argb[y * width + x] = scale.colour(sampler.at(lat, lng).toDouble())
+                val value = sampler.at(lat, lng).toDouble()
+                val colour = scale.colour(value)
+                argb[y * width + x] = if (band != null && colour != 0 && value !in band) dim(colour) else colour
             }
         }
         return Pixels(width, height, argb)
+    }
+
+    /** [argb] darkened and greyed, for water outside a target band. */
+    fun dim(argb: Int): Int {
+        val r = (argb shr 16) and 0xFF
+        val g = (argb shr 8) and 0xFF
+        val b = argb and 0xFF
+        val grey = (r * 0.3 + g * 0.59 + b * 0.11)
+        fun mix(v: Int) = ((v * 0.25 + grey * 0.75) * 0.45).toInt().coerceIn(0, 255)
+        return (argb and 0xFF000000.toInt()) or (mix(r) shl 16) or (mix(g) shl 8) or mix(b)
     }
 
     fun mercatorY(lat: Double): Double = ln(tan(PI / 4 + Math.toRadians(lat.coerceIn(-85.0, 85.0)) / 2))

@@ -41,6 +41,10 @@ class SeaUnitsTest {
     fun seaLevelFollowsTheTideUnit() {
         assertEquals("+10 cm", metres.seaLevel(10.0))
         assertEquals("+3.9 in", feet.seaLevel(10.0))
+        assertEquals("2 cm below average", metres.seaLevelVsAverage(-2.0))
+        assertEquals("6 cm above average", metres.seaLevelVsAverage(6.0))
+        assertEquals("about average", metres.seaLevelVsAverage(0.2))
+        assertEquals("0.8 in below average", feet.seaLevelVsAverage(-2.0))
     }
 
     @Test
