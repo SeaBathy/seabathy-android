@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.1 — 2026-11-16
 
 - **Temperature lines:** smooth, labelled lines over the sea temperature maps (satellite, breaks
   and at depth), every 0.25, 0.5, 1 or 2 degrees or spaced automatically, with whole degrees drawn

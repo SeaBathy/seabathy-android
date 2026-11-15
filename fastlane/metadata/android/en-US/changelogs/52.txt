@@ -1,0 +1,1 @@
+New on the sea conditions map: temperature lines, a target temperature band, eddy outlines, and sun, moon and solunar times. Plainer labels for surface temp, sea temp at depth and sea level.
