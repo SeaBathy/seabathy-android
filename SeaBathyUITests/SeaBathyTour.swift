@@ -105,7 +105,7 @@ final class SeaBathyTour: XCTestCase {
     func panMap(dx: CGFloat, dy: CGFloat) {
         let from = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.6))
         let to = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5 + dx, dy: 0.6 + dy))
-        from.press(forDuration: 0.05, thenDragTo: to)
+        from.press(forDuration: 0.1, thenDragTo: to, withVelocity: .slow, thenHoldForDuration: 0.3)
         sleep(1)
     }
 
@@ -201,7 +201,7 @@ final class SeaBathyTour: XCTestCase {
         tap("Layers")
         sleep(1)
         shot("drawer-with-layer")
-        if tap("COLOURS") {
+        if tap("Depth colours for", contains: false) {
             sleep(2)
             shot("depth-colours")
             tap("Reef and shallows", contains: true)
@@ -218,7 +218,7 @@ final class SeaBathyTour: XCTestCase {
     func test07_ThreeD() {
         tap("Layers")
         sleep(1)
-        if tap("3D VIEW") {
+        if tap("Show Seabed", contains: false) {
             sleep(25)
             shot("3d-view")
             tap("Close 3D view", wait: 5)
@@ -255,8 +255,10 @@ final class SeaBathyTour: XCTestCase {
         sleep(40)
         shot("conditions-current")
         settingsRow("Sea conditions")
-        if tap("Show on the map") {
+        if tap("Show on the map", wait: 12) {
             tap("Wind speed")
+            sleep(1)
+            app.navigationBars.buttons.element(boundBy: 0).tap()
         }
         done()
         sleep(20)
@@ -352,6 +354,8 @@ final class SeaBathyTour: XCTestCase {
     }
 
     func test15_Anchor() {
+        tap("GPS")
+        sleep(3)
         settingsRow("Anchor alarm")
         shot("anchor-sheet")
         tap("Drop anchor", contains: true)
@@ -361,9 +365,10 @@ final class SeaBathyTour: XCTestCase {
         sleep(2)
         shot("anchor-chip")
         settingsRow("Anchor alarm")
-        tap("Stop anchor alarm")
+        tap("Stop anchor alarm", wait: 12)
         sleep(1)
         done()
+        tap("GPS"); tap("GPS")
     }
 
     func test16_OnlineLayers() {
@@ -371,7 +376,7 @@ final class SeaBathyTour: XCTestCase {
         shot("online-layers")
         if tap("Sentinel", contains: true) {
             sleep(1)
-            tap("Add as a layer", wait: 3)
+            if element("Add as a layer").exists { tap("Add as a layer", wait: 3) }
         }
         sleep(1)
         done()
@@ -395,6 +400,8 @@ final class SeaBathyTour: XCTestCase {
         settingsRow("Boat & navigation")
         toggle("Night red filter")
         done()
+        sleep(2)
+        shot("night-filter-off")
     }
 
     func test19_BuoysAndBeacons() {
@@ -402,10 +409,9 @@ final class SeaBathyTour: XCTestCase {
         toggle("Buoys, beacons, pipelines")
         sleep(2)
         shot("navmarks-warning")
-        tap("I understand", contains: true)
-        tap("Show layer")
         sleep(1)
-        done()
+        tap("I understand", contains: true, wait: 10)
+        tap("Show layer")
         sleep(4)
         shot("navmarks-map")
     }

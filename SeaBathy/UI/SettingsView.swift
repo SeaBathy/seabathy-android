@@ -54,7 +54,10 @@ private struct SettingsContent: View {
                         set: { settings.showGrid = $0; app.navigation.grid.setVisible($0) }))
                     Toggle("Buoys, beacons, pipelines (beta)", isOn: Binding(
                         get: { navMarks.visible },
-                        set: { navMarks.requestVisible($0) }))
+                        set: { wanted in
+                            // The not-for-navigation tick can't show over this sheet: close it first.
+                            if wanted { close { navMarks.requestVisible(true) } } else { navMarks.requestVisible(false) }
+                        }))
                 }
 
                 Section("Map layers") {
