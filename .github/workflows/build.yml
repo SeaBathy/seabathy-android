@@ -47,6 +47,7 @@ jobs:
           ls -l out
 
       - name: Build for the iPhone simulator
+        id: simbuild
         run: |
           set -o pipefail
           xcodebuild -project SeaBathy.xcodeproj -scheme SeaBathy -configuration Debug \
@@ -63,6 +64,8 @@ jobs:
           xcodebuild -project SeaBathy.xcodeproj -scheme SeaBathy -destination "id=$UDID"             -derivedDataPath build/test test 2>&1 | tee logs/tests.log | grep -E "Test Case|error:|Executed|TEST" | tail -n 120
 
       - name: Run in the simulator and take screenshots
+        # Screenshots are still useful when a unit test fails.
+        if: ${{ !cancelled() && steps.simbuild.outcome == 'success' }}
         run: |
           UDID=$(xcrun simctl list devices available -j | python3 -c '
           import json, sys

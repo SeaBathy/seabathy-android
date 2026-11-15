@@ -179,7 +179,7 @@ final class RoutePlanningTests: XCTestCase {
     }
 
     func testWaypointWithoutIconGetsDefault() throws {
-        let raw = #"[{"id":"a","name":"Reef","lat":1.0,"lng":2.0,"color":"#EF4444"},{"id":"b","name":"Two","lat":1,"lng":2,"icon":"fish"}]"#
+        let raw = ##"[{"id":"a","name":"Reef","lat":1.0,"lng":2.0,"color":"#EF4444"},{"id":"b","name":"Two","lat":1,"lng":2,"icon":"fish"}]"##
         let list = try JSONDecoder().decode([Waypoint].self, from: Data(raw.utf8))
         XCTAssertEqual(list[0].icon, "marker")
         XCTAssertEqual(list[1].icon, "fish")
