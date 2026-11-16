@@ -75,6 +75,7 @@ phone or PC only. SeaBathy shows their credit on the map while they're shown.
 | Temperature at depth | HYCOM Consortium (ESPC-D-V02 ocean model) | Public release; demonstration product with no guarantee of availability |
 | Latest true colour | NASA Global Imagery Browse Services (GIBS), VIIRS | NASA data, no restriction on use; credit requested |
 | Seabed depths | GMRT, Global Multi-Resolution Topography (Ryan et al. 2009, doi:10.1029/2008GC002332) | CC BY 4.0; not to be used for navigation |
+| High-detail depths (Australia) | Flukes, E. (2026), Multi-resolution bathymetry composite surface for Australian waters (EEZ), IMAS, doi:10.25959/Y9VF-V723; AusSeabed surveys, © Commonwealth of Australia (Geoscience Australia), and state surveys, each credited in the _sources.txt saved beside the file | CC BY 4.0; not to be used for navigation |
 
 The forecasts come from models about 8 km apart. Near the shore, round
 headlands and in narrow channels the real current can be very different.
@@ -101,12 +102,20 @@ types are guessed from the data. Not for navigation.
 Each is off until turned on (Settings, or the chips at the top of the layers panel). Built from
 these free datasets:
 
-- Marine parks and their zones, Commonwealth and every state: Collaborative Australian Protected
-  Areas Database (CAPAD) 2024, Marine, Australian Government Department of Climate Change,
-  Energy, the Environment and Water (CC BY 4.0). Zones are grouped by their IUCN category:
-  Ia and II (and Victoria's marine sanctuaries) are shown as no-take, IV as limited fishing, the
-  rest as general use. No-take and limited zones are simplified to about 60 m, general use to
-  about 300 m, and small islands cut out of a zone are filled in.
+- Marine park zones, from each authority's own zoning (all CC BY 4.0):
+  Australian Marine Parks zones, Department of Climate Change, Energy, the Environment and Water
+  (DCCEEW); Great Barrier Reef Marine Park Zoning, Great Barrier Reef Marine Park Authority;
+  Great Barrier Reef Coast, Moreton Bay and Great Sandy marine park zones, Queensland Government;
+  NSW Marine Protected Areas, NSW Department of Primary Industries (Fisheries); Marine Park
+  Zoning, South Australian Department for Environment and Water; Fisheries Guide fishing
+  prohibition orders (closed waters and marine park sanctuary areas), WA Department of Primary
+  Industries and Regional Development; and for Victoria, Tasmania, the NT and WA park outlines,
+  the Collaborative Australian Protected Areas Database (CAPAD) 2024, DCCEEW. Each zone is
+  grouped by its official zone name: sanctuary, marine national park, preservation, scientific
+  research and restricted access zones as no-take; habitat protection, conservation park,
+  buffer, recreational use and special purpose zones as limited fishing; the rest as general
+  use. Island land is left out. No-take and limited zones are simplified to about 30 m,
+  general use to about 150 m.
 - Reef, island, shoal, bank, rock and seamount names: Composite Gazetteer of Australia,
   Geoscience Australia and the states and territories (CC BY 4.0); Great Barrier Reef Features,
   Great Barrier Reef Marine Park Authority (CC BY 4.0), including reef numbers for unnamed reefs.

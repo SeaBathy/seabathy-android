@@ -29,7 +29,8 @@ class ImportProgressDialog(private val context: Context, private val panels: Pan
         }
     }
 
-    fun show(title: String, initialText: String): Handle {
+    /** [onCancel], when given, adds a Cancel button that calls it (the caller then dismisses). */
+    fun show(title: String, initialText: String, onCancel: (() -> Unit)? = null): Handle {
         val body = panels.body()
         val row = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -43,9 +44,25 @@ class ImportProgressDialog(private val context: Context, private val panels: Pan
         }
         row.addView(label)
         body.addView(row)
+        if (onCancel != null) {
+            body.addView(android.widget.Button(context).apply {
+                text = "Cancel"
+                isAllCaps = false
+                setOnClickListener {
+                    isEnabled = false
+                    label.text = "Stopping…"
+                    onCancel()
+                }
+            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                gravity = Gravity.END
+                topMargin = context.dp(12)
+            })
+        }
 
         val dialog = panels.showPanel(title, body)
         dialog.setCancelable(false)
+        // A long build with a Cancel button: keep the screen on so the phone doesn't sleep mid-way.
+        if (onCancel != null) dialog.window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         return Handle(dialog, label, Handler(Looper.getMainLooper()))
     }
 }

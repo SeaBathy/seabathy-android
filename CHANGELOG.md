@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **High-detail depths for Australian waters:** "Get seabed depths for this area" now offers
+  High detail as well as Standard. It builds the area on the phone from the IMAS composite with
+  AusSeabed and state multibeam surveys on top, down to a metre or two where surveyed, and opens
+  it as a layer. This is BathyPicker's engine, now inside SeaBathy, so one app does both.
+- **Marine park zones rebuilt** from each authority's own zoning (Australian Marine Parks,
+  GBRMPA, Queensland, NSW, SA and WA fishing orders) and grouped by the official zone name, not a
+  rough category. Habitat protection and conservation park zones now show as limited fishing,
+  WA's general use and recreation areas are no longer marked no-take, island land no longer
+  shows as zones, and tapping a zone shows its official name and who publishes it.
+- **Reef and island names:** names now read properly (McDonald, Le Geographe's), repeats close
+  together are gone, and Antarctic and garbled names are left out.
 - **Pipelines, cables and mooring areas** in the buoys layer: 20 tiny areas had been simplified to
   fewer than 4 corners, which could stop the map reading the whole file. They're repaired.
 - **Sturdier saved settings:** a good-weather alert or photo record missing a field (say, from an

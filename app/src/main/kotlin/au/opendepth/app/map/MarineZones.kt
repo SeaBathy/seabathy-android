@@ -41,12 +41,14 @@ enum class ZoneMode(val label: String) {
 }
 
 /**
- * Marine park zones (every Australian marine park, Commonwealth and state, from CAPAD),
+ * Marine park zones (Commonwealth and every state, from each authority's own zoning),
  * reef and island names, and boat ramps, bundled in assets/zones. Built by testing/zones
  * in the dev folder. Zones are a guide only: the official zoning maps are the law.
  *
- * Zone classes ("c"): "nt" no-take (IUCN Ia/II, Victoria's marine sanctuaries), "lim"
- * limited fishing (IUCN IV, habitat protection), "gen" fishing under the usual rules.
+ * Properties: "n" park, "z" official zone name, "s" waters, "src" authority, and the class "c"
+ * set from the zone name: "nt" no-take (sanctuary, marine national park, preservation...),
+ * "lim" limited fishing (habitat protection, conservation park, special purpose...), "gen"
+ * fishing under the usual rules.
  */
 class MarineZonesController(private val mapHolder: MapHolder, private val prefs: SharedPreferences) {
 
@@ -199,7 +201,7 @@ class MarineZonesController(private val mapHolder: MapHolder, private val prefs:
             val strictest = zones.maxByOrNull { RANK[it.getStringProperty("c")] ?: 0 }
             if (strictest != null) {
                 return describeZone(strictest.getStringProperty("c"), strictest.getStringProperty("n"),
-                    strictest.getStringProperty("t"), strictest.getStringProperty("s"), strictest.getStringProperty("i"))
+                    strictest.getStringProperty("z"), strictest.getStringProperty("s"), strictest.getStringProperty("src"))
             }
         }
         if (names) {
@@ -212,10 +214,10 @@ class MarineZonesController(private val mapHolder: MapHolder, private val prefs:
     }
 
     companion object {
-        const val CREDIT = "Marine parks: CAPAD 2024, DCCEEW (CC BY 4.0)"
+        const val CREDIT = "Marine park zones: DCCEEW, GBRMPA, Queensland Government, NSW DPI, SA DEW, WA DPIRD, CAPAD 2024 (CC BY 4.0)"
         const val NAMES_CREDIT = "Names: Geoscience Australia gazetteer, GBRMPA (CC BY 4.0)"
         const val RAMPS_CREDIT = "Boat ramps: © OpenStreetMap contributors"
-        const val NOT_OFFICIAL = "A guide only, from national data that can lag behind changes. The official zoning map and rules " +
+        const val NOT_OFFICIAL = "A guide only, from government data that can lag behind changes. The official zoning map and rules " +
             "for the park are the law: check them before you fish. Not for navigation."
 
         private const val KEY_MODE = "zones_mode"
@@ -237,19 +239,26 @@ class MarineZonesController(private val mapHolder: MapHolder, private val prefs:
         const val LIM_COLOUR = "#EAB308"
         const val GEN_COLOUR = "#60A5FA"
         private val RANK = mapOf("nt" to 3, "lim" to 2, "gen" to 1)
+        private val SOURCE_NAMES = mapOf(
+            "DCCEEW" to "Australian Marine Parks (DCCEEW)", "GBRMPA" to "Great Barrier Reef Marine Park Authority",
+            "Qld Gov" to "Queensland Government", "NSW DPI" to "NSW DPI Fisheries", "SA DEW" to "SA Department for Environment and Water",
+            "WA DPIRD" to "WA DPIRD fishing orders", "CAPAD" to "CAPAD 2024 (park outline)")
 
-        fun describeZone(c: String?, park: String?, type: String?, state: String?, iucn: String?): MapInfo {
+        fun describeZone(c: String?, park: String?, zone: String?, state: String?, source: String?): MapInfo {
+            val z = zone.orEmpty()
+            val restricted = z.contains("restricted access", ignoreCase = true) || z.contains("preservation", ignoreCase = true)
             val (badge, colour, fishing) = when (c) {
-                "nt" -> Triple("No-take zone", NT_COLOUR, "No fishing or collecting of any kind." + if (iucn == "Ia") " Some zones like this are also no entry." else "")
-                "lim" -> Triple("Limited fishing", LIM_COLOUR, "Some fishing is allowed, with limits on gear and methods (for example no trawling).")
+                "nt" -> Triple("No-take zone", NT_COLOUR, "No fishing or collecting of any kind." + if (restricted) " Entry is also restricted." else "")
+                "lim" -> Triple("Limited fishing", LIM_COLOUR, "Some fishing is allowed, with limits on gear, methods or species. Check this zone's rules.")
                 else -> Triple("General use", GEN_COLOUR, "Fishing is allowed under the usual rules for the park.")
             }
             val waters = state?.let { if (it == "COM") "Commonwealth" else it }
             return MapInfo(
                 badge = badge, badgeColour = Color.parseColor(colour),
                 title = park?.takeIf { it.isNotBlank() } ?: badge,
-                subtitle = listOfNotNull(type, waters).joinToString(" · "),
-                rows = listOf(au.opendepth.app.ui.InfoCard.Row("Fishing", fishing)),
+                subtitle = listOfNotNull(zone?.takeIf { it.isNotBlank() }, waters).joinToString(" · "),
+                rows = listOfNotNull(au.opendepth.app.ui.InfoCard.Row("Fishing", fishing),
+                    source?.takeIf { it.isNotBlank() }?.let { au.opendepth.app.ui.InfoCard.Row("Zoning from", SOURCE_NAMES[it] ?: it) }),
                 fine = "$NOT_OFFICIAL\n$CREDIT"
             )
         }
@@ -313,7 +322,7 @@ class NoTakeZones private constructor(private val zones: List<Zone>) {
                         w = minOf(w, outer[k]); e = maxOf(e, outer[k]); s = minOf(s, outer[k + 1]); n = maxOf(n, outer[k + 1])
                     }
                 }
-                out += Zone(p.optString("n"), p.optString("t"), w, s, e, n, polygons)
+                out += Zone(p.optString("n"), p.optString("z"), w, s, e, n, polygons)
             }
             return NoTakeZones(out)
         }

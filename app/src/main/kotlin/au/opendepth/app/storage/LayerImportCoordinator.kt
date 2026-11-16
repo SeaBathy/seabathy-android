@@ -113,6 +113,53 @@ class LayerImportCoordinator(
         }
     }
 
+    /**
+     * Builds high-detail Australian depths for [area] ([HighDetailDepths]) and opens them as a
+     * layer. Can take a few minutes for a big area; the dialog shows progress and can cancel.
+     */
+    fun downloadHighDetail(area: SeabedDownload.Area) {
+        var work: kotlinx.coroutines.Job? = null
+        val progress = importProgress.show("High-detail depths", "Starting…") { work?.cancel() }
+        work = scope.launch {
+            DiagnosticLog.log(TAG, "high-detail build: ${area.name}")
+            val importer = GeoTiffImporter(context, File(filesDir, OverlayLayerController.GEOTIFF_TILE_CACHE_DIR))
+            val result = try {
+                runCatchingCancellable {
+                    val (file, credits) = withContext(Dispatchers.IO) {
+                        HighDetailDepths.build(context, area, File(filesDir, OverlayLayerController.SEABED_DIR)) { pct, stage ->
+                            progress.update(if (pct > 0) "$pct%  $stage" else stage)
+                        }
+                    }
+                    val existing = overlays.layerWithSource(file.absolutePath)
+                    if (existing != null) {
+                        Triple(existing, null, credits)
+                    } else {
+                        progress.update("Opening the depths…")
+                        Triple(null, openOnIoClosingOnCancel({ importer.importFile(file) }) { imported ->
+                            (imported as? GeoTiffImporter.ImportedGeoTiff.OnDemand)?.tileSource?.close()
+                        }, credits)
+                    }
+                }
+            } finally {
+                progress.dismiss()
+            }
+            result.onSuccess { (existing, imported, _) ->
+                if (existing != null) {
+                    if (!existing.visible) overlays.setVisible(existing.id, true)
+                    overlays.boundsOf(existing.id)?.let(onShowArea)
+                    onResult("${existing.name} is already loaded")
+                } else if (imported != null) {
+                    val id = overlays.addGeoTiff(imported, HighDetailDepths.CREDIT)
+                    overlays.boundsOf(id)?.let(onShowArea)
+                    onResult(describe(imported))
+                }
+            }.onFailure { error ->
+                DiagnosticLog.logError(TAG, "high-detail build FAILED", error)
+                onError(error.readableMessage("Couldn't build the high-detail depths"))
+            }
+        }
+    }
+
     /** Downloads free depth data for [area] ([SeabedDownload]) and opens it as a layer. */
     fun downloadSeabed(area: SeabedDownload.Area) {
         scope.launch {

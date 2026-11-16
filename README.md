@@ -44,7 +44,7 @@ once it's on the phone. Free and open source, with no account, ads or tracking.
 | | |
 |---|---|
 | 🗺️ **Your surveys, sharp** | GeoTIFF depth surveys, even multi-gigabyte BigTIFFs, coloured by depth with relief shading. The depth under the crosshair as you pan. |
-| 🌊 **Free depths anywhere** | Download seabed depths for the area on screen, anywhere in the world (GMRT). |
+| 🌊 **Free depths anywhere** | Download seabed depths for the area on screen, anywhere in the world (GMRT), or in high detail for Australian waters (IMAS composite with AusSeabed and state multibeam surveys, built on the phone). |
 | 🏝️ **3D seabed** | Rotate and fly over any depth layer. Exaggerate the height up to 100× so every reef wall stands out, drape satellite or offline maps over it, tap for depth and slope. |
 | 📶 **Works offline** | Save satellite maps, tides and sea conditions for the area you fish, then use them with no signal. |
 | 🌡️ **Tides and sea conditions** | Tide charts, wind, waves, swell, currents with moving flow lines, sea temperature and its breaks, chlorophyll, sea level and salinity. |
@@ -298,7 +298,7 @@ height, wind (including Beaufort), waves and swell, current and sea temperature.
 <details>
 <summary><b>Also</b></summary>
 
-- Free seabed depths anywhere (GMRT); NASA's daily true colour picture; a latitude and longitude grid
+- Free seabed depths anywhere (GMRT), and high-detail Australian depths built on the phone (IMAS, AusSeabed); NASA's daily true colour picture; a latitude and longitude grid
 - Offline map downloads with a size estimate, background progress and retries
 - Waypoints with icons, colours, notes and search; measurement tool; DD, DDM and DMS coordinates
 - Licences and credits screen in Settings

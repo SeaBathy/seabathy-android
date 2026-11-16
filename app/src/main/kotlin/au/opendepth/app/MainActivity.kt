@@ -1019,6 +1019,26 @@ class MainActivity : AppCompatActivity() {
             target.latitude, target.longitude
         )
         val note = if (area.trimmed) " The most one download holds is about ${SeabedDownload.MAX_SPAN_KM} km across, so this is the middle of the screen." else ""
+        if (au.opendepth.app.storage.HighDetailDepths.covers(area)) {
+            au.opendepth.app.ui.InfoCard(this).apply {
+                badge = "Seabed depths"
+                title = "Which depths?"
+                rows += au.opendepth.app.ui.InfoCard.Row("High detail",
+                    "Australian waters only. The IMAS composite with AusSeabed and state multibeam surveys on top: down to a metre or two where surveyed. Built on the phone; a big area can take a few minutes.")
+                rows += au.opendepth.app.ui.InfoCard.Row("Standard",
+                    "GMRT, worldwide. Ship surveys blended with the GEBCO grid; much coarser away from surveys. Up to about 55 MB, quick.")
+                fine = "Either one is added as a layer that also works in 3D and offline.$note Not for navigation."
+                actions += au.opendepth.app.ui.InfoCard.Action("Standard") {
+                    sidePanel.close()
+                    layerImports.downloadSeabed(area)
+                }
+                actions += au.opendepth.app.ui.InfoCard.Action("High detail", primary = true) {
+                    sidePanel.close()
+                    layerImports.downloadHighDetail(area)
+                }
+            }.show()
+            return
+        }
         panels.confirm(
             title = "Get seabed depths?",
             message = "Downloads depths for the area on screen from GMRT, which blends ship surveys with the global " +
