@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **Marine park zones** for every Australian marine park, Commonwealth and state: no-take zones in
+  green, limited fishing in yellow, general use in blue. Show all zones or only the no-take ones,
+  tap a zone for its park and what's allowed, and get a warning (with a buzz) when the boat goes
+  into a no-take zone, even with the zones hidden. A guide only: the official zoning map is the law.
+- **Reef and island names**: named reefs, islands, shoals, banks and rocks around Australia, and
+  Great Barrier Reef reef numbers close in.
+- **Boat ramps** from OpenStreetMap.
+- Quick switches for zones, names and ramps at the top of the layers panel.
 - **Man overboard button** at the top of the chart: one tap marks the boat's position (or the
   first GPS fix, if the GPS was off) as a waypoint and starts steering back to it, with a buzz.
 - **Backup and restore** (Settings → Backup and restore): one file with your waypoints and their

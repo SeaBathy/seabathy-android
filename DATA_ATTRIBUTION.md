@@ -97,6 +97,27 @@ types mapped to IALA region A symbols):
 Many marks are missing (most Queensland marks, SA, NT and Tasmania; Victorian marks have no port or starboard type), some are out of date, and some
 types are guessed from the data. Not for navigation.
 
+## Marine park zones, reef and island names, boat ramps
+
+Each is off until turned on (Settings, or the chips at the top of the layers panel). Built from
+these free datasets:
+
+- Marine parks and their zones, Commonwealth and every state: Collaborative Australian Protected
+  Areas Database (CAPAD) 2024, Marine, Australian Government Department of Climate Change,
+  Energy, the Environment and Water (CC BY 4.0). Zones are grouped by their IUCN category:
+  Ia and II (and Victoria's marine sanctuaries) are shown as no-take, IV as limited fishing, the
+  rest as general use. No-take and limited zones are simplified to about 60 m, general use to
+  about 300 m, and small islands cut out of a zone are filled in.
+- Reef, island, shoal, bank, rock and seamount names: Composite Gazetteer of Australia,
+  Geoscience Australia and the states and territories (CC BY 4.0); Great Barrier Reef Features,
+  Great Barrier Reef Marine Park Authority (CC BY 4.0), including reef numbers for unnamed reefs.
+  Islands and rocks are kept only in the sea or within about 3 km of the coast, tested against
+  Natural Earth 1:10m land and coastline (public domain).
+- Boat ramps: © OpenStreetMap contributors (ODbL), slipways not marked private.
+
+A guide only: zones change, and the official zoning map and rules for each park are the law.
+Not for navigation.
+
 ## Not for navigation
 
 SeaBathy and any supplied map data are for research, planning, educational, and situational-awareness use only.
