@@ -1,0 +1,1 @@
+Cleaner cards: zone, ramp, name and mark details, the no-take warning and other notices now use the app's own dark cards with a coloured badge and clear rows.

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.3 — 2026-11-16
 
 - **Cleaner cards:** zone, ramp, name and mark details, the no-take warning and the other notices now use the app's own dark cards, with a coloured badge and clear rows, instead of Android's grey pop-ups.
 
