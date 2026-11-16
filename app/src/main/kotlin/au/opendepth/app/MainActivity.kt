@@ -793,47 +793,51 @@ class MainActivity : AppCompatActivity() {
     /** The nav marks layer is only shown once the user has ticked that it is not for navigation. */
     private fun confirmNavMarks(onResult: (Boolean) -> Unit) {
         if (isFinishing || isDestroyed) return onResult(false)
-        val pad = (20 * resources.displayMetrics.density).toInt()
+        val palette = au.opendepth.app.ui.AppTheme.palette
         val tick = android.widget.CheckBox(this).apply {
             text = "I understand this is not for navigation"
-            setPadding(pad / 4, pad / 2, 0, 0)
-        }
-        val box = android.widget.LinearLayout(this).apply {
-            orientation = android.widget.LinearLayout.VERTICAL
-            setPadding(pad, pad / 2, pad, 0)
-            addView(android.widget.TextView(this@MainActivity).apply {
-                text = "This layer shows buoys, beacons, lights, moorings, pipelines and submarine cables " +
-                    "gathered from free government data and OpenStreetMap.\n\n" +
-                    "It is NOT a nautical chart and must not be used for navigation. Marks can be moved, " +
-                    "removed or added at any time, positions may be old or wrong, many marks are missing, " +
-                    "and some types are guessed from the data. Always use official charts, notices to " +
-                    "mariners and your own eyes."
-            })
-            addView(tick)
+            setTextColor(palette.primaryText)
+            buttonTintList = android.content.res.ColorStateList.valueOf(palette.accent)
+            setPadding(dp(4), dp(12), 0, 0)
         }
         var answered = false
-        val dialog = AlertDialog.Builder(this, ALERT_THEME)
-            .setTitle("Not for navigation")
-            .setView(box)
-            .setPositiveButton("Show layer") { _, _ ->
+        val card = au.opendepth.app.ui.InfoCard(this).apply {
+            badge = "Not for navigation"
+            badgeColour = android.graphics.Color.parseColor("#F59E0B")
+            title = "Buoys, beacons, pipelines"
+            paragraphs += "Buoys, beacons, lights, moorings, pipelines and submarine cables gathered from free government data and OpenStreetMap."
+            paragraphs += "It is not a nautical chart. Marks can be moved, removed or added at any time, positions may be old or wrong, many marks are missing, and some types are guessed from the data. Always use official charts, notices to mariners and your own eyes."
+            extra = tick
+            onDismiss = { if (!answered) onResult(false) }
+            actions += au.opendepth.app.ui.InfoCard.Action("Cancel")
+            actions += au.opendepth.app.ui.InfoCard.Action("Show layer", primary = true) {
                 answered = true
                 onResult(true)
             }
-            .setNegativeButton("Cancel", null)
-            .setOnDismissListener { if (!answered) onResult(false) }
-            .show()
-        val ok = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+        }
+        card.show()
+        val ok = card.buttons.last()
         ok.isEnabled = false
-        tick.setOnCheckedChangeListener { _, checked -> ok.isEnabled = checked }
+        ok.alpha = 0.45f
+        tick.setOnCheckedChangeListener { _, checked ->
+            ok.isEnabled = checked
+            ok.alpha = if (checked) 1f else 0.45f
+        }
     }
 
     private fun showNavMarkAt(lat: Double, lng: Double) {
         if (!navMarks.visible && !zones.anyShown) return
         val map = mapHolder.map ?: return
         val point = map.projection.toScreenLocation(org.maplibre.android.geometry.LatLng(lat, lng))
-        val (title, detail) = navMarks.describeAt(point) ?: zones.describeAt(point) ?: return
+        val info = navMarks.describeAt(point)?.let { (title, detail) ->
+            val lines = detail.lines().filter { it.isNotBlank() && it != au.opendepth.app.map.NavMarksController.NOT_FOR_NAVIGATION }
+            au.opendepth.app.map.MapInfo(
+                badge = "Nav mark", badgeColour = android.graphics.Color.parseColor("#F59E0B"), title = title,
+                paragraphs = lines, fine = au.opendepth.app.map.NavMarksController.NOT_FOR_NAVIGATION
+            )
+        } ?: zones.describeAt(point) ?: return
         if (isFinishing || isDestroyed) return
-        AlertDialog.Builder(this, ALERT_THEME).setTitle(title).setMessage(detail).setPositiveButton("OK", null).show()
+        showMapInfo(info)
     }
 
     private fun showWaypointSheetAtCentre(fallbackLat: Double, fallbackLng: Double) {
@@ -1273,14 +1277,19 @@ class MainActivity : AppCompatActivity() {
             val (latLng, taken) = info
             if (latLng == null) {
                 val centre = mapHolder.map?.cameraPosition?.target
-                AlertDialog.Builder(this@MainActivity, ALERT_THEME)
-                    .setTitle("No location in this photo")
-                    .setMessage("The photo has no GPS position: the camera's location tag may have been off, or it was removed when the photo was shared. Put the waypoint at the crosshair instead?")
-                    .setPositiveButton("At the crosshair") { _, _ ->
+                var placed = false
+                au.opendepth.app.ui.InfoCard(this@MainActivity).apply {
+                    badge = "Waypoint from a photo"
+                    title = "No location in this photo"
+                    paragraphs += "The camera's location tag may have been off, or the location was removed when the photo was shared."
+                    paragraphs += "Put the waypoint at the crosshair instead?"
+                    onDismiss = { if (!placed) file.delete() }
+                    actions += au.opendepth.app.ui.InfoCard.Action("Cancel")
+                    actions += au.opendepth.app.ui.InfoCard.Action("At the crosshair", primary = true) {
+                        placed = true
                         if (centre != null) finishPhotoWaypoint(file, centre.latitude, centre.longitude, taken ?: System.currentTimeMillis())
                     }
-                    .setNegativeButton("Cancel") { _, _ -> file.delete() }
-                    .show()
+                }.show()
                 return@launch
             }
             finishPhotoWaypoint(file, latLng[0], latLng[1], taken ?: System.currentTimeMillis())
@@ -1371,6 +1380,20 @@ class MainActivity : AppCompatActivity() {
         file.outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, PHOTO_QUALITY, it) }
     }
 
+    /** A tap's findings on the chart, as an app card. */
+    private fun showMapInfo(info: au.opendepth.app.map.MapInfo) {
+        au.opendepth.app.ui.InfoCard(this).apply {
+            badge = info.badge
+            info.badgeColour?.let { badgeColour = it }
+            title = info.title
+            subtitle = info.subtitle
+            rows += info.rows
+            paragraphs += info.paragraphs
+            fine = info.fine
+            actions += au.opendepth.app.ui.InfoCard.Action("Close", primary = true)
+        }.show()
+    }
+
     // Marine park zones ------------------------------------------------------------
 
     private lateinit var zones: au.opendepth.app.map.MarineZonesController
@@ -1396,16 +1419,20 @@ class MainActivity : AppCompatActivity() {
 
     /** The first time zones are turned on: they're a guide, the official map is the law. */
     private fun confirmZones(done: () -> Unit) {
-        AlertDialog.Builder(this, ALERT_THEME)
-            .setTitle("Marine park zones")
-            .setMessage(au.opendepth.app.map.MarineZonesController.NOT_OFFICIAL +
-                "\n\nGreen: no-take (no fishing). Yellow: limited fishing. Blue: fishing under the usual rules. Tap a zone for details.")
-            .setPositiveButton("I understand") { _, _ ->
+        au.opendepth.app.ui.InfoCard(this).apply {
+            badge = "Marine park zones"
+            title = "Every Australian marine park"
+            rows += au.opendepth.app.ui.InfoCard.Row("No-take: no fishing", "", android.graphics.Color.parseColor(au.opendepth.app.map.MarineZonesController.NT_COLOUR))
+            rows += au.opendepth.app.ui.InfoCard.Row("Limited fishing", "", android.graphics.Color.parseColor(au.opendepth.app.map.MarineZonesController.LIM_COLOUR))
+            rows += au.opendepth.app.ui.InfoCard.Row("General use", "", android.graphics.Color.parseColor(au.opendepth.app.map.MarineZonesController.GEN_COLOUR))
+            paragraphs += "Tap a zone to see what's allowed there."
+            fine = au.opendepth.app.map.MarineZonesController.NOT_OFFICIAL
+            actions += au.opendepth.app.ui.InfoCard.Action("Cancel")
+            actions += au.opendepth.app.ui.InfoCard.Action("I understand", primary = true) {
                 zones.acknowledge()
                 done()
             }
-            .setNegativeButton("Cancel", null)
-            .show()
+        }.show()
     }
 
     /** Warns once on entering a no-take zone, and says when the boat has left it. */
@@ -1440,12 +1467,16 @@ class MainActivity : AppCompatActivity() {
             vibrator?.vibrate(android.os.VibrationEffect.createWaveform(longArrayOf(0, 250, 120, 250, 120, 250), -1))
         }
         if (isFinishing || isDestroyed) return
-        AlertDialog.Builder(this, ALERT_THEME)
-            .setTitle("No-take zone")
-            .setMessage("You're in a no-take zone: $name. No fishing or collecting here.\n\n" + au.opendepth.app.map.MarineZonesController.NOT_OFFICIAL)
-            .setPositiveButton("OK", null)
-            .setNeutralButton("Stop these warnings") { _, _ -> zones.setWarn(false) }
-            .show()
+        au.opendepth.app.ui.InfoCard(this).apply {
+            badge = "No-take zone"
+            badgeColour = android.graphics.Color.parseColor(au.opendepth.app.map.MarineZonesController.NT_COLOUR)
+            title = "You're in a no-take zone"
+            subtitle = name
+            paragraphs += "No fishing or collecting here."
+            fine = au.opendepth.app.map.MarineZonesController.NOT_OFFICIAL
+            actions += au.opendepth.app.ui.InfoCard.Action("Stop warnings") { zones.setWarn(false) }
+            actions += au.opendepth.app.ui.InfoCard.Action("OK", primary = true)
+        }.show()
     }
 
     /** One tap to switch the zones, names and ramps, at the top of the layers panel. */
@@ -1839,27 +1870,25 @@ class MainActivity : AppCompatActivity() {
             return
         }
         if (isFinishing || isDestroyed) return
-        AlertDialog.Builder(this, ALERT_THEME)
-            .setTitle("Location")
-            .setMessage(message)
-            .setPositiveButton("Open settings") { _, _ ->
+        au.opendepth.app.ui.InfoCard(this).apply {
+            badge = "Location"
+            title = "Location is off for SeaBathy"
+            paragraphs += message
+            actions += au.opendepth.app.ui.InfoCard.Action("Not now")
+            actions += au.opendepth.app.ui.InfoCard.Action("Open settings", primary = true) {
                 runCatching {
-                    startActivity(
-                        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null))
-                    )
+                    startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null)))
                 }
             }
-            .setNegativeButton("Not now", null)
-            .show()
+        }.show()
     }
 
     private fun showAlert(message: String) {
         if (isFinishing || isDestroyed) return
-        AlertDialog.Builder(this, ALERT_THEME)
-            .setTitle("SeaBathy")
-            .setMessage(message)
-            .setPositiveButton("OK", null)
-            .show()
+        au.opendepth.app.ui.InfoCard(this).apply {
+            title = "SeaBathy"
+            paragraphs += message
+        }.show()
     }
 
     // Lifecycle ------------------------------------------------------------

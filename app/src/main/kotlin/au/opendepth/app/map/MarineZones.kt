@@ -22,6 +22,17 @@ import org.maplibre.android.style.layers.SymbolLayer
 import org.maplibre.android.style.sources.GeoJsonSource
 import java.net.URI
 
+/** What a tap on the chart found, for an [au.opendepth.app.ui.InfoCard]. */
+data class MapInfo(
+    val badge: String?,
+    val badgeColour: Int?,
+    val title: String,
+    val subtitle: String? = null,
+    val rows: List<au.opendepth.app.ui.InfoCard.Row> = emptyList(),
+    val paragraphs: List<String> = emptyList(),
+    val fine: String? = null
+)
+
 /** Which marine park zones are drawn. */
 enum class ZoneMode(val label: String) {
     OFF("Off"),
@@ -170,14 +181,17 @@ class MarineZonesController(private val mapHolder: MapHolder, private val prefs:
     }
 
     /** What was tapped: the strictest zone under the finger, a ramp or a name; null if none. */
-    fun describeAt(point: PointF): Pair<String, String>? {
+    fun describeAt(point: PointF): MapInfo? {
         val map = mapHolder.map ?: return null
         val box = RectF(point.x - TAP_PX, point.y - TAP_PX, point.x + TAP_PX, point.y + TAP_PX)
         if (ramps) {
             runCatching { map.queryRenderedFeatures(box, RAMPS).firstOrNull() }.getOrNull()?.let { f ->
                 val name = f.getStringProperty("n")?.takeIf { it.isNotBlank() } ?: "Boat ramp"
-                val fee = if (f.hasProperty("fee")) "\nA fee applies." else ""
-                return "Boat ramp" to "$name$fee\nFrom OpenStreetMap: check it's open and suits your boat."
+                return MapInfo(
+                    badge = "Boat ramp", badgeColour = Color.parseColor("#0284C7"), title = name,
+                    rows = listOfNotNull(au.opendepth.app.ui.InfoCard.Row("Fee", "Yes").takeIf { f.hasProperty("fee") }),
+                    fine = "From OpenStreetMap: check it's open and suits your boat. $RAMPS_CREDIT"
+                )
             }
         }
         if (mode != ZoneMode.OFF) {
@@ -191,7 +205,7 @@ class MarineZonesController(private val mapHolder: MapHolder, private val prefs:
         if (names) {
             runCatching { map.queryRenderedFeatures(box, PLACE_LABEL).firstOrNull() }.getOrNull()?.let { f ->
                 val kind = f.getStringProperty("k").orEmpty().replaceFirstChar { it.uppercase() }
-                return (f.getStringProperty("n") ?: kind) to "$kind\n$NAMES_CREDIT"
+                return MapInfo(badge = kind, badgeColour = Color.parseColor("#7DD3FC"), title = f.getStringProperty("n") ?: kind, fine = NAMES_CREDIT)
             }
         }
         return null
@@ -224,20 +238,20 @@ class MarineZonesController(private val mapHolder: MapHolder, private val prefs:
         const val GEN_COLOUR = "#60A5FA"
         private val RANK = mapOf("nt" to 3, "lim" to 2, "gen" to 1)
 
-        fun describeZone(c: String?, park: String?, type: String?, state: String?, iucn: String?): Pair<String, String> {
-            val what = when (c) {
-                "nt" -> "No-take zone: no fishing or collecting of any kind." +
-                    if (iucn == "Ia") " Some zones like this are also no entry." else ""
-                "lim" -> "Limited fishing: some fishing is allowed, with limits on gear and methods (for example no trawling)."
-                else -> "Fishing allowed under the usual rules for the park."
+        fun describeZone(c: String?, park: String?, type: String?, state: String?, iucn: String?): MapInfo {
+            val (badge, colour, fishing) = when (c) {
+                "nt" -> Triple("No-take zone", NT_COLOUR, "No fishing or collecting of any kind." + if (iucn == "Ia") " Some zones like this are also no entry." else "")
+                "lim" -> Triple("Limited fishing", LIM_COLOUR, "Some fishing is allowed, with limits on gear and methods (for example no trawling).")
+                else -> Triple("General use", GEN_COLOUR, "Fishing is allowed under the usual rules for the park.")
             }
-            val title = when (c) {
-                "nt" -> "No-take zone"
-                "lim" -> "Limited fishing zone"
-                else -> "General use zone"
-            }
-            val where = listOfNotNull(park?.takeIf { it.isNotBlank() }, type, state?.let { if (it == "COM") "Commonwealth waters" else it }).joinToString(" · ")
-            return title to "$where\n$what\n\n$NOT_OFFICIAL\n$CREDIT"
+            val waters = state?.let { if (it == "COM") "Commonwealth" else it }
+            return MapInfo(
+                badge = badge, badgeColour = Color.parseColor(colour),
+                title = park?.takeIf { it.isNotBlank() } ?: badge,
+                subtitle = listOfNotNull(type, waters).joinToString(" · "),
+                rows = listOf(au.opendepth.app.ui.InfoCard.Row("Fishing", fishing)),
+                fine = "$NOT_OFFICIAL\n$CREDIT"
+            )
         }
 
         /** A boat ramp: a rounded blue square with a ramp and a hull on it. */
