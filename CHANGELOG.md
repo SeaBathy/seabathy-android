@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.4 — 2026-11-16
 
 - **One agreement instead of notices everywhere:** on first launch you agree once that SeaBathy is
   not for navigation (also under Settings → Safety and terms, and at seabathy.com/terms). "Not for

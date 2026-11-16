@@ -1,0 +1,1 @@
+High-detail depths for Australian waters, built on the phone from the IMAS composite and AusSeabed surveys. Marine park zones rebuilt from each authority's official zoning, with the zone name on tap. Cleaner reef and island names. One safety agreement instead of notices everywhere. Fixes for the buoys layer and saved settings.
