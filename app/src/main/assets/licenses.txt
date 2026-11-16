@@ -1,6 +1,6 @@
 SeaBathy: licences and credits
 
-SeaBathy's own code is under the MIT licence. This app is built with the open-source software below, each under its own licence, shown in full.
+SeaBathy's own code is under the GNU General Public License version 3 (GPL-3.0): free to use, change and share, and any shared copy or changed version must stay free and open source. This app is built with the open-source software below, each under its own licence, shown in full.
 
 MAPS AND DATA
 

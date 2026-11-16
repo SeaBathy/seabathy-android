@@ -6,7 +6,7 @@ Your depth maps in 3D, offline charts, tides and sea conditions. Works anywhere 
 <p align="center">
   <img alt="Version 1.2.1" src="https://img.shields.io/badge/version-1.2.1-0f766e">
   <img alt="Android 8.0+" src="https://img.shields.io/badge/Android-8.0%2B-3ddc84?logo=android&logoColor=white">
-  <img alt="MIT licence" src="https://img.shields.io/badge/licence-MIT-blue">
+  <img alt="GPL-3.0 licence" src="https://img.shields.io/badge/licence-GPL--3.0-blue">
   <img alt="No ads, no tracking" src="https://img.shields.io/badge/ads%20%26%20tracking-none-success">
   <img alt="Not for navigation" src="https://img.shields.io/badge/not%20for-navigation-critical">
 </p>
@@ -284,7 +284,7 @@ project.
 
 ## Credits and licence
 
-- **Code:** MIT licence, see [LICENSE](LICENSE).
+- **Code:** GNU GPL-3.0, see [LICENSE](LICENSE): free to use, change and share; anyone who shares a copy or a changed version must keep it free and open source under the same licence.
 - **Libraries:** [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Full licence texts are in the app under Settings → Licences and credits.
 - **Maps and data:** each map's credit is shown on screen while it's shown. Every source, its credit and its terms: [DATA_ATTRIBUTION.md](DATA_ATTRIBUTION.md).
 - **Building from source, architecture and tests:** [DEVELOPMENT.md](DEVELOPMENT.md) and [BUILD_AND_TEST.md](BUILD_AND_TEST.md).
