@@ -536,6 +536,7 @@ class MainActivity : AppCompatActivity() {
         )
         sidePanel = SidePanel(views)
         addQuickZones()
+        addPhotoWaypointButton()
         coordinateEditor = CoordinateEditorDialog(this, panels)
         gpxExport = GpxExportService(this)
         debugLogShare = DebugLogShareService(this)
@@ -968,6 +969,7 @@ class MainActivity : AppCompatActivity() {
                     onConditions = { sidePanel.close(); conditions.show() },
                     onImportGpx = ::launchGpxImportPicker,
                     onBackup = { backup.show() },
+                    onWaypointFromPhoto = ::pickWaypointPhoto,
                     showGrid = { graticule.visible },
                     onShowGridChanged = { visible ->
                         settingsRepository.saveShowGrid(visible)
@@ -1202,6 +1204,149 @@ class MainActivity : AppCompatActivity() {
             photoFor = null
             toast("No camera app found")
         }
+    }
+
+    // Waypoint from a gallery photo -------------------------------------------------
+
+    /** "Waypoint from a photo" above the waypoint list in the layers panel. */
+    private fun addPhotoWaypointButton() {
+        val list = findViewById<android.view.View>(R.id.waypointsList) ?: return
+        val parent = list.parent as? android.widget.LinearLayout ?: return
+        val button = android.widget.TextView(this).apply {
+            text = "📷  Waypoint from a photo"
+            textSize = 13f
+            setTextColor(android.graphics.Color.parseColor("#2DD4BF"))
+            contentDescription = "Make a waypoint where a photo in your gallery was taken"
+            setPadding(dp(16), dp(6), dp(16), dp(10))
+            setOnClickListener { pickWaypointPhoto() }
+        }
+        parent.addView(button, parent.indexOfChild(list))
+    }
+
+    private val pickPhoto = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) waypointFromPhoto(uri)
+    }
+
+    /** Lets the app read where photos were taken; the picker opens whatever the answer. */
+    private val mediaLocation = registerForActivityResult(ActivityResultContracts.RequestPermission()) { openPhotoPicker() }
+
+    /** Asks for the photo's location to be readable (once), then opens the picker. */
+    fun pickWaypointPhoto() {
+        if (android.os.Build.VERSION.SDK_INT >= 29 &&
+            checkSelfPermission(Manifest.permission.ACCESS_MEDIA_LOCATION) != android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            mediaLocation.launch(Manifest.permission.ACCESS_MEDIA_LOCATION)
+        } else {
+            openPhotoPicker()
+        }
+    }
+
+    private fun openPhotoPicker() {
+        runCatching { pickPhoto.launch(arrayOf("image/jpeg", "image/heic", "image/heif", "image/*")) }
+            .onFailure { toast("No file picker found") }
+    }
+
+    /**
+     * Makes a waypoint where a photo was taken (from its GPS tags), with the photo and a
+     * record of the time, tide, sun and moon, and the wind and sea that hour.
+     */
+    private fun waypointFromPhoto(uri: android.net.Uri) {
+        val dir = java.io.File(filesDir, PHOTOS_DIR).apply { mkdirs() }
+        val file = java.io.File(dir, "${java.util.UUID.randomUUID()}.jpg")
+        scope.launch {
+            val info = withContext(Dispatchers.IO) {
+                runCatching {
+                    copyOriginal(uri, file)
+                    val exif = android.media.ExifInterface(file.path)
+                    val ll = FloatArray(2)
+                    val latLng: DoubleArray? = if (exif.getLatLong(ll) && (ll[0] != 0f || ll[1] != 0f) && ll[0] in -90f..90f && ll[1] in -180f..180f) {
+                        doubleArrayOf(ll[0].toDouble(), ll[1].toDouble())
+                    } else null
+                    Pair(latLng, photoTime(exif))
+                }.getOrNull()
+            }
+            if (info == null) {
+                file.delete()
+                toast("Couldn't read that photo")
+                return@launch
+            }
+            val (latLng, taken) = info
+            if (latLng == null) {
+                val centre = mapHolder.map?.cameraPosition?.target
+                AlertDialog.Builder(this@MainActivity, ALERT_THEME)
+                    .setTitle("No location in this photo")
+                    .setMessage("The photo has no GPS position: the camera's location tag may have been off, or it was removed when the photo was shared. Put the waypoint at the crosshair instead?")
+                    .setPositiveButton("At the crosshair") { _, _ ->
+                        if (centre != null) finishPhotoWaypoint(file, centre.latitude, centre.longitude, taken ?: System.currentTimeMillis())
+                    }
+                    .setNegativeButton("Cancel") { _, _ -> file.delete() }
+                    .show()
+                return@launch
+            }
+            finishPhotoWaypoint(file, latLng[0], latLng[1], taken ?: System.currentTimeMillis())
+        }
+    }
+
+    private fun finishPhotoWaypoint(file: java.io.File, lat: Double, lng: Double, taken: Long) {
+        scope.launch {
+            val ok = withContext(Dispatchers.IO) { runCatching { shrinkPhoto(file) }.isSuccess }
+            if (!ok) {
+                file.delete()
+                toast("Couldn't save the photo")
+                return@launch
+            }
+            val older = System.currentTimeMillis() - taken > 6 * 3_600_000L
+            val format = au.opendepth.app.nav.NavFormat(navFeature.settings.units)
+            val saved = if (::conditions.isInitialized) conditions.snapshot(lat, lng, taken, withSatellite = !older) else emptyList()
+            // Saved forecast lines don't reach back that far: ask the archive.
+            val past = if (older && saved.none { it.startsWith("Wind") } && hasWorkingInternet()) {
+                withContext(Dispatchers.IO) { runCatching { au.opendepth.app.conditions.PastConditions.lines(lat, lng, taken, format) }.getOrDefault(emptyList()) }
+            } else emptyList()
+            val record = listOfNotNull(navFeature.tides.snapshotAt(taken)) + past + saved
+            val stamp = java.text.SimpleDateFormat("d MMM HH:mm", java.util.Locale.getDefault()).format(java.util.Date(taken))
+            var name = "Photo $stamp"
+            if (waypointStore.isNameTaken(name)) name = waypointStore.nextDefaultName()
+            val waypoint = waypointStore.add(
+                name = name, lat = lat, lng = lng, color = Waypoint.DEFAULT_COLOR,
+                description = "From a photo taken $stamp"
+            )
+            waypoint.photos = mutableListOf(au.opendepth.app.model.WaypointPhoto(file.name, taken, record))
+            refreshWaypoints()
+            flyTo(lat, lng)
+            sidePanel.close()
+            showWaypointEditor(waypoint)
+        }
+    }
+
+    /** Copies the photo as taken (with its location, when the permission allows) into [file]. */
+    private fun copyOriginal(uri: android.net.Uri, file: java.io.File) {
+        val original = if (android.os.Build.VERSION.SDK_INT >= 29) runCatching {
+            val media = if (android.provider.DocumentsContract.isDocumentUri(this, uri)) android.provider.MediaStore.getMediaUri(this, uri) else uri
+            media?.let { android.provider.MediaStore.setRequireOriginal(it) }
+        }.getOrNull() else null
+        val stream = original?.let { runCatching { contentResolver.openInputStream(it) }.getOrNull() }
+            ?: contentResolver.openInputStream(uri) ?: error("can't open")
+        stream.use { input -> file.outputStream().use { input.copyTo(it) } }
+    }
+
+    /** When a photo was taken: the GPS time (UTC) if there is one, else the camera's clock. */
+    private fun photoTime(exif: android.media.ExifInterface): Long? {
+        val gpsDate = exif.getAttribute(android.media.ExifInterface.TAG_GPS_DATESTAMP)
+        val gpsTime = exif.getAttribute(android.media.ExifInterface.TAG_GPS_TIMESTAMP)
+        if (gpsDate != null && gpsTime != null) {
+            runCatching {
+                val f = java.text.SimpleDateFormat("yyyy:MM:dd HH:mm:ss", java.util.Locale.US).apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }
+                return f.parse("$gpsDate ${gpsTime.substringBefore('.')}")!!.time
+            }
+        }
+        val local = exif.getAttribute(android.media.ExifInterface.TAG_DATETIME_ORIGINAL)
+            ?: exif.getAttribute(android.media.ExifInterface.TAG_DATETIME) ?: return null
+        val offset = exif.getAttribute(android.media.ExifInterface.TAG_OFFSET_TIME_ORIGINAL)
+        return runCatching {
+            val f = java.text.SimpleDateFormat("yyyy:MM:dd HH:mm:ss", java.util.Locale.US)
+            if (offset != null) f.timeZone = java.util.TimeZone.getTimeZone("GMT$offset")
+            f.parse(local)!!.time
+        }.getOrNull()
     }
 
     /** Re-saves a camera photo upright and at most [PHOTO_MAX_PX] across. */

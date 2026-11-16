@@ -478,6 +478,13 @@ class TideFeature(
         return "Tide$where ${format.tideHeight(height)}, $trend$next"
     }
 
+    /** The tide at a past or future time, if the saved tides cover it; else null. */
+    fun snapshotAt(time: Long): String? {
+        val curve = forecast?.curve ?: return null
+        curve.heightAt(time) ?: return null
+        return snapshotLine(time)
+    }
+
     // Chip ------------------------------------------------------------------------------------
 
     fun refreshChip() {

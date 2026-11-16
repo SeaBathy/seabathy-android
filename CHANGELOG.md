@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **Waypoint from a photo:** pick a photo from the gallery and a waypoint is made where it was
+  taken (from its GPS tags), with the photo and the tide, sun and moon then, and the wind, waves
+  and swell that hour from Open-Meteo's archived forecasts. For when you took a photo but forgot
+  to drop a mark. A photo with no location can go at the crosshair instead.
+- **Save any online map offline:** "Save this area offline" now works with every online map;
+  what you save, and keeping to each provider's terms, is up to you.
+- **Licence:** SeaBathy is now under the GNU GPL-3.0: free to use, change and share, and any
+  shared copy or changed version must stay free and open source.
 - **Marine park zones** for every Australian marine park, Commonwealth and state: no-take zones in
   green, limited fishing in yellow, general use in blue. Show all zones or only the no-take ones,
   tap a zone for its park and what's allowed, and get a warning (with a buzz) when the boat goes

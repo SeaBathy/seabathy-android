@@ -470,10 +470,12 @@ class ConditionsFeature(
      * a waypoint photo's record. The sun and moon are always there; the rest
      * when a downloaded area covers the point.
      */
-    fun snapshot(lat: Double, lng: Double, now: Long = System.currentTimeMillis()): List<String> {
+    fun snapshot(lat: Double, lng: Double, now: Long = System.currentTimeMillis(), withSatellite: Boolean = true): List<String> {
         val format = NavFormat(units())
         val a = listOfNotNull(area, spotArea).firstOrNull { it.contains(lat, lng) }
-        val list = if (a != null) values(a, lat, lng, now, format) else skyValues(lat, lng, now)
+        var list = if (a != null) values(a, lat, lng, now, format) else skyValues(lat, lng, now)
+        // The satellite layers are of today: not for an older photo.
+        if (!withSatellite) list = list.filter { it.row !in SATELLITE_ROWS }
         return list.map { it.text }
     }
 
@@ -2363,6 +2365,7 @@ class ConditionsFeature(
         private const val MIN_DOWNLOAD_GAP_MS = 75_000L
         private const val MAX_ARROWS_PER_SIDE = 12
         private const val BOX_ROWS = 9
+        private val SATELLITE_ROWS = setOf("Sea", "Depth", "Water")
         private val DAY_NAMES = listOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
         private val DAY_NAMES_LONG = listOf("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")
         private const val PLAY_STEP_MS = 650L

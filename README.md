@@ -174,6 +174,44 @@ arrival, off-course and shallow-water alarms. Set your draft and margin in **Boa
 Tap the waypoint button, move the map so the crosshair is on the spot, and tap the map. Give it a
 name, icon, colour and notes. Tap a waypoint on the chart to see or edit it, and search them all
 from the Layers drawer.
+
+**Photos:** open a waypoint and tap **Take a photo**: it's saved with the time, tide, wind, waves,
+swell, current, sea temperature, sun and moon there. Forgot to drop a mark? **Waypoint from a
+photo** (Layers drawer or Settings) makes one where a gallery photo was taken, from its GPS tags,
+with the tide, sun and moon then, and the wind and sea that hour from Open-Meteo's archive.
+</details>
+
+<details>
+<summary><b>Man overboard</b></summary>
+
+Tap the red **MOB** button at the top. It marks the boat's position (or the first GPS fix, if the
+GPS was off) as a waypoint, buzzes, and starts steering back to it.
+</details>
+
+<details>
+<summary><b>Marine park zones, reef names and boat ramps</b></summary>
+
+Turn them on with the **Zones**, **Names** and **Ramps** switches at the top of the Layers drawer
+(or in Settings). Zones cover every Australian marine park: no-take in green, limited fishing in
+yellow, general use in blue; show all or only the no-take ones, and tap a zone for what's allowed.
+With the GPS on, the phone buzzes and warns you when the boat goes into a no-take zone. A guide
+only: the official zoning map is the law.
+</details>
+
+<details>
+<summary><b>Good-weather alerts</b></summary>
+
+**Sea conditions** → **Good-weather alert**: set the most wind and waves you'll go out in, how many
+daylight hours in a row, how far ahead to look and which days (any, weekends or chosen days). A few
+times a day the app checks the forecast at your spot and tells you about each good day once.
+</details>
+
+<details>
+<summary><b>Backup and restore</b></summary>
+
+**Settings** → **Backup and restore** saves your waypoints and their photos, routes, tracks and
+settings in one file. Turn on the daily backup and pick a folder (Google Drive, OneDrive, an SD
+card…) to keep the newest five there. A SeaBathy Desktop backup adds its waypoints and routes.
 </details>
 
 <details>
@@ -194,8 +232,8 @@ notification. **Stop and save** when you're done, then show it on the chart or *
 <details>
 <summary><b>Swap marks with a plotter or PC (GPX)</b></summary>
 
-**Settings** → **Import GPX** reads waypoints and routes from a chartplotter, SeaBathy Desktop or
-another app. **Export waypoints and route** shares yours as a GPX file.
+**Settings** → **Import GPX, KML or KMZ** reads waypoints and routes from a chartplotter, Google
+Earth, SeaBathy Desktop or another app. **Export waypoints and route** shares yours as a GPX file.
 </details>
 
 <details>
@@ -253,6 +291,8 @@ height, wind (including Beaufort), waves and swell, current and sea temperature.
 - Currents (with the tide's flow), waves, swell and wind, hourly for up to 8 days
 - Satellite sea temperature, temperature breaks, chlorophyll, sea level and salinity; temperature at a depth you choose (10 to 300 m)
 - Colour layers with moving flow lines, a time slider and values at the crosshair
+- Labelled temperature lines, a target temperature band, eddy outlines, and sun, moon and solunar times
+- Good-weather alerts for your spot, days ahead and chosen days
 </details>
 
 <details>

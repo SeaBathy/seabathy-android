@@ -42,6 +42,7 @@ class SettingsPanel(
         val onConditions: () -> Unit,
         val onImportGpx: () -> Unit,
         val onBackup: () -> Unit,
+        val onWaypointFromPhoto: () -> Unit = {},
         val showGrid: () -> Boolean,
         val onShowGridChanged: (Boolean) -> Unit,
         val showNavMarks: () -> Boolean,
@@ -352,6 +353,13 @@ class SettingsPanel(
             panels.row("Backup and restore", "Waypoints, photos, routes, tracks and settings; daily to a folder") {
                 settingsDialog?.dismiss()
                 callbacks.onBackup()
+            }
+        )
+        panels.addRow(
+            body,
+            panels.row("Waypoint from a photo", "Where a gallery photo was taken, with the tide and sea then") {
+                settingsDialog?.dismiss()
+                callbacks.onWaypointFromPhoto()
             }
         )
         panels.addRow(
