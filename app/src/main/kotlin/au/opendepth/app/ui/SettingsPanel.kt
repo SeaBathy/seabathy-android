@@ -272,6 +272,20 @@ class SettingsPanel(
             }
         }.also { panels.addRow(body, it) }
 
+        fun limitLabel(mb: Int) = if (mb == 0) "Auto (about ${au.opendepth.app.storage.HighDetailDepths.autoLimitMb()} MB on this phone now)" else "$mb MB"
+        lateinit var limitRow: TextView
+        limitRow = panels.row("High-detail download size", limitLabel(au.opendepth.app.storage.HighDetailDepths.limitChoice(context))) {
+            val choices = au.opendepth.app.storage.HighDetailDepths.LIMIT_CHOICES
+            panels.showChoicePanel(
+                title = "High-detail download size",
+                labels = choices.map { if (it == 0) limitLabel(0) + " — follows the phone's free memory" else "$it MB" + if (it >= 500) " — phones with plenty of memory" else "" },
+                selectedIndex = choices.indexOf(au.opendepth.app.storage.HighDetailDepths.limitChoice(context)).coerceAtLeast(0)
+            ) { index ->
+                au.opendepth.app.storage.HighDetailDepths.setLimitChoice(context, choices[index])
+                limitRow.text = "High-detail download size\n${limitLabel(choices[index])}"
+            }
+        }.also { panels.addRow(body, it) }
+
         body.addView(panels.sectionHeader("DEPTH COLOURS"))
         body.addView(
             panels.caption(

@@ -135,7 +135,7 @@ class LayerImportCoordinator(
                         Triple(existing, null, credits)
                     } else {
                         progress.update("Opening the depths…")
-                        Triple(null, openOnIoClosingOnCancel({ importer.importFile(file) }) { imported ->
+                        Triple(null, openOnIoClosingOnCancel({ importer.importFileOnDemand(file) }) { imported ->
                             (imported as? GeoTiffImporter.ImportedGeoTiff.OnDemand)?.tileSource?.close()
                         }, credits)
                     }
@@ -149,8 +149,8 @@ class LayerImportCoordinator(
                     overlays.boundsOf(existing.id)?.let(onShowArea)
                     onResult("${existing.name} is already loaded")
                 } else if (imported != null) {
-                    val id = overlays.addGeoTiff(imported, HighDetailDepths.CREDIT)
-                    overlays.boundsOf(id)?.let(onShowArea)
+                    // No camera move: the box was drawn where the user is looking.
+                    overlays.addGeoTiff(imported, HighDetailDepths.CREDIT)
                     onResult(describe(imported))
                 }
             }.onFailure { error ->

@@ -39,7 +39,33 @@ object HighDetailDepths {
     private const val N = -8.0
 
     /** The most one build may write. Auto resolution picks the finest detail that fits. */
-    private const val MAX_GB = 0.3
+    /** The size choices in Settings, in MB; 0 is Auto (from this phone's memory). */
+    val LIMIT_CHOICES = listOf(0, 100, 250, 500, 1000)
+    private const val KEY_LIMIT = "high_detail_limit_mb"
+
+    fun limitChoice(context: Context): Int =
+        context.getSharedPreferences("od", Context.MODE_PRIVATE).getInt(KEY_LIMIT, 0)
+
+    fun setLimitChoice(context: Context, mb: Int) =
+        context.getSharedPreferences("od", Context.MODE_PRIVATE).edit().putInt(KEY_LIMIT, mb).apply()
+
+    /**
+     * Auto: what this phone can build safely right now. The engine keeps a tile cache and a few
+     * rows of the grid in memory, which grows with the file, so the limit follows the memory
+     * Android gives the app, less what the app is already using (open layers, the map).
+     */
+    fun autoLimitMb(): Int {
+        val rt = Runtime.getRuntime()
+        val freeMb = (rt.maxMemory() - (rt.totalMemory() - rt.freeMemory())) / (1024 * 1024)
+        return ((freeMb - AUTO_RESERVE_MB) * AUTO_MB_PER_FREE_MB).toInt().coerceIn(50, 1000) / 10 * 10
+    }
+
+    /** The limit in force: the Settings choice, or Auto. */
+    fun limitMb(context: Context): Int = limitChoice(context).takeIf { it > 0 } ?: autoLimitMb()
+
+    private const val AUTO_RESERVE_MB = 80
+    // Measured: a build estimated at 360 MB peaked at about 375 MB of heap (emulator, 576 MB limit).
+    private const val AUTO_MB_PER_FREE_MB = 0.8
 
     const val CREDIT = "Depths: IMAS composite (Flukes 2026), AusSeabed and state surveys (CC BY 4.0)"
 
@@ -51,23 +77,43 @@ object HighDetailDepths {
     @Volatile private var surveys: Surveys? = null
 
     /** The most one high-detail build covers, in degrees (about 110 km): more runs a phone out of memory. */
-    const val MAX_SPAN_DEG = 1.0
     const val MAX_SPAN_KM = 110
 
     fun covers(area: SeabedDownload.Area): Boolean =
         area.east > W && area.west < E && area.north > S && area.south < N
 
-    /** [area], or its middle [MAX_SPAN_DEG] when it's bigger. */
+    /** [area], or its middle [MAX_SPAN_KM] each way when it's bigger. */
     fun fit(area: SeabedDownload.Area): SeabedDownload.Area {
-        if (area.north - area.south <= MAX_SPAN_DEG && area.east - area.west <= MAX_SPAN_DEG) return area
-        fun mid(lo: Double, hi: Double): Pair<Double, Double> {
-            val h = minOf(hi - lo, MAX_SPAN_DEG) / 2
+        val kmPerDegLng = 111.32 * kotlin.math.cos(Math.toRadians((area.south + area.north) / 2)).coerceAtLeast(0.05)
+        val maxLat = MAX_SPAN_KM / 110.57 * 0.98
+        val maxLng = MAX_SPAN_KM / kmPerDegLng * 0.98
+        if (area.north - area.south <= maxLat && area.east - area.west <= maxLng) return area
+        fun mid(lo: Double, hi: Double, cap: Double): Pair<Double, Double> {
+            val h = minOf(hi - lo, cap) / 2
             val c = (lo + hi) / 2
             return c - h to c + h
         }
-        val (s, n) = mid(area.south, area.north)
-        val (w, e) = mid(area.west, area.east)
+        val (s, n) = mid(area.south, area.north, maxLat)
+        val (w, e) = mid(area.west, area.east, maxLng)
         return SeabedDownload.Area(s, w, n, e, trimmed = true)
+    }
+
+    /**
+     * A line for the box picker: about how big the file will be and how fine, or why it can't be
+     * built. Reads only the source headers (a second or two online), never the depths.
+     */
+    fun estimate(context: Context, area: SeabedDownload.Area): String {
+        val params = Planner.parse(doubleArrayOf(area.west, area.south, area.east, area.north), null, "wgs84", "auto", "auto")
+        val plan = Planner.assess(params, catalog, surveys(context), limitMb(context) / 1024.0, context.filesDir.usableSpace, "SeaBathy", null)
+        if (plan.json["ok"] != true) {
+            return (plan.json["errors"] as? List<*>).orEmpty().joinToString(" ").ifBlank { "No high-detail depths here." }
+        }
+        val mb = ((plan.json["est_bytes"] as? Number)?.toDouble() ?: 0.0) / 1e6
+        val res = (plan.json["res_m"] as? Number)?.toDouble() ?: plan.resM
+        val surveysIn = plan.chosen.size
+        return String.format(java.util.Locale.US, "Up to about %.0f MB at %s m detail · %s", mb.coerceAtLeast(1.0),
+            if (res < 10) String.format(java.util.Locale.US, "%.1f", res).removeSuffix(".0") else String.format(java.util.Locale.US, "%.0f", res),
+            if (surveysIn == 0) "the IMAS composite (no multibeam surveys in this box)" else "$surveysIn multibeam survey${if (surveysIn == 1) "" else "s"} on top")
     }
 
     /**
@@ -87,7 +133,7 @@ object HighDetailDepths {
         onProgress(0, "Finding the depth data for this area…")
         val params = Planner.parse(doubleArrayOf(area.west, area.south, area.east, area.north), null, "wgs84", "auto", "auto")
         val job = Job()
-        val plan = Planner.assess(params, catalog, surveys(context), MAX_GB, dir.usableSpace, "SeaBathy", job)
+        val plan = Planner.assess(params, catalog, surveys(context), limitMb(context) / 1024.0, dir.usableSpace, "SeaBathy", job)
         if (plan.json["ok"] != true) {
             val errors = (plan.json["errors"] as? List<*>).orEmpty().joinToString(" ")
             throw IOException(errors.ifBlank { "No high-detail depths for this area." })
@@ -107,7 +153,9 @@ object HighDetailDepths {
         try {
             RandomAccessFile(partial, "rw").use { raf ->
                 raf.setLength(0)
-                val budget = maxOf(48L shl 20, Runtime.getRuntime().maxMemory() / 3)
+                val rt = Runtime.getRuntime()
+                val free = rt.maxMemory() - (rt.totalMemory() - rt.freeMemory())
+                val budget = maxOf(32L shl 20, minOf(rt.maxMemory() / 3, free / 3))
                 val builder = Builder(plan, job, TileSource(net, budget), workers)
                 builder.workDir = context.cacheDir
                 builder.run(raf.channel, raf.channel)

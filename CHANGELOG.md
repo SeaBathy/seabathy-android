@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- **Draw the box for high-detail depths:** drag on the chart to draw the area you want (two
+  fingers still move the map), and see its size and the download before anything starts.
+- **Download size follows the phone:** Auto picks a size this phone can build from its free
+  memory, or choose 100 MB to 1 GB under Settings → High-detail download size. A bigger box
+  gets slightly coarser detail instead of failing.
+- **Smoother after a build:** high-detail files now open piece by piece, so they don't fill the
+  phone's memory, and the map stays where you drew the box instead of jumping.
+
 ## 1.2.4 — 2026-11-16
 
 - **One agreement instead of notices everywhere:** on first launch you agree once that SeaBathy is

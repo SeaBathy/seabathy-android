@@ -995,20 +995,17 @@ class MainActivity : AppCompatActivity() {
                 badge = "Seabed depths"
                 title = "Which depths?"
                 rows += au.opendepth.app.ui.InfoCard.Row("High detail",
-                    "Australian waters only. The IMAS composite with AusSeabed and state multibeam surveys on top: down to a metre or two where surveyed. Built on the phone; a big area can take a few minutes.")
+                    "Australian waters only. The IMAS composite with AusSeabed and state multibeam surveys on top: down to a metre or two where surveyed. You draw the box (up to about ${au.opendepth.app.storage.HighDetailDepths.MAX_SPAN_KM} km across) and see the download size first.")
                 rows += au.opendepth.app.ui.InfoCard.Row("Standard",
                     "GMRT, worldwide. Ship surveys blended with the GEBCO grid; much coarser away from surveys. Up to about 55 MB, quick.")
-                val hdNote = if (au.opendepth.app.storage.HighDetailDepths.fit(area).trimmed && !area.trimmed)
-                    " High detail covers up to about ${au.opendepth.app.storage.HighDetailDepths.MAX_SPAN_KM} km across, so it takes the middle of the screen."
-                else if (area.trimmed) " High detail covers up to about ${au.opendepth.app.storage.HighDetailDepths.MAX_SPAN_KM} km across." else ""
-                fine = "Either one is added as a layer that also works in 3D and offline.$note$hdNote"
+                fine = "Either one is added as a layer that also works in 3D and offline.$note"
                 actions += au.opendepth.app.ui.InfoCard.Action("Standard") {
                     sidePanel.close()
                     layerImports.downloadSeabed(area)
                 }
                 actions += au.opendepth.app.ui.InfoCard.Action("High detail", primary = true) {
                     sidePanel.close()
-                    layerImports.downloadHighDetail(area)
+                    pickHighDetailArea(area)
                 }
             }.show()
             return
@@ -1025,6 +1022,36 @@ class MainActivity : AppCompatActivity() {
             layerImports.downloadSeabed(area)
         }
     }
+
+    /**
+     * High detail: the user draws the box on the chart (two fingers still move the map), sees the
+     * size and the download it means, then builds it. Starts with the middle of the screen.
+     */
+    private fun pickHighDetailArea(screen: SeabedDownload.Area) {
+        val map = mapHolder.map ?: return
+        val start = au.opendepth.app.storage.HighDetailDepths.fit(screen)
+        au.opendepth.app.ui.AreaPicker(
+            context = this,
+            root = views.mapView.parent as android.view.ViewGroup,
+            mapView = views.mapView,
+            map = map,
+            maxKm = au.opendepth.app.storage.HighDetailDepths.MAX_SPAN_KM.toDouble(),
+            confirmLabel = "Get depths",
+            describe = { box, show ->
+                scope.launch {
+                    val line = withContext(Dispatchers.IO) {
+                        runCatching { au.opendepth.app.storage.HighDetailDepths.estimate(this@MainActivity, box.toArea()) }
+                            .getOrElse { "Couldn't reach the depth data. Check the internet connection." }
+                    }
+                    show(line)
+                }
+            },
+            onConfirm = { box -> layerImports.downloadHighDetail(box.toArea()) },
+            onCancel = {}
+        ).show(au.opendepth.app.ui.AreaPicker.Box(start.south, start.west, start.north, start.east))
+    }
+
+    private fun au.opendepth.app.ui.AreaPicker.Box.toArea() = SeabedDownload.Area(south, west, north, east, trimmed = false)
 
     private fun launchMbtilesPicker() {
         mbtilesPicker.launch(pickFileIntent(MbtilesImporter.EXTENSION))
