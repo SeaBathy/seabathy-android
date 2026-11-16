@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **One agreement instead of notices everywhere:** on first launch you agree once that SeaBathy is
+  not for navigation (also under Settings → Safety and terms, and at seabathy.com/terms). "Not for
+  navigation" now always leads the credits line on the chart, and the repeated notices and extra
+  tick boxes on the buoys layer and zones are gone. Route guidance shows a one-line reminder when it starts, and man overboard says to call for help (VHF 16, 000, EPIRB).
 - **High-detail depths for Australian waters:** "Get seabed depths for this area" now offers
   High detail as well as Standard. It builds the area on the phone from the IMAS composite with
   AusSeabed and state multibeam surveys on top, down to a metre or two where surveyed, and opens

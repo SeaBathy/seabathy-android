@@ -11,4 +11,4 @@ SeaBathy is free, open-source offline bathymetry for boats.
 • Your choice of units for depth, distance, speed, tides, wind, waves and temperature
 • No account, ads or tracking
 
-SeaBathy does not include official nautical charts and must not be used as the sole source for navigation or safety-of-life decisions.
+Not for navigation. SeaBathy is not a nautical chart and must not be used for navigation or safety-of-life decisions. Depths, tides, forecasts and zones come from public data and can be wrong or out of date. Always use official charts.

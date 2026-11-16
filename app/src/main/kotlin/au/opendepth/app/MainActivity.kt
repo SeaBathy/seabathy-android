@@ -248,6 +248,8 @@ class MainActivity : AppCompatActivity() {
 
         preferences = getSharedPreferences(PREFERENCES_NAME, MODE_PRIVATE)
         views = MainViews(this)
+        // The one agreement that covers every feature (see SafetyTerms); posted so it sits above startup cards.
+        window.decorView.post { au.opendepth.app.ui.SafetyTerms.showIfNeeded(this, preferences) }
 
         buildDomain()
         buildUi()
@@ -790,39 +792,9 @@ class MainActivity : AppCompatActivity() {
         styleCoordinator.refreshAttribution()
     }
 
-    /** The nav marks layer is only shown once the user has ticked that it is not for navigation. */
+    /** Turning the buoys layer on: the first-launch agreement (SafetyTerms) already covers it. */
     private fun confirmNavMarks(onResult: (Boolean) -> Unit) {
-        if (isFinishing || isDestroyed) return onResult(false)
-        val palette = au.opendepth.app.ui.AppTheme.palette
-        val tick = android.widget.CheckBox(this).apply {
-            text = "I understand this is not for navigation"
-            setTextColor(palette.primaryText)
-            buttonTintList = android.content.res.ColorStateList.valueOf(palette.accent)
-            setPadding(dp(4), dp(12), 0, 0)
-        }
-        var answered = false
-        val card = au.opendepth.app.ui.InfoCard(this).apply {
-            badge = "Not for navigation"
-            badgeColour = android.graphics.Color.parseColor("#F59E0B")
-            title = "Buoys, beacons, pipelines"
-            paragraphs += "Buoys, beacons, lights, moorings, pipelines and submarine cables gathered from free government data and OpenStreetMap."
-            paragraphs += "It is not a nautical chart. Marks can be moved, removed or added at any time, positions may be old or wrong, many marks are missing, and some types are guessed from the data. Always use official charts, notices to mariners and your own eyes."
-            extra = tick
-            onDismiss = { if (!answered) onResult(false) }
-            actions += au.opendepth.app.ui.InfoCard.Action("Cancel")
-            actions += au.opendepth.app.ui.InfoCard.Action("Show layer", primary = true) {
-                answered = true
-                onResult(true)
-            }
-        }
-        card.show()
-        val ok = card.buttons.last()
-        ok.isEnabled = false
-        ok.alpha = 0.45f
-        tick.setOnCheckedChangeListener { _, checked ->
-            ok.isEnabled = checked
-            ok.alpha = if (checked) 1f else 0.45f
-        }
+        onResult(!isFinishing && !isDestroyed)
     }
 
     private fun showNavMarkAt(lat: Double, lng: Double) {
@@ -984,7 +956,6 @@ class MainActivity : AppCompatActivity() {
                     confirmZones = ::confirmZones,
                     onZonesChanged = ::zonesChanged,
                     onShowNavMarksChanged = { wanted, done ->
-                        // The warning is shown, and must be ticked, every time the layer is turned on.
                         if (!wanted) {
                             setNavMarksVisible(false)
                             done(false)
@@ -1030,7 +1001,7 @@ class MainActivity : AppCompatActivity() {
                 val hdNote = if (au.opendepth.app.storage.HighDetailDepths.fit(area).trimmed && !area.trimmed)
                     " High detail covers up to about ${au.opendepth.app.storage.HighDetailDepths.MAX_SPAN_KM} km across, so it takes the middle of the screen."
                 else if (area.trimmed) " High detail covers up to about ${au.opendepth.app.storage.HighDetailDepths.MAX_SPAN_KM} km across." else ""
-                fine = "Either one is added as a layer that also works in 3D and offline.$note$hdNote Not for navigation."
+                fine = "Either one is added as a layer that also works in 3D and offline.$note$hdNote"
                 actions += au.opendepth.app.ui.InfoCard.Action("Standard") {
                     sidePanel.close()
                     layerImports.downloadSeabed(area)
@@ -1046,7 +1017,7 @@ class MainActivity : AppCompatActivity() {
             title = "Get seabed depths?",
             message = "Downloads depths for the area on screen from GMRT, which blends ship surveys with the global " +
                 "GEBCO grid, and adds them as a layer that also works in 3D and offline. Detail is best where ships " +
-                "have surveyed; elsewhere it's much coarser. Up to about 55 MB.$note Not for navigation.",
+                "have surveyed; elsewhere it's much coarser. Up to about 55 MB.$note",
             confirmLabel = "Download",
             destructive = false
         ) {
@@ -1440,22 +1411,10 @@ class MainActivity : AppCompatActivity() {
         refreshQuickZones()
     }
 
-    /** The first time zones are turned on: they're a guide, the official map is the law. */
+    /** Turning zones on: the first-launch agreement (SafetyTerms) already covers it. */
     private fun confirmZones(done: () -> Unit) {
-        au.opendepth.app.ui.InfoCard(this).apply {
-            badge = "Marine park zones"
-            title = "Every Australian marine park"
-            rows += au.opendepth.app.ui.InfoCard.Row("No-take: no fishing", "", android.graphics.Color.parseColor(au.opendepth.app.map.MarineZonesController.NT_COLOUR))
-            rows += au.opendepth.app.ui.InfoCard.Row("Limited fishing", "", android.graphics.Color.parseColor(au.opendepth.app.map.MarineZonesController.LIM_COLOUR))
-            rows += au.opendepth.app.ui.InfoCard.Row("General use", "", android.graphics.Color.parseColor(au.opendepth.app.map.MarineZonesController.GEN_COLOUR))
-            paragraphs += "Tap a zone to see what's allowed there."
-            fine = au.opendepth.app.map.MarineZonesController.NOT_OFFICIAL
-            actions += au.opendepth.app.ui.InfoCard.Action("Cancel")
-            actions += au.opendepth.app.ui.InfoCard.Action("I understand", primary = true) {
-                zones.acknowledge()
-                done()
-            }
-        }.show()
+        zones.acknowledge()
+        done()
     }
 
     /** Warns once on entering a no-take zone, and says when the boat has left it. */
@@ -1578,7 +1537,7 @@ class MainActivity : AppCompatActivity() {
         }
         mobPending = true
         followWithGps()
-        toast("Man overboard: waiting for GPS, the mark goes down at the first fix")
+        toastLong("Man overboard: waiting for GPS, the mark goes down at the first fix. Call for help: VHF 16, 000 or your EPIRB.")
     }
 
     private fun markOverboard(fix: android.location.Location) {
@@ -1595,7 +1554,7 @@ class MainActivity : AppCompatActivity() {
             icon = "mob"
         )
         refreshWaypoints()
-        navFeature.startNavigation(listOf(RoutePoint(fix.latitude, fix.longitude, name)), name)
+        navFeature.startNavigation(listOf(RoutePoint(fix.latitude, fix.longitude, name)), name, quiet = true)
         runCatching {
             val vibrator = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
                 getSystemService(android.os.VibratorManager::class.java)?.defaultVibrator
@@ -1604,7 +1563,7 @@ class MainActivity : AppCompatActivity() {
             }
             vibrator?.vibrate(android.os.VibrationEffect.createWaveform(longArrayOf(0, 400, 150, 400), -1))
         }
-        toast("Man overboard marked. Steering back to it: stop navigation when done.")
+        toastLong("Man overboard marked. Steering back to it. Call for help too: VHF 16, 000 or your EPIRB.")
     }
 
     /** @return an error message to show on the name field, or null on success. */

@@ -218,7 +218,7 @@ class MarineZonesController(private val mapHolder: MapHolder, private val prefs:
         const val NAMES_CREDIT = "Names: Geoscience Australia gazetteer, GBRMPA (CC BY 4.0)"
         const val RAMPS_CREDIT = "Boat ramps: © OpenStreetMap contributors"
         const val NOT_OFFICIAL = "A guide only, from government data that can lag behind changes. The official zoning map and rules " +
-            "for the park are the law: check them before you fish. Not for navigation."
+            "for the park are the law: check them before you fish."
 
         private const val KEY_MODE = "zones_mode"
         private const val KEY_NAMES = "zones_names"

@@ -388,6 +388,12 @@ class SettingsPanel(
         )
         panels.addRow(
             body,
+            panels.row("Safety and terms", "Not for navigation: what SeaBathy is and isn't") {
+                SafetyTerms.show(context)
+            }
+        )
+        panels.addRow(
+            body,
             panels.row("Privacy policy", "No account, no ads, no tracking: what the app sends and why") {
                 openPrivacyPolicy()
             }

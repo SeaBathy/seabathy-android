@@ -1476,14 +1476,14 @@ class ConditionsFeature(
                         panels.confirm(
                             "Good days coming up",
                             found.second.joinToString("\n") { "${day.format(Date(it.day))}: ${clock.format(Date(it.from))}–${clock.format(Date(it.to))}, wind up to ${u.wind.format(it.maxWindKn)}, waves up to ${wavesText(it.maxWaveM)}" } +
-                                "\n\nForecast at your spot. Check it before you go: not for navigation.",
+                                "\n\nForecast at your spot. Check it before you go.",
                             confirmLabel = "OK", destructive = false
                         ) {}
                     }
                 }
             }
         })
-        body.addView(panels.caption("Uses about 8 forecast requests a day. Not for navigation: always check the latest forecast and warnings.", topPaddingDp = 4))
+        body.addView(panels.caption("Uses about 8 forecast requests a day. Always check the latest forecast and warnings.", topPaddingDp = 4))
         alertsDialog?.dismiss()
         alertsDialog = panels.showPanel("Good-weather alert", body)
     }
@@ -1672,7 +1672,7 @@ class ConditionsFeature(
         })
         status?.let { body.addView(panels.caption(it, topPaddingDp = 2)) }
         body.addView(panels.caption(
-            "Forecast model points are about 8 km apart, so it's less accurate close to shore and in channels. Not for navigation.",
+            "Forecast model points are about 8 km apart, so it's less accurate close to shore and in channels.",
             topPaddingDp = 8
         ))
     }

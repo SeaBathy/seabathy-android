@@ -349,11 +349,13 @@ class NavigationFeature(
 
     // Navigation -------------------------------------------------------------------
 
-    fun startNavigation(points: List<RoutePoint>, name: String?) {
+    /** [quiet] skips the guidance reminder (man overboard has its own message). */
+    fun startNavigation(points: List<RoutePoint>, name: String?, quiet: Boolean = false) {
         if (points.isEmpty()) {
             callbacks.toast("Plan or load a route first")
             return
         }
+        if (!quiet) callbacks.toast("Guidance only: keep a lookout and check official charts.")
         callbacks.onNavigationStarted()
         navigation.start(points, name)
         navHud.setMuted(false)

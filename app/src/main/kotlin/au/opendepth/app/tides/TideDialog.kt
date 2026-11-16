@@ -156,7 +156,7 @@ class TideDialog(
                 (if (s.showsChartDatum(forecast)) "Heights above the lowest tide (chart datum, LAT), like a tide table. "
                 else "Heights from mean sea level — lows read below zero until the lowest tide here is worked out (needs a connection, once). ") +
                     "Modelled tides, worked out from Open-Meteo data (CC BY 4.0, E.U. Copernicus Marine Service). " +
-                    "Not an official tide table. Not for navigation."
+                    "Not an official tide table."
             )
         )
         // The old panel's dismiss runs after this one is shown: only clear [main] if it is still this panel.

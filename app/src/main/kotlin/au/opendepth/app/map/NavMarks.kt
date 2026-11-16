@@ -121,7 +121,7 @@ class NavMarksController(private val mapHolder: MapHolder) {
 
     companion object {
         const val CREDIT = "Nav marks: Transport for NSW, WA DoT, Vic Gov, Qld Gov, AMSA, NOPTA, Geoscience Australia, ACMA, © OpenStreetMap"
-        const val NOT_FOR_NAVIGATION = "Not for navigation. Positions may be old or wrong, and many marks are missing."
+        const val NOT_FOR_NAVIGATION = "Positions may be old or wrong, and many marks are missing."
         private const val MARKS_SOURCE = "navmarks-src"
         private const val LINES_SOURCE = "navlines-src"
         private const val MARKS = "navmarks"

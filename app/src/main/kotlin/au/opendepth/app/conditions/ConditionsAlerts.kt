@@ -205,7 +205,7 @@ object ConditionsAlerts {
             .setSmallIcon(R.drawable.ic_anchor)
             .setContentTitle(title)
             .setContentText(text)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(text + "\nForecast at your spot. Check it before you go: not for navigation."))
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text + "\nForecast at your spot. Check it before you go."))
             .setContentIntent(open)
             .setAutoCancel(true)
             .build()

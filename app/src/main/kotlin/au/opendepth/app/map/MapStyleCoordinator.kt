@@ -182,6 +182,7 @@ class MapStyleCoordinator(
     /** Recomputes the credit line from the basemap and visible overlays. */
     fun refreshAttribution() {
         val credits = buildList {
+            add(NOT_FOR_NAVIGATION)
             baseAttribution()?.let { add(it) }
             addAll(overlays.visibleAttributions())
             addAll(extraAttributions())
@@ -211,6 +212,8 @@ class MapStyleCoordinator(
 
     private companion object {
         const val SEPARATOR = " • "
+        /** Always first in the credits line on the chart: the agreement's short form, never out of sight. */
+        const val NOT_FOR_NAVIGATION = "Not for navigation"
         const val TAG = "SeaBathyStyle"
     }
 }
