@@ -51,6 +51,7 @@ import au.opendepth.app.geotiff.GeoTiffReader
 import au.opendepth.app.model.GeoBounds
 import au.opendepth.app.model.OverlayLayer
 import au.opendepth.app.model.Waypoint
+import au.opendepth.app.ui.dp
 import au.opendepth.app.settings.AppSettingsRepository
 import au.opendepth.app.settings.BasemapType
 import au.opendepth.app.settings.DepthDisplayMode
@@ -417,6 +418,7 @@ class MainActivity : AppCompatActivity() {
                 if (::conditions.isInitialized) conditions.onLocation(location.latitude, location.longitude)
                 terrain3d.updateBoat(location)
                 if (mobPending) markOverboard(location)
+                checkNoTake(location.latitude, location.longitude)
             },
             followBearing = { location -> navFeature.chartBearing(location) }
         )
@@ -426,10 +428,12 @@ class MainActivity : AppCompatActivity() {
         }
         // Always starts off: turning it on asks for the not-for-navigation tick again.
         navMarks = au.opendepth.app.map.NavMarksController(mapHolder)
+        zones = au.opendepth.app.map.MarineZonesController(mapHolder, preferences)
 
         styleCoordinator = MapStyleCoordinator(
             graticule = graticule,
             navMarks = navMarks,
+            zones = zones,
             mapHolder = mapHolder,
             settings = settingsRepository,
             overlays = overlays,
@@ -439,7 +443,8 @@ class MainActivity : AppCompatActivity() {
             isOnline = ::hasWorkingInternet,
             extraAttributions = {
                 (if (::conditions.isInitialized) conditions.credits() else emptyList()) +
-                    (if (::navMarks.isInitialized && navMarks.visible) listOf(au.opendepth.app.map.NavMarksController.CREDIT) else emptyList())
+                    (if (::navMarks.isInitialized && navMarks.visible) listOf(au.opendepth.app.map.NavMarksController.CREDIT) else emptyList()) +
+                    zoneCredits()
             }
         )
         watchConnectivity()
@@ -530,6 +535,7 @@ class MainActivity : AppCompatActivity() {
             }
         )
         sidePanel = SidePanel(views)
+        addQuickZones()
         coordinateEditor = CoordinateEditorDialog(this, panels)
         gpxExport = GpxExportService(this)
         debugLogShare = DebugLogShareService(this)
@@ -821,10 +827,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showNavMarkAt(lat: Double, lng: Double) {
-        if (!navMarks.visible) return
+        if (!navMarks.visible && !zones.anyShown) return
         val map = mapHolder.map ?: return
         val point = map.projection.toScreenLocation(org.maplibre.android.geometry.LatLng(lat, lng))
-        val (title, detail) = navMarks.describeAt(point) ?: return
+        val (title, detail) = navMarks.describeAt(point) ?: zones.describeAt(point) ?: return
         if (isFinishing || isDestroyed) return
         AlertDialog.Builder(this, ALERT_THEME).setTitle(title).setMessage(detail).setPositiveButton("OK", null).show()
     }
@@ -968,6 +974,9 @@ class MainActivity : AppCompatActivity() {
                         graticule.setVisible(visible)
                     },
                     showNavMarks = { navMarks.visible },
+                    zones = zones,
+                    confirmZones = ::confirmZones,
+                    onZonesChanged = ::zonesChanged,
                     onShowNavMarksChanged = { wanted, done ->
                         // The warning is shown, and must be ticked, every time the layer is turned on.
                         if (!wanted) {
@@ -1215,6 +1224,140 @@ class MainActivity : AppCompatActivity() {
             bitmap = android.graphics.Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, m, true)
         }
         file.outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, PHOTO_QUALITY, it) }
+    }
+
+    // Marine park zones ------------------------------------------------------------
+
+    private lateinit var zones: au.opendepth.app.map.MarineZonesController
+    private var noTake: au.opendepth.app.map.NoTakeZones? = null
+    private var noTakeLoading = false
+    /** The no-take zone the boat was last in, so the warning comes once on the way in. */
+    private var inNoTake: String? = null
+    private var quickZonesRow: android.widget.LinearLayout? = null
+
+    private fun zoneCredits(): List<String> {
+        if (!::zones.isInitialized) return emptyList()
+        return listOfNotNull(
+            au.opendepth.app.map.MarineZonesController.CREDIT.takeIf { zones.mode != au.opendepth.app.map.ZoneMode.OFF },
+            au.opendepth.app.map.MarineZonesController.NAMES_CREDIT.takeIf { zones.names },
+            au.opendepth.app.map.MarineZonesController.RAMPS_CREDIT.takeIf { zones.ramps }
+        )
+    }
+
+    private fun zonesChanged() {
+        styleCoordinator.refreshAttribution()
+        refreshQuickZones()
+    }
+
+    /** The first time zones are turned on: they're a guide, the official map is the law. */
+    private fun confirmZones(done: () -> Unit) {
+        AlertDialog.Builder(this, ALERT_THEME)
+            .setTitle("Marine park zones")
+            .setMessage(au.opendepth.app.map.MarineZonesController.NOT_OFFICIAL +
+                "\n\nGreen: no-take (no fishing). Yellow: limited fishing. Blue: fishing under the usual rules. Tap a zone for details.")
+            .setPositiveButton("I understand") { _, _ ->
+                zones.acknowledge()
+                done()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /** Warns once on entering a no-take zone, and says when the boat has left it. */
+    private fun checkNoTake(lat: Double, lng: Double) {
+        if (!zones.warn) return
+        val data = noTake
+        if (data == null) {
+            if (!noTakeLoading) {
+                noTakeLoading = true
+                scope.launch {
+                    noTake = withContext(Dispatchers.IO) { runCatching { au.opendepth.app.map.NoTakeZones.load(this@MainActivity) }.getOrNull() }
+                    noTakeLoading = false
+                }
+            }
+            return
+        }
+        val zone = data.at(lat, lng)
+        val name = zone?.let { it.name.ifBlank { it.type } }
+        if (name == inNoTake) return
+        val was = inNoTake
+        inNoTake = name
+        if (name == null) {
+            toastLong("You've left the no-take zone ($was)")
+            return
+        }
+        runCatching {
+            val vibrator = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                getSystemService(android.os.VibratorManager::class.java)?.defaultVibrator
+            } else {
+                @Suppress("DEPRECATION") getSystemService(android.os.Vibrator::class.java)
+            }
+            vibrator?.vibrate(android.os.VibrationEffect.createWaveform(longArrayOf(0, 250, 120, 250, 120, 250), -1))
+        }
+        if (isFinishing || isDestroyed) return
+        AlertDialog.Builder(this, ALERT_THEME)
+            .setTitle("No-take zone")
+            .setMessage("You're in a no-take zone: $name. No fishing or collecting here.\n\n" + au.opendepth.app.map.MarineZonesController.NOT_OFFICIAL)
+            .setPositiveButton("OK", null)
+            .setNeutralButton("Stop these warnings") { _, _ -> zones.setWarn(false) }
+            .show()
+    }
+
+    /** One tap to switch the zones, names and ramps, at the top of the layers panel. */
+    private fun addQuickZones() {
+        val basemap = findViewById<android.view.View>(R.id.spinBasemap) ?: return
+        val box = basemap.parent as? android.widget.LinearLayout ?: return
+        val header = android.widget.TextView(this).apply {
+            text = "ON THE CHART"
+            setTextColor(androidx.core.content.ContextCompat.getColor(this@MainActivity, R.color.text_muted))
+            textSize = 10f
+            setPadding(0, 0, 0, dp(6))
+        }
+        val row = android.widget.LinearLayout(this).apply { orientation = android.widget.LinearLayout.HORIZONTAL }
+        box.addView(header, 0)
+        box.addView(row, 1, android.widget.LinearLayout.LayoutParams(android.widget.LinearLayout.LayoutParams.MATCH_PARENT, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(12) })
+        quickZonesRow = row
+        refreshQuickZones()
+    }
+
+    private fun refreshQuickZones() {
+        val row = quickZonesRow ?: return
+        row.removeAllViews()
+        fun chip(label: String, on: Boolean, description: String, click: () -> Unit) = android.widget.TextView(this).apply {
+            text = label
+            gravity = android.view.Gravity.CENTER
+            textSize = 12f
+            contentDescription = description
+            setTextColor(if (on) android.graphics.Color.parseColor("#0B1622") else android.graphics.Color.parseColor("#E2E8F0"))
+            background = android.graphics.drawable.GradientDrawable().apply {
+                cornerRadius = dp(16).toFloat()
+                setColor(if (on) android.graphics.Color.parseColor("#2DD4BF") else android.graphics.Color.parseColor("#29313A"))
+            }
+            setPadding(dp(6), dp(8), dp(6), dp(8))
+            setOnClickListener { click() }
+        }
+        val params = { android.widget.LinearLayout.LayoutParams(0, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(6) } }
+        val modeLabel = when (zones.mode) {
+            au.opendepth.app.map.ZoneMode.OFF -> "Zones off"
+            au.opendepth.app.map.ZoneMode.NO_TAKE -> "No-take"
+            au.opendepth.app.map.ZoneMode.ALL -> "All zones"
+        }
+        row.addView(chip(modeLabel, zones.mode != au.opendepth.app.map.ZoneMode.OFF, "Marine park zones: $modeLabel. Tap to change") {
+            val next = au.opendepth.app.map.ZoneMode.entries[(zones.mode.ordinal + 1) % au.opendepth.app.map.ZoneMode.entries.size]
+            fun set() {
+                zones.setMode(next)
+                zonesChanged()
+            }
+            if (next != au.opendepth.app.map.ZoneMode.OFF && !zones.acknowledged) confirmZones { set() } else set()
+        }, params())
+        row.addView(chip("Names", zones.names, "Reef and island names") {
+            zones.setNames(!zones.names)
+            zonesChanged()
+        }, params())
+        row.addView(chip("Ramps", zones.ramps, "Boat ramps") {
+            zones.setRamps(!zones.ramps)
+            zonesChanged()
+        }, params())
     }
 
     // Man overboard ------------------------------------------------------------------

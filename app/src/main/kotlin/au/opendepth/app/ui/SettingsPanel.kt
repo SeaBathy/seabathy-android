@@ -47,7 +47,11 @@ class SettingsPanel(
         val showNavMarks: () -> Boolean,
         /** Turning on asks for the not-for-navigation confirmation first; [done] gets the new state. */
         val onShowNavMarksChanged: (Boolean, done: (Boolean) -> Unit) -> Unit,
-        val onGetSeabed: () -> Unit
+        val onGetSeabed: () -> Unit,
+        val zones: au.opendepth.app.map.MarineZonesController? = null,
+        /** Asks once that the zones are a guide only; [done] runs when accepted. */
+        val confirmZones: (done: () -> Unit) -> Unit = { it() },
+        val onZonesChanged: () -> Unit = {}
     )
 
     fun show(callbacks: Callbacks) {
@@ -201,6 +205,38 @@ class SettingsPanel(
                 callbacks.onShowNavMarksChanged(index == 1) { refresh() }
             }
         }.also { panels.addRow(body, it) }
+
+        callbacks.zones?.let { zones ->
+            panels.addRow(body, panels.row("Marine park zones", zones.mode.label + if (zones.mode == au.opendepth.app.map.ZoneMode.OFF) ": no-take zones in green" else "") {
+                val modes = au.opendepth.app.map.ZoneMode.entries
+                panels.showChoicePanel("Marine park zones", modes.map { it.label }, modes.indexOf(zones.mode)) { i ->
+                    fun set() {
+                        zones.setMode(modes[i])
+                        callbacks.onZonesChanged()
+                        settingsDialog?.dismiss()
+                        show(callbacks)
+                    }
+                    if (modes[i] != au.opendepth.app.map.ZoneMode.OFF && !zones.acknowledged) callbacks.confirmZones { set() } else set()
+                }
+            })
+            panels.addRow(body, panels.row("Reef and island names", if (zones.names) "On" else "Off: named reefs, islands, shoals and banks") {
+                zones.setNames(!zones.names)
+                callbacks.onZonesChanged()
+                settingsDialog?.dismiss()
+                show(callbacks)
+            })
+            panels.addRow(body, panels.row("Boat ramps", if (zones.ramps) "On" else "Off") {
+                zones.setRamps(!zones.ramps)
+                callbacks.onZonesChanged()
+                settingsDialog?.dismiss()
+                show(callbacks)
+            })
+            panels.addRow(body, panels.row("Warn me in a no-take zone", if (zones.warn) "On: when the GPS is on, even with the zones hidden" else "Off") {
+                zones.setWarn(!zones.warn)
+                settingsDialog?.dismiss()
+                show(callbacks)
+            })
+        }
 
         body.addView(panels.sectionHeader("MAP LAYERS"))
         panels.addRow(

@@ -26,9 +26,11 @@ object BaseMapLayers {
     // route vanishes over teal depth colours (and amber over amber).
     private const val CASING = "#0B1622"
 
-    fun install(style: Style, graticule: GraticuleController? = null, navMarks: NavMarksController? = null) {
+    fun install(style: Style, graticule: GraticuleController? = null, navMarks: NavMarksController? = null, zones: MarineZonesController? = null) {
         addAnchor(style)
+        runCatching { zones?.addAreas(style) }
         navMarks?.addTo(style)
+        runCatching { zones?.addPoints(style) }
         graticule?.addTo(style)
         addTrackLayers(style)
         addRouteLayers(style)
