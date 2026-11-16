@@ -50,18 +50,37 @@ object HighDetailDepths {
     private val catalog by lazy { Catalog(net) }
     @Volatile private var surveys: Surveys? = null
 
+    /** The most one high-detail build covers, in degrees (about 110 km): more runs a phone out of memory. */
+    const val MAX_SPAN_DEG = 1.0
+    const val MAX_SPAN_KM = 110
+
     fun covers(area: SeabedDownload.Area): Boolean =
         area.east > W && area.west < E && area.north > S && area.south < N
+
+    /** [area], or its middle [MAX_SPAN_DEG] when it's bigger. */
+    fun fit(area: SeabedDownload.Area): SeabedDownload.Area {
+        if (area.north - area.south <= MAX_SPAN_DEG && area.east - area.west <= MAX_SPAN_DEG) return area
+        fun mid(lo: Double, hi: Double): Pair<Double, Double> {
+            val h = minOf(hi - lo, MAX_SPAN_DEG) / 2
+            val c = (lo + hi) / 2
+            return c - h to c + h
+        }
+        val (s, n) = mid(area.south, area.north)
+        val (w, e) = mid(area.west, area.east)
+        return SeabedDownload.Area(s, w, n, e, trimmed = true)
+    }
 
     /**
      * Builds the depths for [area] into [dir] and returns the file and its credits. Reuses a
      * file already built for the same area. [onProgress] gets a percentage and a stage line.
      * Cancelling the coroutine stops the build and deletes the part-written file.
      */
-    suspend fun build(context: Context, area: SeabedDownload.Area, dir: File, onProgress: (Int, String) -> Unit): Pair<File, String> {
+    suspend fun build(context: Context, wanted: SeabedDownload.Area, dir: File, onProgress: (Int, String) -> Unit): Pair<File, String> {
+        val area = fit(wanted)
         dir.mkdirs()
         val target = File(dir, "${area.name.replace("Seabed", "High detail")}.tif")
-        val credits = File(dir, "${target.nameWithoutExtension}_sources.txt")
+        // Named as the depth file's sidecar, so it stays and goes with that layer.
+        val credits = File(dir, target.name + AppOwnedArtifacts.SOURCES_SUFFIX)
         if (target.length() > 0) return target to (credits.takeIf { it.exists() }?.readText() ?: CREDIT)
 
         Http.userAgent = "SeaBathy-Android/${BuildConfig.VERSION_NAME} (+https://github.com/SeaBathy/seabathy-android)"
@@ -103,7 +122,8 @@ object HighDetailDepths {
         } catch (e: Throwable) {
             if (job.running()) job.fail(e.message ?: e.toString())
             partial.delete()
-            throw if (e is OutOfMemoryError) IOException("The phone ran out of memory. Zoom in to a smaller area and try again.") else e
+            val oom = e is OutOfMemoryError || (e.message ?: "").contains("out of memory", ignoreCase = true)
+            throw if (oom) IOException("The phone ran out of memory. Zoom in to a smaller area and try again.") else e
         } finally {
             watcher.interrupt()
         }

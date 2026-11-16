@@ -154,8 +154,12 @@ class LayerImportCoordinator(
                     onResult(describe(imported))
                 }
             }.onFailure { error ->
-                DiagnosticLog.logError(TAG, "high-detail build FAILED", error)
-                onError(error.readableMessage("Couldn't build the high-detail depths"))
+                if (error is java.io.InterruptedIOException) {
+                    onResult("Stopped. Nothing was saved.")
+                } else {
+                    DiagnosticLog.logError(TAG, "high-detail build FAILED", error)
+                    onError(error.readableMessage("Couldn't build the high-detail depths"))
+                }
             }
         }
     }

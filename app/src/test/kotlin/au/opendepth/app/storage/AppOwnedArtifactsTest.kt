@@ -200,6 +200,7 @@ class AppOwnedArtifactsTest {
         assertEquals("x.gdaltiles", AppOwnedArtifacts.baseNameOf("x.gdaltiles.dem-journal"))
         assertEquals("x.gdaltiles", AppOwnedArtifacts.baseNameOf("x.gdaltiles.dem"))
         assertEquals("x.gdaltiles", AppOwnedArtifacts.baseNameOf("x.gdaltiles.values"))
+        assertEquals("High detail 1S 2E.tif", AppOwnedArtifacts.baseNameOf("High detail 1S 2E.tif.sources.txt"))
         assertEquals("x.gdaltiles", AppOwnedArtifacts.baseNameOf("x.gdaltiles.values-journal"))
         assertEquals("a.mbtiles", AppOwnedArtifacts.baseNameOf("a.mbtiles-wal"))
         assertEquals("a.mbtiles", AppOwnedArtifacts.baseNameOf("a.mbtiles"))

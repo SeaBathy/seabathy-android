@@ -71,6 +71,8 @@ class AppOwnedArtifacts(filesDir: File, subdirectories: List<String>) {
         private val SQLITE_SIDECARS = listOf("-journal", "-wal", "-shm")
         private const val DEM_SUFFIX = ".dem"
         private const val VALUES_SUFFIX = ".values"
+        /** The credits saved beside a high-detail depths file. */
+        const val SOURCES_SUFFIX = ".sources.txt"
 
         /** `x.gdaltiles.dem-journal` -> `x.gdaltiles`; `x.gdaltiles.values` -> `x.gdaltiles`; `a.mbtiles-wal` -> `a.mbtiles`. */
         fun baseNameOf(name: String): String {
@@ -78,6 +80,7 @@ class AppOwnedArtifacts(filesDir: File, subdirectories: List<String>) {
             SQLITE_SIDECARS.firstOrNull { base.endsWith(it) }?.let { base = base.removeSuffix(it) }
             if (base.endsWith(DEM_SUFFIX)) base = base.removeSuffix(DEM_SUFFIX)
             if (base.endsWith(VALUES_SUFFIX)) base = base.removeSuffix(VALUES_SUFFIX)
+            if (base.endsWith(SOURCES_SUFFIX)) base = base.removeSuffix(SOURCES_SUFFIX)
             return base
         }
     }

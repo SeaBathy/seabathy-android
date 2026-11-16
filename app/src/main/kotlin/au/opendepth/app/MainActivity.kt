@@ -1027,7 +1027,10 @@ class MainActivity : AppCompatActivity() {
                     "Australian waters only. The IMAS composite with AusSeabed and state multibeam surveys on top: down to a metre or two where surveyed. Built on the phone; a big area can take a few minutes.")
                 rows += au.opendepth.app.ui.InfoCard.Row("Standard",
                     "GMRT, worldwide. Ship surveys blended with the GEBCO grid; much coarser away from surveys. Up to about 55 MB, quick.")
-                fine = "Either one is added as a layer that also works in 3D and offline.$note Not for navigation."
+                val hdNote = if (au.opendepth.app.storage.HighDetailDepths.fit(area).trimmed && !area.trimmed)
+                    " High detail covers up to about ${au.opendepth.app.storage.HighDetailDepths.MAX_SPAN_KM} km across, so it takes the middle of the screen."
+                else if (area.trimmed) " High detail covers up to about ${au.opendepth.app.storage.HighDetailDepths.MAX_SPAN_KM} km across." else ""
+                fine = "Either one is added as a layer that also works in 3D and offline.$note$hdNote Not for navigation."
                 actions += au.opendepth.app.ui.InfoCard.Action("Standard") {
                     sidePanel.close()
                     layerImports.downloadSeabed(area)
@@ -1470,7 +1473,8 @@ class MainActivity : AppCompatActivity() {
             return
         }
         val zone = data.at(lat, lng)
-        val name = zone?.let { it.name.ifBlank { it.type } }
+        // "Ningaloo Marine Park · Bundegi Sanctuary Area": the park, and the zone when it has its own name.
+        val name = zone?.let { z -> listOf(z.name, z.type).filter { it.isNotBlank() }.distinct().joinToString(" · ") }
         if (name == inNoTake) return
         val was = inNoTake
         inNoTake = name
