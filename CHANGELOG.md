@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.2 — 2026-11-16
 
 - **Waypoint from a photo:** pick a photo from the gallery and a waypoint is made where it was
   taken (from its GPS tags), with the photo and the tide, sun and moon then, and the wind, waves

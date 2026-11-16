@@ -1,0 +1,1 @@
+New: marine park zones with a no-take warning, reef and island names, boat ramps, man overboard button, waypoint photos with the tide and sea conditions, waypoint from a gallery photo, good-weather alerts, backup and restore (daily to a folder), KML/KMZ import, smoother sea-temperature lines. Now GPL-3.0.
