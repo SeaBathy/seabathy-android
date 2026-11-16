@@ -63,9 +63,22 @@ object ConditionsAlerts {
     private const val KNOTS_PER_MS = 1.943844
     private val gson = Gson()
 
-    fun load(prefs: SharedPreferences): AlertRules =
-        prefs.getString(KEY_RULES, null)?.let { runCatching { gson.fromJson(it, AlertRules::class.java) }.getOrNull() }
-            ?.let { it.copy(weekdays = it.weekdays.ifEmpty { AlertRules.ALL_DAYS }) } ?: AlertRules()
+    /** The saved rules; anything missing or unreadable falls back to the defaults (Gson leaves absent fields null). */
+    @Suppress("SENSELESS_COMPARISON", "USELESS_ELVIS")
+    fun load(prefs: SharedPreferences): AlertRules {
+        val raw = prefs.getString(KEY_RULES, null) ?: return AlertRules()
+        val r = runCatching { gson.fromJson(raw, AlertRules::class.java) }.getOrNull() ?: return AlertRules()
+        val d = AlertRules()
+        val days: Set<Int>? = r.weekdays
+        return AlertRules(
+            enabled = r.enabled,
+            windMaxKn = r.windMaxKn.takeIf { it > 0 } ?: d.windMaxKn,
+            waveMaxM = r.waveMaxM.takeIf { it > 0 } ?: d.waveMaxM,
+            daysAhead = r.daysAhead.coerceIn(1, 7),
+            weekdays = days?.filter { it in 1..7 }?.toSet()?.ifEmpty { null } ?: AlertRules.ALL_DAYS,
+            minHours = r.minHours.takeIf { it > 0 } ?: d.minHours
+        )
+    }
 
     fun save(context: Context, prefs: SharedPreferences, rules: AlertRules) {
         prefs.edit().putString(KEY_RULES, gson.toJson(rules)).remove(KEY_TOLD).apply()

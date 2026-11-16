@@ -246,7 +246,11 @@ class WaypointEditDialog(
         }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         body.addView(panels.sectionHeader(stamp(photo.takenMillis).uppercase(Locale.getDefault())))
         body.addView(panels.caption(
-            if (photo.conditions.isEmpty()) "No conditions were saved with this photo." else photo.conditions.joinToString(separator = "\n"),
+            // Gson leaves a missing list null, whatever the type says.
+            @Suppress("USELESS_CAST")
+            (photo.conditions as List<String>?).orEmpty().let { lines ->
+                if (lines.isEmpty()) "No conditions were saved with this photo." else lines.joinToString(separator = "\n")
+            },
             topPaddingDp = 0
         ))
         lateinit var view: Dialog

@@ -1073,6 +1073,7 @@ class ConditionsFeature(
             }
             row.view.visibility = View.VISIBLE
             row.text.text = value.text
+            row.view.contentDescription = value.text + if (layerOfRow(value.row, a) != null) ". Tap to show it on the map" else ""
             row.layer = layerOfRow(value.row, a)
             row.from = a
             row.highlight(shown && row.layer != null && (row.layer == colour || (colour == ColourChoice.CHLOROPHYLL && row.layer?.satellite != null)))

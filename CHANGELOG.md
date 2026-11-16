@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- **Pipelines, cables and mooring areas** in the buoys layer: 20 tiny areas had been simplified to
+  fewer than 4 corners, which could stop the map reading the whole file. They're repaired.
+- **Sturdier saved settings:** a good-weather alert or photo record missing a field (say, from an
+  older or hand-edited backup) now falls back to defaults instead of failing.
+- **Screen readers:** the values box lines, the basemap picker and the drawer's backdrop now say
+  what they are.
+
 ## 1.2.3 — 2026-11-16
 
 - **Cleaner cards:** zone, ramp, name and mark details, the no-take warning and the other notices now use the app's own dark cards, with a coloured badge and clear rows, instead of Android's grey pop-ups.

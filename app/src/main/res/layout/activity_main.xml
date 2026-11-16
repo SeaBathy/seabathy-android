@@ -14,6 +14,7 @@
     <!-- Top bar: menu, live coordinates and the tool buttons -->
     <LinearLayout
         android:id="@+id/topBar"
+        android:importantForAccessibility="no"
         android:clickable="true"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -166,6 +167,7 @@
     <!-- Route planner readout -->
     <LinearLayout
         android:id="@+id/routeCard"
+        android:importantForAccessibility="no"
         android:clickable="true"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -356,6 +358,7 @@
     <!-- Measurement readout -->
     <LinearLayout
         android:id="@+id/measureCard"
+        android:importantForAccessibility="no"
         android:clickable="true"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -417,6 +420,7 @@
 
     <FrameLayout
         android:id="@+id/panelScrim"
+        android:contentDescription="Close the layers panel"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:background="#88000000"
@@ -425,6 +429,7 @@
     <!-- Side panel: layer stack, imports and waypoints -->
     <LinearLayout
         android:id="@+id/sidePanel"
+        android:importantForAccessibility="no"
         android:clickable="true"
         android:layout_width="300dp"
         android:layout_height="match_parent"
@@ -555,6 +560,7 @@
 
             <Spinner
                 android:id="@+id/spinBasemap"
+        android:contentDescription="Basemap"
                 android:layout_width="match_parent"
                 android:layout_height="48dp"
                 android:background="@drawable/bg_spinner_field"
@@ -574,6 +580,7 @@
 
         <LinearLayout
             android:id="@+id/wptDialog"
+        android:importantForAccessibility="no"
             android:clickable="true"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
