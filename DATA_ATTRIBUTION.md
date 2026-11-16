@@ -32,10 +32,9 @@ on the chart and in the 3D view.
 | Sentinel-2 cloudless 2024 (EOX), the built-in offline source (also in 3D) | Sentinel-2 cloudless - https://s2maps.eu by EOX IT Services GmbH (Contains modified Copernicus Sentinel data 2024) | Allowed under [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/): non-commercial use, keep the credit, share packs under the same licence |
 
 The apps' built-in offline download source is Sentinel-2 cloudless, whose
-licence allows offline copies. In the 3D view, "Save this area offline" is
-offered for Sentinel-2 and other maps that allow it, but not for
-OpenStreetMap or OpenTopoMap (or Esri, if you add it yourself), whose terms
-don't allow offline copies: those can be looked at online only.
+licence allows offline copies. "Save this area offline" (also in the 3D view)
+works with any online map, including ones whose terms don't allow offline
+copies: whether to save one is the user's choice.
 
 Esri's basemaps are not built in, because Esri's terms need an ArcGIS licence
 for use in apps. You can still add one yourself with "Add a map link" if your

@@ -129,9 +129,8 @@ sand and channels, but soft up close. For more detail you can add any online sat
 that gives an XYZ tile link (a web address with `{z}`, `{x}` and `{y}` in it) under
 **Settings → Online map layers → Your own tile link**. Some providers, Esri World Imagery for example, have sub-metre imagery of most
 coastlines. Those services are run by their owners under their own terms, which usually limit
-how they may be used: check them before adding one, and use it on your own account. SeaBathy
-shows the provider's credit with any map you add, and doesn't save maps offline from
-providers whose terms don't allow it.
+how they may be used. SeaBathy shows the provider's credit with any map you add and can save any
+of them offline: what you add and download, and keeping to each provider's terms, is up to you.
 </details>
 
 <details>
