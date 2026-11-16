@@ -9,7 +9,7 @@ Each map's credit shows on screen while it's shown. The services behind the app,
 - Tides and sea forecasts: Open-Meteo (CC BY 4.0, https://open-meteo.com), with E.U. Copernicus Marine Service Information, Météo-France, ECMWF, DWD and NOAA models. Tides are worked out from this data, and are modelled: not an official tide table.
 - Place search: Open-Meteo Geocoding (GeoNames, CC BY 4.0). Suggested place names: © OpenStreetMap contributors, Nominatim (ODbL).
 - Buoys, beacons, pipelines and cables (beta, off by default): Transport for NSW (CC BY), WA Department of Transport (CC BY 3.0 AU), Victorian Government (Vicmap, CC BY 4.0), State of Queensland (CC BY 4.0), AMSA (CC BY 4.0), NOPTA, Geoscience Australia (CC BY 4.0), ACMA, and © OpenStreetMap contributors (ODbL). Not for navigation.
-- Marine park zones: Australian Marine Parks zoning, Department of Climate Change, Energy, the Environment and Water; Great Barrier Reef Marine Park zoning, GBRMPA; Queensland marine park zones, Queensland Government; NSW Marine Protected Areas, NSW DPI Fisheries; SA marine park zoning, Department for Environment and Water; WA fishing prohibition orders, DPIRD; CAPAD 2024, DCCEEW (all CC BY 4.0). Reef and island names: Composite Gazetteer of Australia, Geoscience Australia and the states (CC BY 4.0); Great Barrier Reef Marine Park Authority (CC BY 4.0). Coast test: Natural Earth (public domain). Boat ramps: © OpenStreetMap contributors (ODbL). A guide only: check the official zoning map.
+- Marine park zones: Australian Marine Parks zoning, Department of Climate Change, Energy, the Environment and Water; Great Barrier Reef Marine Park zoning, GBRMPA; Queensland marine park zones, Queensland Government; NSW Marine Protected Areas, NSW DPI Fisheries; SA marine park zoning, Department for Environment and Water; WA fishing prohibition orders, DPIRD; CAPAD 2024, DCCEEW (all Creative Commons Attribution, CC BY). Reef and island names: Composite Gazetteer of Australia, Geoscience Australia and the states (CC BY 4.0); Great Barrier Reef Marine Park Authority (CC BY 4.0). Coast test: Natural Earth (public domain). Boat ramps: © OpenStreetMap contributors (ODbL). A guide only: check the official zoning map.
 - Satellite sea layers: NOAA CoastWatch, NASA JPL MUR, NASA GIBS, HYCOM. Contains modified Copernicus Sentinel data. Sea level: data courtesy of NOAA; Sentinel data courtesy of Copernicus Program; generated using AVISO+ products.
 - Seabed depths: GMRT (Ryan et al. 2009, doi:10.1029/2008GC002332), CC BY 4.0.
 - High-detail depths for Australia: Flukes, E. (2026), Multi-resolution bathymetry composite surface for Australian waters (EEZ), Institute for Marine and Antarctic Studies, doi:10.25959/Y9VF-V723; AusSeabed bathymetry, © Commonwealth of Australia (Geoscience Australia); and state surveys. All CC BY 4.0. Each build saves a _sources.txt listing every survey in it.
@@ -2914,3 +2914,42 @@ Apache License
    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
    See the License for the specific language governing permissions and
    limitations under the License.
+
+----------------------------------------------------------------------
+GDAL licence, for the parts of the high-detail depths engine (from BathyPicker) that follow GDAL's code
+
+Proximity.java follows GDAL's gdalproximity.cpp, and the resampling and scale steps in
+Builder.java follow GDAL's gdalwarpkernel.cpp and gdalwarpoperation.cpp (GDAL 3.13.3), so the
+phone builds the same files as BathyPicker's desktop gdalwarp and gdal raster proximity.
+
+gdalproximity.cpp:
+  Copyright (c) 2008, Frank Warmerdam
+  Copyright (c) 2009-2010, Even Rouault <even dot rouault at spatialys.com>
+
+gdalwarpkernel.cpp:
+  Copyright (c) 2003, Frank Warmerdam <warmerdam@pobox.com>
+  Copyright (c) 2008-2013, Even Rouault <even dot rouault at spatialys.com>
+
+gdalwarpoperation.cpp:
+  Copyright (c) 2003, Frank Warmerdam <warmerdam@pobox.com>
+  Copyright (c) 2007-2012, Even Rouault <even dot rouault at spatialys.com>
+
+SPDX-License-Identifier: MIT
+
+Permission is hereby granted, free of charge, to any person obtaining a
+copy of this software and associated documentation files (the "Software"),
+to deal in the Software without restriction, including without limitation
+the rights to use, copy, modify, merge, publish, distribute, sublicense,
+and/or sell copies of the Software, and to permit persons to whom the
+Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included
+in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.

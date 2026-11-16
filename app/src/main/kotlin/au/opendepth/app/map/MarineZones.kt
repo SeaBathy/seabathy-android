@@ -214,7 +214,7 @@ class MarineZonesController(private val mapHolder: MapHolder, private val prefs:
     }
 
     companion object {
-        const val CREDIT = "Marine park zones: DCCEEW, GBRMPA, Queensland Government, NSW DPI, SA DEW, WA DPIRD, CAPAD 2024 (CC BY 4.0)"
+        const val CREDIT = "Marine park zones: DCCEEW, GBRMPA, Queensland Government, NSW DPI, SA DEW, WA DPIRD, CAPAD 2024 (CC BY)"
         const val NAMES_CREDIT = "Names: Geoscience Australia gazetteer, GBRMPA (CC BY 4.0)"
         const val RAMPS_CREDIT = "Boat ramps: © OpenStreetMap contributors"
         const val NOT_OFFICIAL = "A guide only, from government data that can lag behind changes. The official zoning map and rules " +

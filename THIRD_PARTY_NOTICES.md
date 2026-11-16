@@ -25,6 +25,8 @@ services are listed separately in [`DATA_ATTRIBUTION.md`](DATA_ATTRIBUTION.md).
 | Open Sans glyphs (`assets/glyphs`) | — | Apache 2.0 (older releases), SIL OFL 1.1 (current) | https://github.com/googlefonts/opensans |
 | PROJ database (`assets/proj/proj.db`) | — | MIT | https://proj.org |
 | LeakCanary (debug builds only, not in release APKs) | 2.14 | Apache 2.0 | https://github.com/square/leakcanary |
+| High-detail depths engine (`app/src/main/java/com/seabathy/bathypicker/core`), from [BathyPicker](https://github.com/SeaBathy/BathyPicker) by the same authors | — | GPL-3.0 | this repository |
+| Code in that engine that follows GDAL 3.13.3: `Proximity.java` (from `gdalproximity.cpp`) and the resampling and scale steps in `Builder.java` (from `gdalwarpkernel.cpp` and `gdalwarpoperation.cpp`) | 3.13.3 | MIT (© Frank Warmerdam, Even Rouault); full text in `app/src/main/assets/licenses.txt` | https://github.com/OSGeo/gdal |
 
 ### Native GDAL (`app/libs/gdal-3.7.0.aar`)
 

@@ -23,10 +23,11 @@ world, then see them coloured by depth, fly over them in 3D, plan routes against
 draft and check tides, currents, wind and sea temperature. Everything works offline
 once it's on the phone. Free and open source, with no account, ads or tracking.
 
-> **Not for navigation.** SeaBathy does not include official nautical charts. Use it
-> alongside proper charts and navigation equipment, never instead of them.
+> **Not for navigation.** SeaBathy is not a nautical chart and must not be used for navigation.
+> Its data comes from public sources and can be wrong or out of date. Use official charts and
+> proper navigation equipment. See the [terms of use](https://seabathy.com/terms).
 
-**New here?** The [how-to guide](https://seabathy.com/guide) shows the whole path in a few minutes: get a free depth file with BathyPicker, open it on your phone or PC, and put it on your chartplotter with AT5 Chart Maker.
+**New here?** The [how-to guide](https://seabathy.com/guide) shows the whole path in a few minutes: get free depths (right in the app, or with BathyPicker on a PC), open them on your phone or PC, and put it on your chartplotter with AT5 Chart Maker.
 
 ## Contents
 
@@ -192,8 +193,9 @@ GPS was off) as a waypoint, buzzes, and starts steering back to it.
 <summary><b>Marine park zones, reef names and boat ramps</b></summary>
 
 Turn them on with the **Zones**, **Names** and **Ramps** switches at the top of the Layers drawer
-(or in Settings). Zones cover every Australian marine park: no-take in green, limited fishing in
-yellow, general use in blue; show all or only the no-take ones, and tap a zone for what's allowed.
+(or in Settings). Zones cover every Australian marine park, from each authority's official zoning:
+no-take in green, limited fishing in yellow, general use in blue; show all or only the no-take ones,
+and tap a zone for its official name and what's allowed.
 With the GPS on, the phone buzzes and warns you when the boat goes into a no-take zone. A guide
 only: the official zoning map is the law.
 </details>

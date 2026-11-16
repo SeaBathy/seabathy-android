@@ -102,7 +102,7 @@ types are guessed from the data. Not for navigation.
 Each is off until turned on (Settings, or the chips at the top of the layers panel). Built from
 these free datasets:
 
-- Marine park zones, from each authority's own zoning (all CC BY 4.0):
+- Marine park zones, from each authority's own zoning (all Creative Commons Attribution, CC BY):
   Australian Marine Parks zones, Department of Climate Change, Energy, the Environment and Water
   (DCCEEW); Great Barrier Reef Marine Park Zoning, Great Barrier Reef Marine Park Authority;
   Great Barrier Reef Coast, Moreton Bay and Great Sandy marine park zones, Queensland Government;
