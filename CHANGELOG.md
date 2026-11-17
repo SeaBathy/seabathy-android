@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- **Tides anywhere, even inland:** following you more than about 25 km from the sea used to give
+  "No tides here". It now finds the nearest coast with tides (up to about 260 km away) and shows
+  how far away that tide point is.
+- **Sea conditions keep up with the boat:** leave the downloaded area and the new one downloads
+  straight away when you're online, instead of waiting up to 15 minutes.
+- **Smoother sea maps:** the moving wind and current lines work out the flow once per time and
+  layer instead of every frame, and hold still while a panel is open, so the settings no longer
+  stutter.
+
 ## 1.2.8 — 2026-11-17
 
 - **Settings in categories:** a short menu (Map display, Depths, Online and offline maps, Boat and

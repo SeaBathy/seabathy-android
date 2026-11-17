@@ -322,13 +322,15 @@ class TideStore(context: Context) {
     private fun fitYear(lat: Double, lng: Double): Pair<TideHarmonics, com.google.gson.JsonObject> {
         val end = java.time.LocalDate.now(java.time.ZoneOffset.UTC).minusDays(2)
         val start = end.minusDays(365)
-        val url = String.format(
-            Locale.US,
-            "https://marine-api.open-meteo.com/v1/marine?latitude=%.4f&longitude=%.4f" +
-                "&hourly=sea_level_height_msl&timeformat=unixtime&cell_selection=sea&start_date=%s&end_date=%s",
-            lat, lng, start, end
-        )
-        val root = JsonParser.parseString(get(url, "Tide service")).asJsonObject
+        val root = atSea(lat, lng) { sLat, sLng ->
+            val url = String.format(
+                Locale.US,
+                "https://marine-api.open-meteo.com/v1/marine?latitude=%.4f&longitude=%.4f" +
+                    "&hourly=sea_level_height_msl&timeformat=unixtime&cell_selection=sea&start_date=%s&end_date=%s",
+                sLat, sLng, start, end
+            )
+            JsonParser.parseString(get(url, "Tide service")).asJsonObject.also { parseHourly(it) }
+        }
         val year = parseHourly(root)
         if (year.first.size < 24 * 60) throw IOException("Not enough tide history here to save tides offline.")
         return TideHarmonics.fit(year.first, year.second) to root
@@ -378,14 +380,17 @@ class TideStore(context: Context) {
 
     /** Downloads a fresh forecast for [lat]/[lng] and caches it under [key]. */
     suspend fun refresh(key: String, lat: Double, lng: Double): TideForecast = withContext(Dispatchers.IO) {
-        val url = String.format(
-            Locale.US,
-            "https://marine-api.open-meteo.com/v1/marine?latitude=%.4f&longitude=%.4f" +
-                "&hourly=sea_level_height_msl&timeformat=unixtime&past_days=1&forecast_days=16&cell_selection=sea",
-            lat,
-            lng
-        )
-        val body = get(url, "Tide service")
+        val body = atSea(lat, lng) { sLat, sLng ->
+            val url = String.format(
+                Locale.US,
+                "https://marine-api.open-meteo.com/v1/marine?latitude=%.4f&longitude=%.4f" +
+                    "&hourly=sea_level_height_msl&timeformat=unixtime&past_days=1&forecast_days=16&cell_selection=sea",
+                sLat,
+                sLng
+            )
+            get(url, "Tide service").also { parseHourly(JsonParser.parseString(it).asJsonObject) }
+        }
+        // Kept against where the user is (not the sea point), so moving on re-checks from there.
         val json = JsonParser.parseString(body).asJsonObject.apply {
             addProperty(REQUEST_LAT, lat)
             addProperty(REQUEST_LNG, lng)
@@ -438,6 +443,64 @@ class TideStore(context: Context) {
             throw IOException("$what didn't answer — check the connection and try again.")
         }
 
+    /** The marine model has no sea at the point asked for (it only looks in the grid cells next to it). */
+    class TooFarFromSea : IOException("No tides here — too far from the sea. Pick a spot on the water.")
+
+    /**
+     * Runs [fetch] at [lat]/[lng]; if that's too far inland for the model, runs it again at the
+     * nearest point that has tides ([nearestSea]), so following the GPS inland still gives the
+     * tides at the nearest coast. The tide screen shows how far away that point is.
+     */
+    private fun <T> atSea(lat: Double, lng: Double, fetch: (Double, Double) -> T): T =
+        try {
+            fetch(lat, lng)
+        } catch (inland: TooFarFromSea) {
+            val (sLat, sLng) = nearestSea(lat, lng)
+                ?: throw IOException("No tides within about ${SEA_SEARCH_KM.last().toInt()} km of here. Pick a spot on the water.")
+            fetch(sLat, sLng)
+        }
+
+    /** Sea points found for inland spots, by spot rounded to about 5 km, so moving about inland doesn't search again. */
+    private val seaPoints = java.util.concurrent.ConcurrentHashMap<String, Pair<Double, Double>>()
+
+    /**
+     * The nearest point with modelled tides: asks the model about rings of points round
+     * [lat]/[lng] (16 directions, 15 km out to [SEA_SEARCH_KM]'s last ring), a few rings per
+     * request, and takes the closest that has tides. Null when there's none in range.
+     */
+    private fun nearestSea(lat: Double, lng: Double): Pair<Double, Double>? {
+        val cacheKey = String.format(Locale.US, "%.2f,%.2f", Math.round(lat * 20) / 20.0, Math.round(lng * 20) / 20.0)
+        seaPoints[cacheKey]?.let { return it }
+        for (rings in SEA_SEARCH_KM.chunked(2)) {
+            val points = rings.flatMap { km ->
+                (0 until SEA_SEARCH_BEARINGS).map { i ->
+                    val bearing = Math.toRadians(i * 360.0 / SEA_SEARCH_BEARINGS)
+                    val pLat = lat + km / 111.32 * Math.cos(bearing)
+                    val pLng = lng + km / (111.32 * Math.cos(Math.toRadians(lat)).coerceAtLeast(0.05)) * Math.sin(bearing)
+                    pLat.coerceIn(-89.0, 89.0) to ((pLng + 540.0) % 360.0 - 180.0)
+                }
+            }
+            val url = "https://marine-api.open-meteo.com/v1/marine?latitude=" +
+                points.joinToString(",") { String.format(Locale.US, "%.4f", it.first) } +
+                "&longitude=" + points.joinToString(",") { String.format(Locale.US, "%.4f", it.second) } +
+                "&hourly=sea_level_height_msl&forecast_days=1&timeformat=unixtime&cell_selection=sea"
+            val reply = JsonParser.parseString(get(url, "Tide service"))
+            val results = if (reply.isJsonArray) reply.asJsonArray.map { it.asJsonObject } else listOf(reply.asJsonObject)
+            val best = results.mapNotNull { r ->
+                val heights = r.getAsJsonObject("hourly")?.getAsJsonArray("sea_level_height_msl") ?: return@mapNotNull null
+                if (heights.count { !it.isJsonNull } < 6) return@mapNotNull null
+                val gLat = r.get("latitude")?.asDouble ?: return@mapNotNull null
+                val gLng = r.get("longitude")?.asDouble ?: return@mapNotNull null
+                Triple(gLat, gLng, NavGeo.distanceM(lat, lng, gLat, gLng))
+            }.minByOrNull { it.third }
+            if (best != null) {
+                DiagnosticLog.log(TAG, String.format(Locale.US, "inland spot: nearest tides %.0f km away", best.third / 1000))
+                return (best.first to best.second).also { seaPoints[cacheKey] = it }
+            }
+        }
+        return null
+    }
+
     /** Hourly times (ms) and heights from a marine API reply, skipping gaps. */
     private fun parseHourly(root: com.google.gson.JsonObject): Pair<LongArray, DoubleArray> {
         val hourly = root.getAsJsonObject("hourly") ?: throw IOException("No tide data in the reply")
@@ -451,7 +514,7 @@ class TideStore(context: Context) {
             t += times[i].asLong * 1000
             h += value.asDouble
         }
-        if (t.size < 6) throw IOException("No tides here — too far from the sea. Pick a spot on the water.")
+        if (t.size < 6) throw TooFarFromSea()
         return t.toLongArray() to h.toDoubleArray()
     }
 
@@ -520,6 +583,9 @@ class TideStore(context: Context) {
         private const val REQUEST_LAT = "seabathy_request_lat"
         private const val REQUEST_LNG = "seabathy_request_lng"
         private const val REFRESH_DISTANCE_M = 15_000.0
+        /** Rings searched for the nearest tides from an inland spot, in km; two rings per request. */
+        private val SEA_SEARCH_KM = listOf(15.0, 30.0, 50.0, 75.0, 100.0, 140.0, 200.0, 260.0)
+        private const val SEA_SEARCH_BEARINGS = 16
         private const val REFRESH_AGE_MS = 12 * TideCurve.HOUR_MS
         private const val DAY_MS = 24 * TideCurve.HOUR_MS
         /** The joined curve starts two days back, so rebuild it now and then. */

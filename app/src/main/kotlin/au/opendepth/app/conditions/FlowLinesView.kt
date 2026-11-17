@@ -131,9 +131,24 @@ class FlowLinesView(context: Context, private val mapHolder: MapHolder) : View(c
         super.onDetachedFromWindow()
     }
 
+    /**
+     * Paused while a panel or card is open over the map (it has the focus then): the specks
+     * hold still behind it instead of taking the phone's time from the panel.
+     */
+    private var paused = false
+
+    override fun onWindowFocusChanged(hasWindowFocus: Boolean) {
+        super.onWindowFocusChanged(hasWindowFocus)
+        paused = !hasWindowFocus
+        if (!paused && running) {
+            removeCallbacks(frame)
+            postOnAnimation(frame)
+        }
+    }
+
     private val frame = object : Runnable {
         override fun run() {
-            if (!running) return
+            if (!running || paused) return
             val now = SystemClock.uptimeMillis()
             if (now - lastFrame >= FRAME_MS) {
                 lastFrame = now

@@ -525,7 +525,7 @@ class ConditionsFeature(
         ticker.removeCallbacks(tick)
         setPlaying(false)
         // No drawing while the app is in the background.
-        flowLines.stop()
+        stopFlowLines()
     }
 
     /** Units changed in Settings: the box and the card show their values again in the new ones. */
@@ -622,7 +622,7 @@ class ConditionsFeature(
         drawJob?.cancel()
         setPlaying(false)
         card.visibility = View.GONE
-        flowLines.stop()
+        stopFlowLines()
         updateBox()
         val style = mapHolder.style ?: return
         runCatching {
@@ -861,7 +861,7 @@ class ConditionsFeature(
         val choice = flow
         val fields = choice.fields
         if (!directionStyle.flow || f == null || fields == null) {
-            flowLines.stop()
+            stopFlowLines()
             return
         }
         val (u, v) = fields
@@ -871,25 +871,42 @@ class ConditionsFeature(
             ArrowChoice.SWELL -> ForecastField.SWELL_HEIGHT
             else -> null
         }
-        flowLines.show(
-            FlowLinesView.Field { lat, lng, out ->
-                if (masked && a.isSea(lat, lng) == false) return@Field false
-                val east = f.sample(u, lat, lng, time, coastal = masked)
-                val north = f.sample(v, lat, lng, time, coastal = masked)
-                if (east.isNaN() || north.isNaN()) return@Field false
-                // Waves and swell store a direction only: their height sets the speed.
-                var scale = 1f
-                if (heightField != null) {
-                    scale = f.sample(heightField, lat, lng, time, coastal = masked)
-                    if (scale.isNaN()) return@Field false
+        val key = "${a.id}:${a.fetchedMillis}:$choice:$time"
+        if (key == flowGridKey) return
+        flowGridKey = key
+        flowGridJob?.cancel()
+        // The flow is worked out once onto a grid, off the main thread: the specks then read the
+        // grid every frame instead of the forecast, which keeps the map and panels smooth.
+        flowGridJob = scope.launch {
+            val grid = withContext(work) {
+                FlowGrid.build(a.south, a.west, a.north, a.east, FLOW_GRID_SIDE) { lat, lng, out ->
+                    if (masked && a.isSea(lat, lng) == false) return@build false
+                    val east = f.sample(u, lat, lng, time, coastal = masked)
+                    val north = f.sample(v, lat, lng, time, coastal = masked)
+                    if (east.isNaN() || north.isNaN()) return@build false
+                    // Waves and swell store a direction only: their height sets the speed.
+                    var scale = 1f
+                    if (heightField != null) {
+                        scale = f.sample(heightField, lat, lng, time, coastal = masked)
+                        if (scale.isNaN()) return@build false
+                    }
+                    out[0] = east.toDouble() * scale
+                    out[1] = north.toDouble() * scale
+                    true
                 }
-                out[0] = east.toDouble() * scale
-                out[1] = north.toDouble() * scale
-                true
-            },
-            choice.reference, a.south, a.west, a.north, a.east
-        )
+            }
+            flowLines.show(grid, choice.reference, a.south, a.west, a.north, a.east)
+        }
     }
+
+    private fun stopFlowLines() {
+        flowGridJob?.cancel()
+        flowGridKey = null
+        flowLines.stop()
+    }
+
+    private var flowGridKey: String? = null
+    private var flowGridJob: kotlinx.coroutines.Job? = null
 
     private fun arrowGeoJson(a: ConditionsArea, choice: ArrowChoice, time: Long): String {
         val f = a.forecast ?: return MapLayerIds.EMPTY_GEOJSON
@@ -1171,7 +1188,6 @@ class ConditionsFeature(
     private fun keepSpotUpdated(force: Boolean = false) {
         if (!keepUpdated || downloading) return
         val now = System.currentTimeMillis()
-        if (!force && now - lastAutoAttempt < AUTO_RETRY_MS) return
         // No position yet (GPS off, just started): keep the last spot's area fresh, or the
         // area on the map's, rather than nothing.
         val (lat, lng) = spot() ?: (spotArea ?: area)?.let { (it.south + it.north) / 2 to (it.west + it.east) / 2 } ?: run {
@@ -1179,6 +1195,10 @@ class ConditionsFeature(
             return
         }
         val saved = spotArea
+        // The pause between tries is for retrying; a boat that has left its area gets the new one
+        // straight away (still no more than one download every MIN_DOWNLOAD_GAP_MS).
+        val leftArea = saved != null && !saved.middleContains(lat, lng)
+        if (!force && !leftArea && now - lastAutoAttempt < AUTO_RETRY_MS) return
         val fresh = saved != null && !ConditionsPolicy.needsUpdate(saved.fetchedMillis, latestRun, now) && saved.middleContains(lat, lng)
         if (fresh) return
         if (!online()) {
@@ -2303,6 +2323,8 @@ class ConditionsFeature(
         const val SPOT_ID = "spot"
         private const val SPOT_NAME = "My spot"
         private const val SPOT_RADIUS_KM = 200.0
+        /** Cells a side in the flow lines' grid: about 3 km apart over a 400 km area. */
+        private const val FLOW_GRID_SIDE = 128
         /** Between automatic tries, so a failing service isn't asked again and again. */
         private const val AUTO_RETRY_MS = 15 * 60_000L
         private const val WARNING = 0xFFF5B942.toInt()
