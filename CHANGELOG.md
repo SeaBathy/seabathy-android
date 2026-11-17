@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.7 — 2026-11-17
+
+- **Offline saving follows each map's rules:** OpenStreetMap's own tile server and OpenTopoMap
+  don't allow saving areas for offline use, and block apps that do, so SeaBathy no longer offers
+  it for those two. Every other map can still be saved.
+
 ## 1.2.6 — 2026-11-17
 
 - **Rename layers:** a RENAME button on every layer in the layers panel, so a download like

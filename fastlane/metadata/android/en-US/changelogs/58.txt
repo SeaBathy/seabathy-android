@@ -1,0 +1,1 @@
+Offline saving now follows each map's rules: OpenStreetMap's own tile server and OpenTopoMap don't allow offline copies, so SeaBathy no longer offers it for those two. Every other map can still be saved.

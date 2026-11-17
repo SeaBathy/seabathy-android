@@ -71,6 +71,7 @@ class OfflineTileDownloadController(
         maxZoom: Int,
         areaNote: String = "The area shown in 3D. Check the map's terms allow offline copies. Load the file as an MBTiles layer when it's done, and it's in 3D's Map list."
     ) {
+        noOfflineReason(source.urlTemplate)?.let { onError(it); return }
         var deepest = maxZoom.coerceAtLeast(DEFAULT_MIN_ZOOM)
         while (deepest > DEFAULT_MIN_ZOOM &&
             OfflineDownloadEstimator.estimateTiles(bounds, DEFAULT_MIN_ZOOM..deepest).tileCount > SUGGESTED_TILE_COUNT
@@ -176,12 +177,28 @@ class OfflineTileDownloadController(
         }
     }
 
-    private companion object {
-        const val DEFAULT_MIN_ZOOM = 10
-        const val DEFAULT_MAX_ZOOM = 14
+    companion object {
+        /**
+         * Tile servers whose rules forbid saving areas for offline use, and block apps that do:
+         * OpenStreetMap's own server (operations.osmfoundation.org/policies/tiles) and
+         * OpenTopoMap's volunteer server. Everything else is left to the user and the map's terms.
+         */
+        private val NO_OFFLINE_HOSTS = listOf("tile.openstreetmap.org", "opentopomap.org")
+
+        /** Why [urlTemplate] can't be saved offline, or null when it can. */
+        fun noOfflineReason(urlTemplate: String): String? {
+            val host = runCatching { java.net.URI(urlTemplate.replace("{", "").replace("}", "")).host }.getOrNull()?.lowercase()
+                ?: return null
+            if (NO_OFFLINE_HOSTS.none { host == it || host.endsWith(".$it") }) return null
+            return "This map's tile server doesn't allow saving areas for offline use, and blocks apps that do. " +
+                "Pick another map to save, or view this one online."
+        }
+
+        private const val DEFAULT_MIN_ZOOM = 10
+        private const val DEFAULT_MAX_ZOOM = 14
         /** More than this is almost always a mistake (an area or zoom range far too big): refused. */
-        const val MAX_REASONABLE_TILE_COUNT = 200_000L
+        private const val MAX_REASONABLE_TILE_COUNT = 200_000L
         /** The 3D area's suggested download stops its max zoom here (tens of MB of imagery). */
-        const val SUGGESTED_TILE_COUNT = 30_000L
+        private const val SUGGESTED_TILE_COUNT = 30_000L
     }
 }
