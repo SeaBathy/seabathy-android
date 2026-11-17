@@ -99,7 +99,7 @@ types are guessed from the data. Not for navigation.
 
 ## Marine park zones, reef and island names, boat ramps
 
-Each is off until turned on (Settings, or the chips at the top of the layers panel). Built from
+Each is off until turned on (on the phone: Settings → Australia; on the desktop: the switches at the top of the side panel). Built from
 these free datasets:
 
 - Marine park zones, from each authority's own zoning (all Creative Commons Attribution, CC BY):

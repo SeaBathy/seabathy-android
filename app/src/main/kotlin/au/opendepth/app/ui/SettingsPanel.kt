@@ -55,6 +55,11 @@ class SettingsPanel(
         val onZonesChanged: () -> Unit = {}
     )
 
+    /**
+     * Settings: a short menu of categories, each opening its own page, so nothing is a long scroll.
+     * Australia-only layers (marine park zones, reef names, ramps, buoys) have their own page,
+     * since the rest of the app works anywhere in the world.
+     */
     fun show(callbacks: Callbacks) {
         val body = panels.body()
         val rows = mutableMapOf<String, TextView>()
@@ -84,344 +89,396 @@ class SettingsPanel(
                 if (callbacks.showNavMarks()) "On" else "Off"
         }
 
-        body.addView(panels.sectionHeader("MAP DISPLAY"))
-
-        rows[ROW_CROSSHAIR] = panels.row(
-            "Crosshair colour",
-            colourName(visual().cursorColor)
-        ) {
-            panels.showChoicePanel(
-                title = "Crosshair colour",
-                labels = COLOUR_NAMES,
-                selectedIndex = COLOUR_VALUES.indexOf(visual().cursorColor)
-            ) { index ->
-                callbacks.onVisualChanged(visual().copy(cursorColor = COLOUR_VALUES[index]))
-                refresh()
-            }
-        }.also { panels.addRow(body, it) }
-
-        rows[ROW_COORDINATE] = panels.row(
-            "Coordinate colour",
-            colourName(visual().coordinateColor)
-        ) {
-            panels.showChoicePanel(
-                title = "Coordinate colour",
-                labels = COLOUR_NAMES,
-                selectedIndex = COLOUR_VALUES.indexOf(visual().coordinateColor)
-            ) { index ->
-                callbacks.onVisualChanged(
-                    visual().copy(coordinateColor = COLOUR_VALUES[index])
-                )
-                refresh()
-            }
-        }.also { panels.addRow(body, it) }
-
-        rows[ROW_DEPTH_MODE] = panels.row(
-            "Crosshair depth",
-            DepthDisplayMode.labelFor(visual().depthDisplayMode)
-        ) {
-            panels.showChoicePanel(
-                title = "Crosshair depth",
-                labels = DepthDisplayMode.LABELS,
-                selectedIndex = DepthDisplayMode.VALUES.indexOf(visual().depthDisplayMode)
-            ) { index ->
-                callbacks.onVisualChanged(
-                    visual().copy(depthDisplayMode = DepthDisplayMode.VALUES[index])
-                )
-                refresh()
-            }
-        }.also { panels.addRow(body, it) }
-
-        rows[ROW_COORD_SIZE] = panels.row(
-            "Coordinate text size",
-            "${visual().coordinateTextSize.roundToInt()} sp"
-        ) {
-            panels.showChoicePanel(
-                title = "Coordinate text size",
-                labels = COORDINATE_SIZES.map { "$it sp" },
-                selectedIndex = COORDINATE_SIZES.indexOf(
-                    visual().coordinateTextSize.roundToInt()
-                )
-            ) { index ->
-                callbacks.onVisualChanged(
-                    visual().copy(coordinateTextSize = COORDINATE_SIZES[index].toFloat())
-                )
-                refresh()
-            }
-        }.also { panels.addRow(body, it) }
-
-        rows[ROW_DEPTH_SIZE] = panels.row(
-            "Depth text size",
-            "${visual().depthTextSize.roundToInt()} sp"
-        ) {
-            panels.showChoicePanel(
-                title = "Depth text size",
-                labels = DEPTH_SIZES.map { "$it sp" },
-                selectedIndex = DEPTH_SIZES.indexOf(visual().depthTextSize.roundToInt())
-            ) { index ->
-                callbacks.onVisualChanged(
-                    visual().copy(depthTextSize = DEPTH_SIZES[index].toFloat())
-                )
-                refresh()
-            }
-        }.also { panels.addRow(body, it) }
-
-        rows[ROW_WAYPOINT_NAMES] = panels.row(
-            "Show waypoint names on map",
-            if (callbacks.showWaypointNames()) "On" else "Off"
-        ) {
-            panels.showChoicePanel(
-                title = "Show waypoint names on map",
-                labels = listOf("Off", "On"),
-                selectedIndex = if (callbacks.showWaypointNames()) 1 else 0
-            ) { index ->
-                callbacks.onShowWaypointNamesChanged(index == 1)
-                refresh()
-            }
-        }.also { panels.addRow(body, it) }
-
-        rows[ROW_GRID] = panels.row(
-            "Latitude and longitude grid",
-            if (callbacks.showGrid()) "On" else "Off"
-        ) {
-            panels.showChoicePanel(
-                title = "Latitude and longitude grid",
-                labels = listOf("Off", "On"),
-                selectedIndex = if (callbacks.showGrid()) 1 else 0
-            ) { index ->
-                callbacks.onShowGridChanged(index == 1)
-                refresh()
-            }
-        }.also { panels.addRow(body, it) }
-
-        rows[ROW_NAV_MARKS] = panels.row(
-            "Buoys, beacons, pipelines (beta)",
-            if (callbacks.showNavMarks()) "On" else "Off"
-        ) {
-            panels.showChoicePanel(
-                title = "Buoys, beacons, pipelines (beta)",
-                labels = listOf("Off", "On"),
-                selectedIndex = if (callbacks.showNavMarks()) 1 else 0
-            ) { index ->
-                callbacks.onShowNavMarksChanged(index == 1) { refresh() }
-            }
-        }.also { panels.addRow(body, it) }
-
-        callbacks.zones?.let { zones ->
-            panels.addRow(body, panels.row("Marine park zones", zones.mode.label + if (zones.mode == au.opendepth.app.map.ZoneMode.OFF) ": no-take zones in green" else "") {
-                val modes = au.opendepth.app.map.ZoneMode.entries
-                panels.showChoicePanel("Marine park zones", modes.map { it.label }, modes.indexOf(zones.mode)) { i ->
-                    fun set() {
-                        zones.setMode(modes[i])
-                        callbacks.onZonesChanged()
-                        settingsDialog?.dismiss()
-                        show(callbacks)
-                    }
-                    if (modes[i] != au.opendepth.app.map.ZoneMode.OFF && !zones.acknowledged) callbacks.confirmZones { set() } else set()
-                }
-            })
-            panels.addRow(body, panels.row("Reef and island names", if (zones.names) "On" else "Off: named reefs, islands, shoals and banks") {
-                zones.setNames(!zones.names)
-                callbacks.onZonesChanged()
-                settingsDialog?.dismiss()
-                show(callbacks)
-            })
-            panels.addRow(body, panels.row("Boat ramps", if (zones.ramps) "On" else "Off") {
-                zones.setRamps(!zones.ramps)
-                callbacks.onZonesChanged()
-                settingsDialog?.dismiss()
-                show(callbacks)
-            })
-            panels.addRow(body, panels.row("Warn me in a no-take zone", if (zones.warn) "On: when the GPS is on, even with the zones hidden" else "Off") {
-                zones.setWarn(!zones.warn)
-                settingsDialog?.dismiss()
-                show(callbacks)
-            })
+        /** Closes the open page and the menu: for rows that hand over to a screen on the chart. */
+        fun closeAll() {
+            categoryDialog?.dismiss()
+            settingsDialog?.dismiss()
         }
 
-        body.addView(panels.sectionHeader("MAP LAYERS"))
-        panels.addRow(
-            body,
-            panels.row("Get seabed depths for this area", "Free depth data, anywhere in the world") {
-                settingsDialog?.dismiss()
-                callbacks.onGetSeabed()
-            }
-        )
-        panels.addRow(
-            body,
-            panels.row("Load MBTiles file", "Charts and map packs (.mbtiles)") {
-                callbacks.onLoadMbtiles()
-            }
-        )
-        panels.addRow(
-            body,
-            panels.row("Load GeoTIFF", "Depth surveys (.tif)") {
-                callbacks.onLoadGeoTiff()
-            }
-        )
-        val qualities = au.opendepth.app.settings.RasterQuality.entries
-        lateinit var qualityRow: TextView
-        qualityRow = panels.row("GeoTIFF quality", callbacks.rasterQuality().label) {
-            panels.showChoicePanel(
-                title = "GeoTIFF quality",
-                labels = qualities.map { "${it.label} — ${it.detail}" },
-                selectedIndex = qualities.indexOf(callbacks.rasterQuality())
-            ) { index ->
-                callbacks.onRasterQualityChanged(qualities[index])
-                qualityRow.text = "GeoTIFF quality\n${qualities[index].label}"
-            }
-        }.also { panels.addRow(body, it) }
+        lateinit var openCategory: (Int) -> Unit
 
-        fun limitLabel(mb: Int) = if (mb == 0) "Auto (about ${au.opendepth.app.storage.HighDetailDepths.autoLimitMb()} MB on this phone now)" else "$mb MB"
-        lateinit var limitRow: TextView
-        limitRow = panels.row("High-detail download size", limitLabel(au.opendepth.app.storage.HighDetailDepths.limitChoice(context))) {
-            val choices = au.opendepth.app.storage.HighDetailDepths.LIMIT_CHOICES
-            panels.showChoicePanel(
-                title = "High-detail download size",
-                labels = choices.map { if (it == 0) limitLabel(0) + " — follows the phone's free memory" else "$it MB" + if (it >= 500) " — phones with plenty of memory" else "" },
-                selectedIndex = choices.indexOf(au.opendepth.app.storage.HighDetailDepths.limitChoice(context)).coerceAtLeast(0)
-            ) { index ->
-                au.opendepth.app.storage.HighDetailDepths.setLimitChoice(context, choices[index])
-                limitRow.text = "High-detail download size\n${limitLabel(choices[index])}"
-            }
-        }.also { panels.addRow(body, it) }
+        /** Rebuilds the open page after a change that alters its rows. */
+        fun reopen() {
+            categoryDialog?.dismiss()
+            openCategory(currentCategory)
+        }
 
-        body.addView(panels.sectionHeader("DEPTH COLOURS"))
-        body.addView(
-            panels.caption(
-                "Colours and depth range for survey layers. Depths outside the range are hidden.",
-                topPaddingDp = 0
-            )
-        )
-        panels.addRow(
-            body,
-            panels.row(
-                "Survey colours",
-                "Palette, depth range, shading"
+        fun mapDisplay(body: android.widget.LinearLayout) {
+            rows[ROW_CROSSHAIR] = panels.row(
+                "Crosshair colour",
+                colourName(visual().cursorColor)
             ) {
-                callbacks.onEditDepthColours()
-            }
-        )
+                panels.showChoicePanel(
+                    title = "Crosshair colour",
+                    labels = COLOUR_NAMES,
+                    selectedIndex = COLOUR_VALUES.indexOf(visual().cursorColor)
+                ) { index ->
+                    callbacks.onVisualChanged(visual().copy(cursorColor = COLOUR_VALUES[index]))
+                    refresh()
+                }
+            }.also { panels.addRow(body, it) }
 
-        body.addView(panels.sectionHeader("ONLINE MAPS"))
-        rows[ROW_XYZ] = panels.row("Online map layers", onlineLayersDetail()) {
-            xyzDialog.show(callbacks.xyz)
-        }.also { panels.addRow(body, it) }
-
-        body.addView(panels.sectionHeader("OFFLINE DATA"))
-        panels.addRow(
-            body,
-            panels.row(
-                "Offline maps",
-                "Download the area on screen"
+            rows[ROW_COORDINATE] = panels.row(
+                "Coordinate colour",
+                colourName(visual().coordinateColor)
             ) {
-                dataSourceDialog.show(callbacks.dataSources)
-            }
-        )
+                panels.showChoicePanel(
+                    title = "Coordinate colour",
+                    labels = COLOUR_NAMES,
+                    selectedIndex = COLOUR_VALUES.indexOf(visual().coordinateColor)
+                ) { index ->
+                    callbacks.onVisualChanged(
+                        visual().copy(coordinateColor = COLOUR_VALUES[index])
+                    )
+                    refresh()
+                }
+            }.also { panels.addRow(body, it) }
 
-        body.addView(panels.sectionHeader("NAVIGATION"))
-        panels.addRow(
-            body,
-            panels.row("Boat & navigation", "Speed, fuel, draft, units, alarms") {
-                callbacks.onNavigationSettings()
-            }
-        )
-        panels.addRow(
-            body,
-            panels.row("Saved routes", "Load, go, rename, export") {
-                callbacks.onRoutes()
-            }
-        )
-        panels.addRow(
-            body,
-            panels.row("Tides", "Heights, highs and lows, offline") {
-                settingsDialog?.dismiss()
-                callbacks.onTides()
-            }
-        )
-        panels.addRow(
-            body,
-            panels.row("Anchor alarm", "Alarm if the boat drags") {
-                settingsDialog?.dismiss()
-                callbacks.onAnchor()
-            }
-        )
-        panels.addRow(
-            body,
-            panels.row("Tracks", "Record where the boat goes, share as GPX") {
-                settingsDialog?.dismiss()
-                callbacks.onTracks()
-            }
-        )
-        panels.addRow(
-            body,
-            panels.row("Sea conditions", "Currents, waves, wind, sea temperature, offline") {
-                settingsDialog?.dismiss()
-                callbacks.onConditions()
-            }
-        )
+            rows[ROW_DEPTH_MODE] = panels.row(
+                "Crosshair depth",
+                DepthDisplayMode.labelFor(visual().depthDisplayMode)
+            ) {
+                panels.showChoicePanel(
+                    title = "Crosshair depth",
+                    labels = DepthDisplayMode.LABELS,
+                    selectedIndex = DepthDisplayMode.VALUES.indexOf(visual().depthDisplayMode)
+                ) { index ->
+                    callbacks.onVisualChanged(
+                        visual().copy(depthDisplayMode = DepthDisplayMode.VALUES[index])
+                    )
+                    refresh()
+                }
+            }.also { panels.addRow(body, it) }
 
-        body.addView(panels.sectionHeader("DATA"))
-        panels.addRow(
-            body,
-            panels.row("Backup and restore", "Waypoints, photos, routes, tracks and settings; daily to a folder") {
-                settingsDialog?.dismiss()
-                callbacks.onBackup()
-            }
-        )
-        panels.addRow(
-            body,
-            panels.row("Waypoint from a photo", "Where a gallery photo was taken, with the tide and sea then") {
-                settingsDialog?.dismiss()
-                callbacks.onWaypointFromPhoto()
-            }
-        )
-        panels.addRow(
-            body,
-            panels.row("Import GPX, KML or KMZ", "From a plotter, Google Earth or another app") {
-                callbacks.onImportGpx()
-            }
-        )
-        panels.addRow(
-            body,
-            panels.row("Export waypoints and route", "Share as a GPX file") {
-                callbacks.onExportGpx()
-            }
-        )
-        body.addView(
-            panels.caption(
-                "If something goes wrong, share this log so it can be fixed.",
-                topPaddingDp = 0
+            rows[ROW_COORD_SIZE] = panels.row(
+                "Coordinate text size",
+                "${visual().coordinateTextSize.roundToInt()} sp"
+            ) {
+                panels.showChoicePanel(
+                    title = "Coordinate text size",
+                    labels = COORDINATE_SIZES.map { "$it sp" },
+                    selectedIndex = COORDINATE_SIZES.indexOf(
+                        visual().coordinateTextSize.roundToInt()
+                    )
+                ) { index ->
+                    callbacks.onVisualChanged(
+                        visual().copy(coordinateTextSize = COORDINATE_SIZES[index].toFloat())
+                    )
+                    refresh()
+                }
+            }.also { panels.addRow(body, it) }
+
+            rows[ROW_DEPTH_SIZE] = panels.row(
+                "Depth text size",
+                "${visual().depthTextSize.roundToInt()} sp"
+            ) {
+                panels.showChoicePanel(
+                    title = "Depth text size",
+                    labels = DEPTH_SIZES.map { "$it sp" },
+                    selectedIndex = DEPTH_SIZES.indexOf(visual().depthTextSize.roundToInt())
+                ) { index ->
+                    callbacks.onVisualChanged(
+                        visual().copy(depthTextSize = DEPTH_SIZES[index].toFloat())
+                    )
+                    refresh()
+                }
+            }.also { panels.addRow(body, it) }
+
+            rows[ROW_WAYPOINT_NAMES] = panels.row(
+                "Show waypoint names on map",
+                if (callbacks.showWaypointNames()) "On" else "Off"
+            ) {
+                panels.showChoicePanel(
+                    title = "Show waypoint names on map",
+                    labels = listOf("Off", "On"),
+                    selectedIndex = if (callbacks.showWaypointNames()) 1 else 0
+                ) { index ->
+                    callbacks.onShowWaypointNamesChanged(index == 1)
+                    refresh()
+                }
+            }.also { panels.addRow(body, it) }
+
+            rows[ROW_GRID] = panels.row(
+                "Latitude and longitude grid",
+                if (callbacks.showGrid()) "On" else "Off"
+            ) {
+                panels.showChoicePanel(
+                    title = "Latitude and longitude grid",
+                    labels = listOf("Off", "On"),
+                    selectedIndex = if (callbacks.showGrid()) 1 else 0
+                ) { index ->
+                    callbacks.onShowGridChanged(index == 1)
+                    refresh()
+                }
+            }.also { panels.addRow(body, it) }
+        }
+
+        fun depths(body: android.widget.LinearLayout) {
+            panels.addRow(
+                body,
+                panels.row("Get seabed depths for this area", "Free depth data, anywhere in the world") {
+                    closeAll()
+                    callbacks.onGetSeabed()
+                }
             )
-        )
-        panels.addRow(
-            body,
-            panels.row("Export debug log", "What the app did, and any errors") {
-                callbacks.onShareDebugLog()
+            panels.addRow(
+                body,
+                panels.row("Load MBTiles file", "Charts and map packs (.mbtiles)") {
+                    callbacks.onLoadMbtiles()
+                }
+            )
+            panels.addRow(
+                body,
+                panels.row("Load GeoTIFF", "Depth surveys (.tif)") {
+                    callbacks.onLoadGeoTiff()
+                }
+            )
+            val qualities = au.opendepth.app.settings.RasterQuality.entries
+            lateinit var qualityRow: TextView
+            qualityRow = panels.row("GeoTIFF quality", callbacks.rasterQuality().label) {
+                panels.showChoicePanel(
+                    title = "GeoTIFF quality",
+                    labels = qualities.map { "${it.label} — ${it.detail}" },
+                    selectedIndex = qualities.indexOf(callbacks.rasterQuality())
+                ) { index ->
+                    callbacks.onRasterQualityChanged(qualities[index])
+                    qualityRow.text = "GeoTIFF quality\n${qualities[index].label}"
+                }
+            }.also { panels.addRow(body, it) }
+
+            fun limitLabel(mb: Int) = if (mb == 0) "Auto (about ${au.opendepth.app.storage.HighDetailDepths.autoLimitMb()} MB on this phone now)" else "$mb MB"
+            lateinit var limitRow: TextView
+            limitRow = panels.row("High-detail download size", limitLabel(au.opendepth.app.storage.HighDetailDepths.limitChoice(context))) {
+                val choices = au.opendepth.app.storage.HighDetailDepths.LIMIT_CHOICES
+                panels.showChoicePanel(
+                    title = "High-detail download size",
+                    labels = choices.map { if (it == 0) limitLabel(0) + " — follows the phone's free memory" else "$it MB" + if (it >= 500) " — phones with plenty of memory" else "" },
+                    selectedIndex = choices.indexOf(au.opendepth.app.storage.HighDetailDepths.limitChoice(context)).coerceAtLeast(0)
+                ) { index ->
+                    au.opendepth.app.storage.HighDetailDepths.setLimitChoice(context, choices[index])
+                    limitRow.text = "High-detail download size\n${limitLabel(choices[index])}"
+                }
+            }.also { panels.addRow(body, it) }
+
+            body.addView(panels.sectionHeader("DEPTH COLOURS"))
+            body.addView(
+                panels.caption(
+                    "Colours and depth range for survey layers. Depths outside the range are hidden.",
+                    topPaddingDp = 0
+                )
+            )
+            panels.addRow(
+                body,
+                panels.row(
+                    "Survey colours",
+                    "Palette, depth range, shading"
+                ) {
+                    callbacks.onEditDepthColours()
+                }
+            )
+        }
+
+        fun maps(body: android.widget.LinearLayout) {
+            rows[ROW_XYZ] = panels.row("Online map layers", onlineLayersDetail()) {
+                xyzDialog.show(callbacks.xyz)
+            }.also { panels.addRow(body, it) }
+            panels.addRow(
+                body,
+                panels.row(
+                    "Offline maps",
+                    "Download the area on screen"
+                ) {
+                    dataSourceDialog.show(callbacks.dataSources)
+                }
+            )
+        }
+
+        fun boat(body: android.widget.LinearLayout) {
+            panels.addRow(
+                body,
+                panels.row("Boat & navigation", "Speed, fuel, draft, units, alarms") {
+                    callbacks.onNavigationSettings()
+                }
+            )
+            panels.addRow(
+                body,
+                panels.row("Saved routes", "Load, go, rename, export") {
+                    callbacks.onRoutes()
+                }
+            )
+            panels.addRow(
+                body,
+                panels.row("Anchor alarm", "Alarm if the boat drags") {
+                    closeAll()
+                    callbacks.onAnchor()
+                }
+            )
+            panels.addRow(
+                body,
+                panels.row("Tracks", "Record where the boat goes, share as GPX") {
+                    closeAll()
+                    callbacks.onTracks()
+                }
+            )
+        }
+
+        fun tidesAndSea(body: android.widget.LinearLayout) {
+            panels.addRow(
+                body,
+                panels.row("Tides", "Heights, highs and lows, offline") {
+                    closeAll()
+                    callbacks.onTides()
+                }
+            )
+            panels.addRow(
+                body,
+                panels.row("Sea conditions", "Currents, waves, wind, sea temperature, offline") {
+                    closeAll()
+                    callbacks.onConditions()
+                }
+            )
+        }
+
+        fun australia(body: android.widget.LinearLayout) {
+            body.addView(
+                panels.caption(
+                    "These layers cover Australian waters only. Everything else in SeaBathy works anywhere in the world.",
+                    topPaddingDp = 0
+                )
+            )
+            callbacks.zones?.let { zones ->
+                panels.addRow(body, panels.row("Marine park zones", zones.mode.label + if (zones.mode == au.opendepth.app.map.ZoneMode.OFF) ": no-take zones in green" else "") {
+                    val modes = au.opendepth.app.map.ZoneMode.entries
+                    panels.showChoicePanel("Marine park zones", modes.map { it.label }, modes.indexOf(zones.mode)) { i ->
+                        fun set() {
+                            zones.setMode(modes[i])
+                            callbacks.onZonesChanged()
+                            reopen()
+                        }
+                        if (modes[i] != au.opendepth.app.map.ZoneMode.OFF && !zones.acknowledged) callbacks.confirmZones { set() } else set()
+                    }
+                })
+                panels.addRow(body, panels.row("Reef and island names", if (zones.names) "On" else "Off: named reefs, islands, shoals and banks") {
+                    zones.setNames(!zones.names)
+                    callbacks.onZonesChanged()
+                    reopen()
+                })
+                panels.addRow(body, panels.row("Boat ramps", if (zones.ramps) "On" else "Off") {
+                    zones.setRamps(!zones.ramps)
+                    callbacks.onZonesChanged()
+                    reopen()
+                })
+                panels.addRow(body, panels.row("Warn me in a no-take zone", if (zones.warn) "On: when the GPS is on, even with the zones hidden" else "Off") {
+                    zones.setWarn(!zones.warn)
+                    reopen()
+                })
             }
-        )
-        panels.addRow(
-            body,
-            panels.row("Safety and terms", "Not for navigation: what SeaBathy is and isn't") {
-                SafetyTerms.show(context)
-            }
-        )
-        panels.addRow(
-            body,
-            panels.row("Privacy policy", "No account, no ads, no tracking: what the app sends and why") {
-                openPrivacyPolicy()
-            }
-        )
-        panels.addRow(
-            body,
-            panels.row("Licences and credits", "Open-source libraries and data sources") {
-                showLicences()
-            }
+            rows[ROW_NAV_MARKS] = panels.row(
+                "Buoys, beacons, pipelines (beta)",
+                if (callbacks.showNavMarks()) "On" else "Off"
+            ) {
+                panels.showChoicePanel(
+                    title = "Buoys, beacons, pipelines (beta)",
+                    labels = listOf("Off", "On"),
+                    selectedIndex = if (callbacks.showNavMarks()) 1 else 0
+                ) { index ->
+                    callbacks.onShowNavMarksChanged(index == 1) { refresh() }
+                }
+            }.also { panels.addRow(body, it) }
+        }
+
+        fun dataAndBackup(body: android.widget.LinearLayout) {
+            panels.addRow(
+                body,
+                panels.row("Backup and restore", "Waypoints, photos, routes, tracks and settings; daily to a folder") {
+                    closeAll()
+                    callbacks.onBackup()
+                }
+            )
+            panels.addRow(
+                body,
+                panels.row("Waypoint from a photo", "Where a gallery photo was taken, with the tide and sea then") {
+                    closeAll()
+                    callbacks.onWaypointFromPhoto()
+                }
+            )
+            panels.addRow(
+                body,
+                panels.row("Import GPX, KML or KMZ", "From a plotter, Google Earth or another app") {
+                    callbacks.onImportGpx()
+                }
+            )
+            panels.addRow(
+                body,
+                panels.row("Export waypoints and route", "Share as a GPX file") {
+                    callbacks.onExportGpx()
+                }
+            )
+            body.addView(
+                panels.caption(
+                    "If something goes wrong, share this log so it can be fixed.",
+                    topPaddingDp = 0
+                )
+            )
+            panels.addRow(
+                body,
+                panels.row("Export debug log", "What the app did, and any errors") {
+                    callbacks.onShareDebugLog()
+                }
+            )
+        }
+
+        fun about(body: android.widget.LinearLayout) {
+            panels.addRow(
+                body,
+                panels.row("Safety and terms", "Not for navigation: what SeaBathy is and isn't") {
+                    SafetyTerms.show(context)
+                }
+            )
+            panels.addRow(
+                body,
+                panels.row("Privacy policy", "No account, no ads, no tracking: what the app sends and why") {
+                    openPrivacyPolicy()
+                }
+            )
+            panels.addRow(
+                body,
+                panels.row("Licences and credits", "Open-source libraries and data sources") {
+                    showLicences()
+                }
+            )
+        }
+
+        val categories = listOf(
+            Triple("Map display", "Crosshair, text sizes, waypoint names, grid", ::mapDisplay),
+            Triple("Depths", "Seabed downloads, your own files, depth colours", ::depths),
+            Triple("Online and offline maps", "Satellite and other map layers, save maps offline", ::maps),
+            Triple("Boat and navigation", "Boat, units, routes, anchor alarm, tracks", ::boat),
+            Triple("Tides and sea conditions", "Tide charts, wind, waves, currents, sea temperature", ::tidesAndSea),
+            Triple("Australia", "Marine park zones, reef names, boat ramps, buoys", ::australia),
+            Triple("Waypoints and backup", "Backup, photos, GPX and KML, debug log", ::dataAndBackup),
+            Triple("About", "Safety and terms, privacy, licences", ::about)
         )
 
-        refresh()
-        settingsDialog = panels.showPanel("Settings", body)
+        openCategory = { index ->
+            currentCategory = index
+            val (title, _, build) = categories[index]
+            val page = panels.body()
+            rows.clear()
+            build(page)
+            refresh()
+            categoryDialog = panels.showPanel(title, page)
+        }
+
+        val menu = panels.body()
+        categories.forEachIndexed { index, (title, detail, _) ->
+            panels.addRow(menu, panels.row(title, detail) { openCategory(index) })
+        }
+        settingsDialog = panels.showPanel("Settings", menu)
     }
+
+    private var categoryDialog: android.app.Dialog? = null
+    private var currentCategory = 0
 
     private fun openPrivacyPolicy() {
         val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(PRIVACY_POLICY_URL))

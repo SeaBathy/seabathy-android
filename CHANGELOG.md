@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.2.8 — 2026-11-17
+
+- **Settings in categories:** a short menu (Map display, Depths, Online and offline maps, Boat and
+  navigation, Tides and sea conditions, Australia, Waypoints and backup, About) instead of one long
+  list. Each opens its own page.
+- **Australia page:** marine park zones, the no-take warning, reef and island names, boat ramps and
+  buoys now live together under Settings → Australia, since they cover Australian waters only and
+  the rest of the app works worldwide. The zone, name and ramp buttons in the layers panel are gone.
+
 ## 1.2.7 — 2026-11-17
 
 - **Offline saving follows each map's rules:** OpenStreetMap's own tile server and OpenTopoMap

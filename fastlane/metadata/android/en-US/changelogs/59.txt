@@ -1,0 +1,1 @@
+Settings are now in categories, each with its own page, instead of one long list. Marine park zones, reef names, boat ramps and buoys have their own Australia page, since they cover Australian waters only.

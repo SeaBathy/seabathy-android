@@ -537,7 +537,6 @@ class MainActivity : AppCompatActivity() {
             }
         )
         sidePanel = SidePanel(views)
-        addQuickZones()
         addPhotoWaypointButton()
         coordinateEditor = CoordinateEditorDialog(this, panels)
         gpxExport = GpxExportService(this)
@@ -1422,7 +1421,6 @@ class MainActivity : AppCompatActivity() {
     private var noTakeLoading = false
     /** The no-take zone the boat was last in, so the warning comes once on the way in. */
     private var inNoTake: String? = null
-    private var quickZonesRow: android.widget.LinearLayout? = null
 
     private fun zoneCredits(): List<String> {
         if (!::zones.isInitialized) return emptyList()
@@ -1435,7 +1433,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun zonesChanged() {
         styleCoordinator.refreshAttribution()
-        refreshQuickZones()
     }
 
     /** Turning zones on: the first-launch agreement (SafetyTerms) already covers it. */
@@ -1487,63 +1484,6 @@ class MainActivity : AppCompatActivity() {
             actions += au.opendepth.app.ui.InfoCard.Action("Stop warnings") { zones.setWarn(false) }
             actions += au.opendepth.app.ui.InfoCard.Action("OK", primary = true)
         }.show()
-    }
-
-    /** One tap to switch the zones, names and ramps, at the top of the layers panel. */
-    private fun addQuickZones() {
-        val basemap = findViewById<android.view.View>(R.id.spinBasemap) ?: return
-        val box = basemap.parent as? android.widget.LinearLayout ?: return
-        val header = android.widget.TextView(this).apply {
-            text = "ON THE CHART"
-            setTextColor(androidx.core.content.ContextCompat.getColor(this@MainActivity, R.color.text_muted))
-            textSize = 10f
-            setPadding(0, 0, 0, dp(6))
-        }
-        val row = android.widget.LinearLayout(this).apply { orientation = android.widget.LinearLayout.HORIZONTAL }
-        box.addView(header, 0)
-        box.addView(row, 1, android.widget.LinearLayout.LayoutParams(android.widget.LinearLayout.LayoutParams.MATCH_PARENT, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(12) })
-        quickZonesRow = row
-        refreshQuickZones()
-    }
-
-    private fun refreshQuickZones() {
-        val row = quickZonesRow ?: return
-        row.removeAllViews()
-        fun chip(label: String, on: Boolean, description: String, click: () -> Unit) = android.widget.TextView(this).apply {
-            text = label
-            gravity = android.view.Gravity.CENTER
-            textSize = 12f
-            contentDescription = description
-            setTextColor(if (on) android.graphics.Color.parseColor("#0B1622") else android.graphics.Color.parseColor("#E2E8F0"))
-            background = android.graphics.drawable.GradientDrawable().apply {
-                cornerRadius = dp(16).toFloat()
-                setColor(if (on) android.graphics.Color.parseColor("#2DD4BF") else android.graphics.Color.parseColor("#29313A"))
-            }
-            setPadding(dp(6), dp(8), dp(6), dp(8))
-            setOnClickListener { click() }
-        }
-        val params = { android.widget.LinearLayout.LayoutParams(0, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(6) } }
-        val modeLabel = when (zones.mode) {
-            au.opendepth.app.map.ZoneMode.OFF -> "Zones off"
-            au.opendepth.app.map.ZoneMode.NO_TAKE -> "No-take"
-            au.opendepth.app.map.ZoneMode.ALL -> "All zones"
-        }
-        row.addView(chip(modeLabel, zones.mode != au.opendepth.app.map.ZoneMode.OFF, "Marine park zones: $modeLabel. Tap to change") {
-            val next = au.opendepth.app.map.ZoneMode.entries[(zones.mode.ordinal + 1) % au.opendepth.app.map.ZoneMode.entries.size]
-            fun set() {
-                zones.setMode(next)
-                zonesChanged()
-            }
-            if (next != au.opendepth.app.map.ZoneMode.OFF && !zones.acknowledged) confirmZones { set() } else set()
-        }, params())
-        row.addView(chip("Names", zones.names, "Reef and island names") {
-            zones.setNames(!zones.names)
-            zonesChanged()
-        }, params())
-        row.addView(chip("Ramps", zones.ramps, "Boat ramps") {
-            zones.setRamps(!zones.ramps)
-            zonesChanged()
-        }, params())
     }
 
     // Man overboard ------------------------------------------------------------------

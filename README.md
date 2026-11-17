@@ -128,7 +128,7 @@ Sentinel-2 cloudless satellite imagery.
 The built-in satellite map is free Sentinel-2 imagery, about 10 m per pixel: good for reefs,
 sand and channels, but soft up close. For more detail you can add any online satellite map
 that gives an XYZ tile link (a web address with `{z}`, `{x}` and `{y}` in it) under
-**Settings → Online map layers → Your own tile link**. Some providers, Esri World Imagery for example, have sub-metre imagery of most
+**Settings → Online and offline maps → Online map layers → Your own tile link**. Some providers, Esri World Imagery for example, have sub-metre imagery of most
 coastlines. Those services are run by their owners under their own terms, which usually limit
 how they may be used. SeaBathy shows the provider's credit with any map you add and can save any
 of them offline: what you add and download, and keeping to each provider's terms, is up to you.
@@ -192,8 +192,7 @@ GPS was off) as a waypoint, buzzes, and starts steering back to it.
 <details>
 <summary><b>Marine park zones, reef names and boat ramps</b></summary>
 
-Turn them on with the **Zones**, **Names** and **Ramps** switches at the top of the Layers drawer
-(or in Settings). Zones cover every Australian marine park, from each authority's official zoning:
+Turn them on in **Settings → Australia** (they cover Australian waters only). Zones cover every Australian marine park, from each authority's official zoning:
 no-take in green, limited fishing in yellow, general use in blue; show all or only the no-take ones,
 and tap a zone for its official name and what's allowed.
 With the GPS on, the phone buzzes and warns you when the boat goes into a no-take zone. A guide
@@ -327,7 +326,7 @@ project.
 ## Credits and licence
 
 - **Code:** GNU GPL-3.0, see [LICENSE](LICENSE): free to use, change and share; anyone who shares a copy or a changed version must keep it free and open source under the same licence.
-- **Libraries:** [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Full licence texts are in the app under Settings → Licences and credits.
+- **Libraries:** [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Full licence texts are in the app under Settings → About → Licences and credits.
 - **Maps and data:** each map's credit is shown on screen while it's shown. Every source, its credit and its terms: [DATA_ATTRIBUTION.md](DATA_ATTRIBUTION.md).
 - **Building from source, architecture and tests:** [DEVELOPMENT.md](DEVELOPMENT.md) and [BUILD_AND_TEST.md](BUILD_AND_TEST.md).
 - **Changes:** [CHANGELOG.md](CHANGELOG.md). Contributions welcome: [CONTRIBUTING.md](CONTRIBUTING.md).

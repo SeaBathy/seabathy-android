@@ -61,7 +61,7 @@ class DownloadPrompts(
             if (removed.any { it.name.endsWith(".part") }) {
                 showMessage(
                     "An offline map download was interrupted before it finished (the phone closed the app) " +
-                        "and the partial file was removed. Start it again from Settings → Offline data sources."
+                        "and the partial file was removed. Start it again from Settings → Online and offline maps → Offline maps."
                 )
             }
         }

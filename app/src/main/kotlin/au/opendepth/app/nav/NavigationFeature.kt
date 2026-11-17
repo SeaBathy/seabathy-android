@@ -493,7 +493,7 @@ class NavigationFeature(
                 append("Imported ${count(added, "waypoint")}")
                 append(if (savedTracks > 0) ", ${count(savedRoutes.size, "route")} and ${count(savedTracks, "track")}." else " and ${count(savedRoutes.size, "route")}.")
                 if (savedRoutes.isNotEmpty()) append(" Routes are in Saved routes.")
-                if (savedTracks > 0) append(" Tracks are in Settings → Tracks.")
+                if (savedTracks > 0) append(" Tracks are in Settings → Boat and navigation → Tracks.")
             }
             callbacks.alert(message)
             // Shown straight away, unless that would throw away an unsaved route being planned.
