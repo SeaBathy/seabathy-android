@@ -51,7 +51,7 @@ class DataSourceDialog(
             body.addView(
                 panels.caption(
                     "A map or satellite tile link with {z}, {x} and {y} in it. " +
-                        "Check its licence allows saving tiles offline.",
+                        "You're responsible for having the right to save this map offline: check its licence.",
                     topPaddingDp = 0
                 )
             )

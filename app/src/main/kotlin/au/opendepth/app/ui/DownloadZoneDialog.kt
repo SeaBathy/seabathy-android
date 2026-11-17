@@ -48,6 +48,8 @@ class DownloadZoneDialog(
             )
         )
 
+        body.addView(panels.caption("You're responsible for having the right to save this map offline: check its licence."))
+
         body.addView(panels.sectionHeader("ZOOM RANGE"))
         body.addView(
             panels.caption(

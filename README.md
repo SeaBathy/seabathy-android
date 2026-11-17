@@ -128,10 +128,12 @@ Sentinel-2 cloudless satellite imagery.
 The built-in satellite map is free Sentinel-2 imagery, about 10 m per pixel: good for reefs,
 sand and channels, but soft up close. For more detail you can add any online satellite map
 that gives an XYZ tile link (a web address with `{z}`, `{x}` and `{y}` in it) under
-**Settings → Online and offline maps → Online map layers → Your own tile link**. Some providers, Esri World Imagery for example, have sub-metre imagery of most
+**Settings → Online and offline maps → Online map layers → Your own tile link**. Some providers have sub-metre imagery of most
 coastlines. Those services are run by their owners under their own terms, which usually limit
-how they may be used. SeaBathy shows the provider's credit with any map you add and can save any
+how they may be used and whether they may be saved offline, so check before you save one. SeaBathy shows the provider's credit with any map you add and can save any
 of them offline: what you add and download, and keeping to each provider's terms, is up to you.
+If a server refuses downloads, SeaBathy stops rather than keep asking, and suggests a service
+that gives you your own key.
 </details>
 
 <details>

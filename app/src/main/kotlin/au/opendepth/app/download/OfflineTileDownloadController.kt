@@ -115,7 +115,12 @@ class OfflineTileDownloadController(
         scope.launch {
             val sampleResult = withContext(Dispatchers.IO) {
                 sampleClient.resetLogBudget()
+                sampleClient.resetPoliteness()
                 tileSampler.sample(source.urlTemplate, bounds, zoomRange)
+            }
+            sampleClient.refusal?.let {
+                onFailure("$it ${TileFetchClient.TRY_A_KEY}")
+                return@launch
             }
 
             val averageBytes = sampleResult.averageBytes

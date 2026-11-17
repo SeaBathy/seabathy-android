@@ -54,7 +54,7 @@ class XyzTileDialog(
         body.addView(panels.sectionHeader("YOUR OWN TILE LINK"))
         body.addView(
             panels.caption(
-                "A link with {z}, {x} and {y} in it. Check the provider's licence allows this.",
+                "A link with {z}, {x} and {y} in it (with your own key, if the service gives you one). Check the provider's licence allows this.",
                 topPaddingDp = 0
             )
         )

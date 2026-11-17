@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- **Polite offline downloads:** saving a map keeps a steady pace (about 20 tiles a second), pauses
+  whenever the map's server asks it to slow down, and stops if the server keeps refusing, instead
+  of retrying. It then suggests a map service that gives you your own key.
+- **Clearer wording:** the save screens say plainly that you're responsible for having the right
+  to save a map offline.
+
 ## 1.2.9 — 2026-11-17
 
 - **Tides anywhere, even inland:** following you more than about 25 km from the sea used to give

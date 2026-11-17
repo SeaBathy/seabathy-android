@@ -42,6 +42,7 @@ class TileDownloadRunner(
     ): Result {
         fetchClient.resetLogBudget()
         fetchClient.resetCancellation()
+        fetchClient.resetPoliteness()
         deleteStaleDownloadParts(offlineDownloadsDir()).takeIf { it.isNotEmpty() }?.let { removed ->
             DiagnosticLog.log(TAG, "removed partial files left by an interrupted download: ${removed.joinToString { it.name }}")
         }
@@ -127,6 +128,8 @@ class TileDownloadRunner(
                 // progress counts only saved tiles.
                 for (chunk in tiles.chunked(WRITE_BATCH_SIZE)) {
                     jobContext.ensureActive()
+                    // The server refused (blocked, or kept saying slow down): stop, don't keep knocking.
+                    fetchClient.refusal?.let { throw IOException("$it ${TileFetchClient.TRY_A_KEY}") }
                     // Signal drops at sea: wait for it to come back rather
                     // than burning every remaining tile as a failure.
                     if (!gaveUpWaiting && !waitForNetwork(onWaitingForNetwork)) gaveUpWaiting = true
@@ -217,6 +220,10 @@ class TileDownloadRunner(
                 "succeeded=$succeeded failed=$failed bytes=$bytesDone byZoom=[$byZoomSummary]"
         )
 
+        fetchClient.refusal?.let {
+            destination.delete()
+            throw IOException("$it ${TileFetchClient.TRY_A_KEY}")
+        }
         if (succeeded == 0L) {
             destination.delete()
             throw IOException("None of the $total tiles in this area could be downloaded")
