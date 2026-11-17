@@ -1,0 +1,1 @@
+High-detail depths: draw the box you want on the chart and see the download size first. The download size now follows each phone's memory (or pick 100 MB to 1 GB in Settings). High-detail files open piece by piece, so the phone stays smooth and the map no longer jumps after a build.

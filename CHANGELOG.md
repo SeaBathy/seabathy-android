@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.5 — 2026-11-16
 
 - **Draw the box for high-detail depths:** drag on the chart to draw the area you want (two
   fingers still move the map), and see its size and the download before anything starts.
