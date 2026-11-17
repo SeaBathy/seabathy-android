@@ -1,0 +1,1 @@
+Tides now work inland: following you far from the sea finds the nearest coast with tides. Sea conditions download the new area as soon as you leave the old one. Smoother sea maps and settings.
