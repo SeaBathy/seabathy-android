@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.3.0 — 2026-11-18
 
 - **Polite offline downloads:** saving a map keeps a steady pace (about 20 tiles a second), pauses
   whenever the map's server asks it to slow down, and stops if the server keeps refusing, instead
