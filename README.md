@@ -205,9 +205,15 @@ only: the official zoning map is the law.
 <details>
 <summary><b>Good-weather alerts</b></summary>
 
-**Sea conditions** → **Good-weather alert**: set the most wind and waves you'll go out in, how many
-daylight hours in a row, how far ahead to look and which days (any, weekends or chosen days). A few
-times a day the app checks the forecast at your spot and tells you about each good day once.
+**Sea conditions** → **Good-weather alert**: add up to three places on the map, each with how far
+round it to check (2 to 50 km), and set the most wind, gusts and waves you'll go out in, how many
+hours in a row, between which hours, how far ahead and on which days. Every 4 hours Android runs a
+small check for a few seconds (the app itself doesn't run, so it costs next to no battery) and
+tells you when a day starts or stops looking good, with a line for each day: times, wind and
+direction, gusts and waves, the worst anywhere in the circle. Nothing is sent between 9 pm and 7 am.
+When a day looks good it also saves that place's forecast (on any connection, Wi-Fi only, or not
+at all), so tapping the alert shows it straight away, even offline. Saved forecasts are removed by
+themselves 2 days after they run out.
 </details>
 
 <details>
@@ -296,7 +302,7 @@ height, wind (including Beaufort), waves and swell, current and sea temperature.
 - Satellite sea temperature, temperature breaks, chlorophyll, sea level and salinity; temperature at a depth you choose (10 to 300 m)
 - Colour layers with moving flow lines, a time slider and values at the crosshair
 - Labelled temperature lines, a target temperature band, eddy outlines, and sun, moon and solunar times
-- Good-weather alerts for your spot, days ahead and chosen days
+- Good-weather alerts for up to three places, with wind, gust and wave limits, hours and days
 </details>
 
 <details>

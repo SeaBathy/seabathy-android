@@ -151,6 +151,8 @@ class ConditionsFeature(
     private var onlineAt = 0L
     private var onlineNow = true
     private var picking = false
+    /** The map's parent, for the alert place picker. */
+    private var boundRoot: ViewGroup? = null
     private var lastAutoAttempt = 0L
     /** When the forecast models last had a new run, as last checked; and when that was. */
     private var latestRun: Long? = null
@@ -408,6 +410,7 @@ class ConditionsFeature(
      */
     fun bind(root: ViewGroup, mapView: View, topViews: () -> List<View>, bottomViews: List<View>) {
         this.topViews = topViews
+        boundRoot = root
         root.addView(flowLines, root.indexOfChild(mapView) + 1, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         flowLines.visibility = View.GONE
         root.addView(card, CoordinatorLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
@@ -518,7 +521,17 @@ class ConditionsFeature(
         if (shown) redraw() else updateBox()
         // Back to the app after a while: is there a newer forecast? (At start-up
         // the saved data is still being read: the start-up check comes after.)
-        if (startupDone) checkForUpdates()
+        if (startupDone) {
+            checkForUpdates()
+            // The alert's check may have saved a forecast while the app was away.
+            scope.launch {
+                withContext(work) {
+                    store.forget(ConditionsAlerts.AREA_PREFIX)
+                    store.summaries()
+                }
+                showNewestHere()
+            }
+        }
     }
 
     fun onPause() {
@@ -1423,16 +1436,35 @@ class ConditionsFeature(
             AlertRules.WEEKENDS -> "weekends"
             else -> r.weekdays.sorted().joinToString(", ") { DAY_NAMES[it - 1] }
         }
-        return "On: wind ≤ ${u.wind.format(r.windMaxKn)}, waves ≤ ${wavesText(r.waveMaxM)}, ${r.minHours} h+, next ${r.daysAhead} days, $days"
+        val where = when (r.places.size) {
+            0 -> "your spot"
+            1 -> r.places[0].name
+            else -> "${r.places.size} places"
+        }
+        return "On for $where: wind ≤ ${u.wind.format(r.windMaxKn)}, waves ≤ ${wavesText(r.waveMaxM)}, ${r.minHours} h+, $days"
     }
 
-    /** The alert's settings: limits, how far ahead, which days. */
+    private fun hourText(h: Int) = String.format(Locale.US, "%02d:00", h)
+
+    private fun hoursLabel(r: AlertRules) =
+        "${r.fromHour?.let { hourText(it) } ?: "Sunrise"} to ${r.toHour?.let { hourText(it) } ?: "sunset"}"
+
+    private fun saveLabel(mode: String) = when (mode) {
+        AlertRules.SAVE_WIFI -> "On Wi-Fi only"
+        AlertRules.SAVE_OFF -> "Off"
+        else -> "Yes, on any connection"
+    }
+
+    /** Notifications this app may post: off, the alert can't say anything. */
+    private fun notificationsAllowed() = androidx.core.app.NotificationManagerCompat.from(activity).areNotificationsEnabled()
+
+    /** The alert's settings: places, limits, hours, days, and saving the forecast. */
     private fun showAlerts() {
         val r = ConditionsAlerts.load(preferences)
         val u = units()
-        val format = NavFormat(u)
         fun update(new: AlertRules) {
             ConditionsAlerts.save(activity, preferences, new)
+            store.forget(ConditionsAlerts.AREA_PREFIX)
             if (new.enabled && !r.enabled && android.os.Build.VERSION.SDK_INT >= 33) {
                 androidx.core.app.ActivityCompat.requestPermissions(activity, arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 41)
             }
@@ -1441,22 +1473,81 @@ class ConditionsFeature(
         }
         val body = panels.body()
         body.addView(panels.caption(
-            "A few times a day the app checks the forecast at your spot (${if (followGps) "the boat's last position" else "the spot you set"}) " +
-                "and tells you when a day has enough daylight hours with wind and waves inside your limits. Each day is told once.",
+            "Every ${ConditionsAlerts.CHECK_HOURS} hours Android wakes a small check for a few seconds (the app doesn't run, " +
+                "so it costs next to no battery) that looks at the forecast for your places. It tells you when a day looks " +
+                "good, and when one stops looking good, with a short breakdown. Nothing is sent between 9 pm and 7 am.",
             topPaddingDp = 0
         ))
         panels.addRow(body, panels.row("Alert", if (r.enabled) "On" else "Off") { update(r.copy(enabled = !r.enabled)) })
+        if (r.enabled && !notificationsAllowed()) {
+            panels.addRow(body, panels.row("Notifications are off", "Tap to allow them for SeaBathy, or the alert can't tell you") {
+                runCatching {
+                    activity.startActivity(
+                        android.content.Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                            .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, activity.packageName)
+                    )
+                }
+            })
+        }
+
+        body.addView(panels.sectionHeader("PLACES"))
+        if (r.places.isEmpty()) {
+            body.addView(panels.caption(
+                "Add the water you go out on. Until you do, the alert checks your spot " +
+                    "(${if (followGps) "the boat's last position" else "the spot you set"}).",
+                topPaddingDp = 0
+            ))
+        }
+        r.places.forEach { place ->
+            panels.addRow(body, panels.row(place.name, "Within ${place.radiusKm.toInt()} km · tap to change") {
+                val options = listOf("Show on the map", "Move or resize", "Rename", "Remove")
+                panels.showChoicePanel(place.name, options, -1) { i ->
+                    when (i) {
+                        0 -> {
+                            panels.dismissAll()
+                            showAlertPlace(place.lat, place.lng, place.radiusKm)
+                        }
+                        1 -> pickAlertPlace(place)
+                        2 -> nameAlertPlace(place.name) { name -> update(r.copy(places = r.places.map { if (it.id == place.id) it.copy(name = name) else it })) }
+                        else -> panels.confirm("Remove ${place.name}?", "The alert stops checking it, and its saved forecast is removed.", "Remove") {
+                            update(r.copy(places = r.places.filter { it.id != place.id }))
+                        }
+                    }
+                }
+            })
+        }
+        if (r.places.size < AlertRules.MAX_PLACES) {
+            panels.addRow(body, panels.row("Add a place", "Choose it on the map, with how far round it to check") { pickAlertPlace(null) })
+        }
+
+        body.addView(panels.sectionHeader("GOOD MEANS"))
         panels.addRow(body, panels.row("Wind at most", u.wind.format(r.windMaxKn)) {
             val choices = listOf(5.0, 8.0, 10.0, 12.0, 15.0, 18.0, 20.0, 25.0)
             panels.showChoicePanel("Wind at most", choices.map { u.wind.format(it) }, choices.indexOf(r.windMaxKn)) { i -> update(r.copy(windMaxKn = choices[i])) }
+        })
+        panels.addRow(body, panels.row("Gusts at most", if (r.gustMaxKn > 0) u.wind.format(r.gustMaxKn) else "Any") {
+            val choices = listOf(0.0, 10.0, 12.0, 15.0, 18.0, 20.0, 25.0, 30.0)
+            panels.showChoicePanel("Gusts at most", choices.map { if (it > 0) u.wind.format(it) else "Any (no gust limit)" }, choices.indexOf(r.gustMaxKn)) { i ->
+                update(r.copy(gustMaxKn = choices[i]))
+            }
         })
         panels.addRow(body, panels.row("Waves at most", wavesText(r.waveMaxM)) {
             val choices = listOf(0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 2.5, 3.0)
             panels.showChoicePanel("Waves at most", choices.map { wavesText(it) }, choices.indexOf(r.waveMaxM)) { i -> update(r.copy(waveMaxM = choices[i])) }
         })
-        panels.addRow(body, panels.row("For at least", "${r.minHours} hours of daylight in a row") {
+        panels.addRow(body, panels.row("For at least", "${r.minHours} hours in a row") {
             val choices = listOf(2, 3, 4, 5, 6, 8)
             panels.showChoicePanel("For at least", choices.map { "$it hours" }, choices.indexOf(r.minHours)) { i -> update(r.copy(minHours = choices[i])) }
+        })
+        panels.addRow(body, panels.row("Between", hoursLabel(r)) {
+            val starts = listOf<Int?>(null, 4, 5, 6, 7, 8, 9, 10)
+            panels.showChoicePanel("From", starts.map { it?.let { h -> hourText(h) } ?: "Sunrise" }, starts.indexOf(r.fromHour)) { i ->
+                val from = starts[i]
+                val ends = listOf<Int?>(null, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20).filter { it == null || from == null || it >= from + 2 }
+                panels.showChoicePanel("Until", ends.map { it?.let { h -> hourText(h) } ?: "Sunset" }, ends.indexOf(r.toHour)) { j ->
+                    update(r.copy(fromHour = from, toHour = ends[j]))
+                }
+            }
         })
         panels.addRow(body, panels.row("Look ahead", "Today and the next ${r.daysAhead} days") {
             val choices = (1..7).toList()
@@ -1482,30 +1573,119 @@ class ConditionsFeature(
                 update(r.copy(weekdays = days))
             }
         })
+
+        body.addView(panels.sectionHeader("READY WHEN YOU OPEN THE APP"))
+        panels.addRow(body, panels.row("Save the forecast when it looks good", saveLabel(r.saveForecast)) {
+            val choices = listOf(AlertRules.SAVE_ANY, AlertRules.SAVE_WIFI, AlertRules.SAVE_OFF)
+            panels.showChoicePanel("Save the forecast when it looks good", choices.map { saveLabel(it) }, choices.indexOf(r.saveForecast)) { i ->
+                update(r.copy(saveForecast = choices[i]))
+            }
+        })
+        body.addView(panels.caption(
+            "When a day looks good, the check also saves the forecast for about 200 km round the place (no satellite " +
+                "pictures), so it's on the map as soon as you tap the alert, even offline. Each place keeps one copy, " +
+                "replaced each time, and old forecasts are removed by themselves 2 days after they run out.",
+            topPaddingDp = 0
+        ))
+
         panels.addRow(body, panels.row("Check now", "Look at the forecast straight away") {
             scope.launch {
-                val result = withContext(Dispatchers.IO) { runCatching { ConditionsAlerts.check(preferences) } }
+                val now = System.currentTimeMillis()
+                val result = withContext(Dispatchers.IO) { runCatching { ConditionsAlerts.check(preferences, now) } }
                 val found = result.getOrNull()
                 when {
                     result.isFailure -> callbacks.toast("Couldn't get the forecast: check the connection")
-                    found == null -> callbacks.toast("Set a spot first (Sea conditions → Spot)")
-                    found.second.isEmpty() -> callbacks.toast("Nothing inside your limits in the next ${found.first.daysAhead} days")
+                    found == null -> callbacks.toast("Add a place first, or set a spot (Sea conditions → Spot)")
                     else -> {
-                        val day = java.text.SimpleDateFormat("EEE d MMM", Locale.getDefault())
-                        val clock = java.text.SimpleDateFormat("HH:mm", Locale.getDefault())
-                        panels.confirm(
-                            "Good days coming up",
-                            found.second.joinToString("\n") { "${day.format(Date(it.day))}: ${clock.format(Date(it.from))}–${clock.format(Date(it.to))}, wind up to ${u.wind.format(it.maxWindKn)}, waves up to ${wavesText(it.maxWaveM)}" } +
-                                "\n\nForecast at your spot. Check it before you go.",
-                            confirmLabel = "OK", destructive = false
-                        ) {}
+                        // What's shown here counts as told, so the next notification brings only news.
+                        ConditionsAlerts.remember(preferences, found.second)
+                        val text = found.second.joinToString("\n\n") { (place, good) ->
+                            place.name + "\n" + if (good.isEmpty()) "Nothing inside your limits in the next ${found.first.daysAhead} days"
+                            else good.joinToString("\n") { ConditionsAlerts.line(it) }
+                        }
+                        panels.confirm("Good days coming up", text + "\n\nThe worst of the forecast across each place. Check it before you go.",
+                            confirmLabel = "OK", destructive = false) {}
                     }
                 }
             }
         })
-        body.addView(panels.caption("Uses about 8 forecast requests a day. Always check the latest forecast and warnings.", topPaddingDp = 4))
+        body.addView(panels.caption(
+            "Uses about ${6 * maxOf(1, r.places.size) * 2} small forecast requests a day. Always check the latest forecast and warnings.",
+            topPaddingDp = 4
+        ))
         alertsDialog?.dismiss()
         alertsDialog = panels.showPanel("Good-weather alert", body)
+    }
+
+    /** Chooses a place on the map ([editing]: moves or resizes that one), then names a new one. */
+    private fun pickAlertPlace(editing: AlertPlace?) {
+        val root = boundRoot ?: return
+        val map = mapHolder.map ?: return
+        panels.dismissAll()
+        alertsDialog = null
+        AlertPlacePicker(activity, root, map, onDone = { lat, lng, radiusKm ->
+            val r = ConditionsAlerts.load(preferences)
+            if (editing != null) {
+                ConditionsAlerts.save(activity, preferences, r.copy(places = r.places.map {
+                    if (it.id == editing.id) it.copy(lat = lat, lng = lng, radiusKm = radiusKm) else it
+                }))
+                showAlerts()
+            } else {
+                nameAlertPlace("Place ${r.places.size + 1}") { name ->
+                    val place = AlertPlace(UUID.randomUUID().toString().take(8), name, lat, lng, radiusKm)
+                    val now = ConditionsAlerts.load(preferences)
+                    ConditionsAlerts.save(activity, preferences, now.copy(places = (now.places + place).take(AlertRules.MAX_PLACES)))
+                    callbacks.toast("$name added")
+                    showAlerts()
+                }
+            }
+        }, onCancel = { showAlerts() }).show(editing?.let { it.lat to it.lng }, editing?.radiusKm)
+    }
+
+    private fun nameAlertPlace(current: String, onName: (String) -> Unit) {
+        val body = panels.body()
+        val input = panels.input {
+            setText(current)
+            setSingleLine(true)
+            selectAll()
+            hint = "Name, e.g. Home reef"
+            filters = arrayOf(android.text.InputFilter.LengthFilter(40))
+        }
+        panels.addRow(body, input)
+        lateinit var dialog: android.app.Dialog
+        dialog = panels.showPanel("Name this place", body, actionLabel = "Save", onAction = {
+            val name = input.text.toString().trim().ifEmpty { current }
+            dialog.dismiss()
+            onName(name)
+        })
+        input.requestFocus()
+        dialog.window?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE)
+    }
+
+    /**
+     * An alert's place on the map, from a tapped notification or the place list: the sea conditions
+     * layer on, the map over the place, and the newest saved forecast there (the alert's check may
+     * have just saved it).
+     */
+    fun showAlertPlace(lat: Double, lng: Double, radiusKm: Double) {
+        store.forget(ConditionsAlerts.AREA_PREFIX)
+        val b = boxAround(lat, lng, max(radiusKm * 1.5, 15.0))
+        callbacks.showArea(GeoBounds(west = b[1], south = b[0], east = b[3], north = b[2]))
+        scope.launch {
+            val summaries = withContext(work) { store.summaries() }
+            val newest = ConditionsPolicy.newestCovering(lat, lng, summaries)
+            val loaded = newest?.let { s -> withContext(work) { store.load(s.id) } }
+            if (loaded != null) {
+                area = loaded
+                areaId = loaded.id
+                preferences.edit().putString(KEY_AREA, loaded.id).apply()
+                lastPictureKey = null
+                scaleCache = null
+            }
+            if (!shown) setShown(true) else redraw()
+            callbacks.creditsChanged()
+            if (loaded == null) callbacks.toast("No forecast saved here yet: open Sea conditions to download it")
+        }
     }
 
     private var alertsDialog: android.app.Dialog? = null
@@ -2288,7 +2468,7 @@ class ConditionsFeature(
         private const val KEY_AREA = "conditions_area"
         private const val KEY_COLOUR = "conditions_colour"
         private const val KEY_OPACITY = "conditions_opacity"
-        private const val KEY_DAYS = "conditions_days"
+        const val KEY_DAYS = "conditions_days"
         private const val KEY_SATELLITE = "conditions_satellite"
         private const val KEY_STYLE = "conditions_direction_style"
         private const val KEY_BOX = "conditions_box"
@@ -2376,14 +2556,14 @@ class ConditionsFeature(
         private const val MAX_SPAN_DEG = 4.5
         private const val MIN_SPAN_DEG = 0.3
         /** The current model is about 0.08° apart; closer points add nothing. */
-        private const val MIN_STEP_DEG = 0.08
+        const val MIN_STEP_DEG = 0.08
         /**
          * Sea points: 16 a side is 256, and the wind's 10 a side 100, so one
          * download is about 360 of Open-Meteo's 600 requests a minute, which
          * leaves room for the tides (the same service).
          */
-        private const val MAX_POINTS_PER_SIDE = 16
-        private const val MAX_WIND_POINTS_PER_SIDE = 10
+        const val MAX_POINTS_PER_SIDE = 16
+        const val MAX_WIND_POINTS_PER_SIDE = 10
         /** Between downloads, so two never land in the same minute of Open-Meteo's limit. */
         private const val MIN_DOWNLOAD_GAP_MS = 75_000L
         private const val MAX_ARROWS_PER_SIDE = 12

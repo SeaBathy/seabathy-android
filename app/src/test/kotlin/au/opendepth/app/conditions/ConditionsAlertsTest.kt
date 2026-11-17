@@ -55,4 +55,49 @@ class ConditionsAlertsTest {
         val late = start + 17 * hour
         assertTrue(ConditionsAlerts.findWindows(times, { 5.0 }, { 0.5 }, AlertRules(daysAhead = 0, minHours = 4), late, lat, lng, zone).isEmpty())
     }
+
+    @Test
+    fun gustsAndSetHoursCount() {
+        val calm = { _: Long -> 8.0 }
+        val flat = { _: Long -> 0.5 }
+        // Gusty 10:00 to 12:00 on Monday: with a gust limit the day splits; without one it doesn't.
+        val gusty = start + 10 * hour until start + 12 * hour
+        val gust = { t: Long -> if (t in gusty) 25.0 else 10.0 }
+        val limited = AlertRules(daysAhead = 0, minHours = 4, gustMaxKn = 20.0)
+        val split = ConditionsAlerts.findWindows(times, calm, flat, limited, start, lat, lng, zone, gustKn = gust)
+        assertTrue(split.single().from >= start + 12 * hour)
+        val noLimit = ConditionsAlerts.findWindows(times, calm, flat, limited.copy(gustMaxKn = 0.0), start, lat, lng, zone, gustKn = gust)
+        assertTrue(noLimit.single().to - noLimit.single().from > 8 * hour)
+        // 06:00 to 10:00 only.
+        val morning = ConditionsAlerts.findWindows(times, calm, flat, AlertRules(daysAhead = 0, minHours = 2, fromHour = 6, toHour = 10), start, lat, lng, zone)
+        assertEquals(start + 6 * hour, morning.single().from)
+        assertEquals(start + 10 * hour, morning.single().to)
+    }
+
+    @Test
+    fun saysWhatsNewAndWhatsGone() {
+        val place = AlertPlace("a", "Reef", lat, lng, 10.0)
+        val sat = GoodWindow(start + 5 * 24 * hour, start + 5 * 24 * hour + 7 * hour, start + 5 * 24 * hour + 12 * hour, 9.0, 0.6)
+        val sun = GoodWindow(start + 6 * 24 * hour, start + 6 * 24 * hour + 7 * hour, start + 6 * 24 * hour + 12 * hour, 9.0, 0.6)
+        // First time: both new.
+        val first = ConditionsAlerts.compare(place, listOf(sat, sun), emptyMap(), "2026-11-16", start, zone)
+        assertEquals(2, first.newDays.size)
+        // Then Sunday turns bad: Sunday gone, nothing new.
+        val told = mapOf("2026-11-21" to listOf(sat.from, sat.to), "2026-11-22" to listOf(sun.from, sun.to))
+        val later = ConditionsAlerts.compare(place, listOf(sat), told, "2026-11-16", start, zone)
+        assertTrue(later.newDays.isEmpty())
+        assertEquals(listOf(sun.from), later.goneDays)
+        // A good day that has simply gone by isn't news.
+        val past = mapOf("2026-11-15" to listOf(start - 10 * hour, start - 5 * hour))
+        assertTrue(!ConditionsAlerts.compare(place, emptyList(), past, "2026-11-16", start, zone).hasNews)
+    }
+
+    @Test
+    fun theWorstPointCounts() {
+        assertEquals(14.0, ConditionsAlerts.worst(doubleArrayOf(6.0, Double.NaN, 14.0, 9.0)), 1e-9)
+        assertTrue(ConditionsAlerts.worst(doubleArrayOf(Double.NaN)).isNaN())
+        val grid = ConditionsAlerts.placeGrid(AlertPlace("a", "Reef", lat, lng, 10.0))
+        assertEquals(9, grid.lats.size * grid.lngs.size)
+        assertEquals(1, ConditionsAlerts.placeGrid(AlertPlace("s", "Spot", lat, lng, 0.0)).lats.size)
+    }
 }

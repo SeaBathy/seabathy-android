@@ -54,6 +54,15 @@ class ConditionsStore(private val dir: File) {
         runCatching { readSummary(file) }.getOrNull()
     }.sortedByDescending { it.fetchedMillis }.also { summaryCache = it }
 
+    /**
+     * Forgets the list, and the copies read of areas whose id starts with [idPrefix], so files
+     * written by the alert job while the app was away are read afresh. Then [summaries] rescans.
+     */
+    fun forget(idPrefix: String) {
+        summaryCache = null
+        synchronized(lock) { cache.keys.removeAll { it.startsWith(idPrefix) } }
+    }
+
     /** Off the main thread. */
     fun load(id: String): ConditionsArea? {
         synchronized(lock) { cache[id] }?.let { return it }

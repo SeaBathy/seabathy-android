@@ -346,6 +346,17 @@ class MainActivity : AppCompatActivity() {
         StrictMode.setVmPolicy(vmPolicy.build())
     }
 
+    /** A tapped good-weather alert's place, shown once the map and its layers are ready. */
+    private var pendingAlertPlace: Triple<Double, Double, Double>? = null
+
+    private fun showPendingAlertPlace() {
+        val (lat, lng, radius) = pendingAlertPlace ?: return
+        if (mapHolder.style == null || !::conditions.isInitialized) return
+        pendingAlertPlace = null
+        closePanelsForImport()
+        conditions.showAlertPlace(lat, lng, radius)
+    }
+
     /** The "download finished" notification was tapped (at a cold start or while running): offer the file as a layer. */
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
@@ -354,6 +365,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun handleIncomingIntent(intent: Intent?) {
+        if (intent?.action == ACTION_SHOW_ALERT_PLACE) {
+            val lat = intent.getDoubleExtra(EXTRA_ALERT_LAT, Double.NaN)
+            val lng = intent.getDoubleExtra(EXTRA_ALERT_LNG, Double.NaN)
+            val radius = intent.getDoubleExtra(EXTRA_ALERT_RADIUS_KM, 0.0)
+            intent.action = null
+            if (lat.isFinite() && lng.isFinite()) {
+                pendingAlertPlace = Triple(lat, lng, radius)
+                showPendingAlertPlace()
+            }
+            return
+        }
         if (intent?.action != ACTION_OFFER_IMPORT_DOWNLOAD) return
         val path = intent.getStringExtra(EXTRA_DOWNLOADED_FILE_PATH) ?: return
         if (!isOfflineDownload(path)) {
@@ -727,6 +749,7 @@ class MainActivity : AppCompatActivity() {
         waypointOverlay.install()
         navFeature.onStyleInstalled()
         conditions.onStyleInstalled()
+        showPendingAlertPlace()
         navFeature.placeCompass()
         measureController.refresh()
         hud.showMeasureSummary(measureController.summary())
@@ -1967,5 +1990,10 @@ class MainActivity : AppCompatActivity() {
         const val EXTRA_DOWNLOADED_FILE_PATH = "downloaded_file_path"
         const val EXTRA_DOWNLOADED_SOURCE_NAME = "downloaded_source_name"
         const val EXTRA_DOWNLOADED_ATTRIBUTION = "downloaded_attribution"
+        /** A good-weather alert was tapped: show the place's sea conditions. */
+        const val ACTION_SHOW_ALERT_PLACE = "au.opendepth.app.ACTION_SHOW_ALERT_PLACE"
+        const val EXTRA_ALERT_LAT = "alert_lat"
+        const val EXTRA_ALERT_LNG = "alert_lng"
+        const val EXTRA_ALERT_RADIUS_KM = "alert_radius_km"
     }
 }

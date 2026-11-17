@@ -5,6 +5,12 @@
 - **Polite offline downloads:** saving a map keeps a steady pace (about 20 tiles a second), pauses
   whenever the map's server asks it to slow down, and stops if the server keeps refusing, instead
   of retrying. It then suggests a map service that gives you your own key.
+- **Better good-weather alerts:** add up to three places on the map, each with a radius; the worst
+  wind and waves anywhere in it count. Limits for gusts and the hours of the day as well as wind and
+  waves. A notification when a day starts or stops looking good, with a line for each day (times,
+  wind and direction, gusts, waves), never between 9 pm and 7 am. When a day looks good the place's
+  forecast is saved too (any connection, Wi-Fi only, or off), so tapping the alert shows it straight
+  away. Checks every 4 hours, only with a connection and not on low battery.
 - **Draw the depths area:** getting seabed depths (High detail or Standard) now starts with an
   empty chart: drag a finger to draw the box, then drag it to move it or a corner to resize it.
   Before, the box filled the screen, so it wasn't clear you could draw one.
