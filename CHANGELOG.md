@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- **Rename layers:** a RENAME button on every layer in the layers panel, so a download like
+  "High detail 27.30S 153.30E (0.97°)" can be called "Moreton Bay banks". Only the name in the
+  app changes; the file itself is left as it is.
+
 ## 1.2.5 — 2026-11-16
 
 - **Draw the box for high-detail depths:** drag on the chart to draw the area you want (two

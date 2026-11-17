@@ -231,19 +231,47 @@ class LayerPanelBinder(
             )
         })
 
-        if (controller.depthSourceFor(layer.id) != null) {
-            addView(LinearLayout(context).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                setPadding(0, context.dp(6), 0, 0)
+        // Second row: rename for every layer, plus the depth tools for depth layers.
+        val depth = controller.depthSourceFor(layer.id) != null
+        addView(LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, context.dp(6), 0, 0)
+            val open3d = if (depth) onOpen3d else null
+            addView(wideChip(chip("RENAME", "Rename ${layer.name}") { renameLayer(layer) }, last = !depth))
+            if (depth) {
                 addView(wideChip(chip("COLOURS", "Depth colours for ${layer.name}") {
                     onEditDepthColours(layer)
-                }))
-                onOpen3d?.let { open ->
+                }, last = open3d == null))
+                open3d?.let { open ->
                     addView(wideChip(chip("3D VIEW", "Show ${layer.name} in 3D") { open(layer) }, last = true))
                 }
-            })
+            }
+        })
+    }
+
+    /**
+     * Gives a layer a name of the user's own. Only the name shown in the app changes: the file
+     * keeps its name, so nothing on the phone's storage is touched.
+     */
+    private fun renameLayer(layer: OverlayLayer) {
+        val body = panels.body()
+        val input = panels.input {
+            setText(layer.name)
+            setSingleLine(true)
+            selectAll()
+            hint = "Layer name"
+            filters = arrayOf(android.text.InputFilter.LengthFilter(MAX_NAME_LENGTH))
         }
+        panels.addRow(body, input)
+        lateinit var dialog: android.app.Dialog
+        dialog = panels.showPanel("Rename layer", body, actionLabel = "Save", onAction = {
+            val name = input.text.toString().trim()
+            if (name.isNotEmpty() && name != layer.name) controller.rename(layer.id, name)
+            dialog.dismiss()
+        })
+        input.requestFocus()
+        dialog.window?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE)
     }
 
     /** Stretches a depth-tool chip to share its row equally, for a bigger touch target. */
@@ -299,6 +327,7 @@ class LayerPanelBinder(
 
     internal companion object {
         const val OPACITY_STEPS = 100
+        const val MAX_NAME_LENGTH = 60
 
         fun formatOpacity(fraction: Float): String =
             "${(fraction.coerceIn(0f, 1f) * 100).roundToInt()}%"
