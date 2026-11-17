@@ -5,6 +5,8 @@
 - **Rename layers:** a RENAME button on every layer in the layers panel, so a download like
   "High detail 27.30S 153.30E (0.97°)" can be called "Moreton Bay banks". Only the name in the
   app changes; the file itself is left as it is.
+- **Tidier layers panel:** the BOTTOM button is gone; the arrows move a layer up or down, and
+  dim when it is already at the top or bottom (and are hidden with only one layer).
 
 ## 1.2.5 — 2026-11-16
 

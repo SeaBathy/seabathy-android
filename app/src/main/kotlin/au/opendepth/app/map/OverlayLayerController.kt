@@ -591,16 +591,6 @@ class OverlayLayerController(
         onStackChanged()
     }
 
-    /** Sends a layer to the bottom of the overlay stack. */
-    fun sendToBottom(id: String) {
-        val currentIndex = layers.indexOfFirst { it.id == id }
-        if (currentIndex <= 0) return
-        layers.add(0, layers.removeAt(currentIndex))
-        reattachStack()
-        persist()
-        onStackChanged()
-    }
-
     /**
      * Removes a layer from the map. The user's own files are never deleted, only
      * the app's files for the layer (its tile cache, a private copy).

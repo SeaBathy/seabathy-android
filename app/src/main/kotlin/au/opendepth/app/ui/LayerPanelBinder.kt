@@ -209,16 +209,21 @@ class LayerPanelBinder(
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
 
-            addView(chip("▲", "Move ${layer.name} up") { controller.move(layer.id, 1) })
-            addView(chip("▼", "Move ${layer.name} down") { controller.move(layer.id, -1) })
-            addView(chip("BOTTOM", "Send ${layer.name} to the bottom") {
-                controller.sendToBottom(layer.id)
-            })
+            // Up and down only when there's somewhere to go: none with one layer, and the top
+            // layer's ▲ and the bottom layer's ▼ are dimmed.
+            val stack = controller.stackTopFirst
+            if (stack.size > 1) {
+                val index = stack.indexOfFirst { it.id == layer.id }
+                addView(chip("▲", "Move ${layer.name} up") { controller.move(layer.id, 1) }.apply { setUsable(index > 0) })
+                addView(chip("▼", "Move ${layer.name} down") { controller.move(layer.id, -1) }.apply { setUsable(index < stack.size - 1) })
+            }
 
             addView(
                 View(context),
                 LinearLayout.LayoutParams(0, 1, 1f)
             )
+
+            addView(chip("RENAME", "Rename ${layer.name}") { renameLayer(layer) })
 
             addView(
                 chip("REMOVE", "Remove ${layer.name}", destructive = true) {
@@ -231,23 +236,26 @@ class LayerPanelBinder(
             )
         })
 
-        // Second row: rename for every layer, plus the depth tools for depth layers.
-        val depth = controller.depthSourceFor(layer.id) != null
-        addView(LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, context.dp(6), 0, 0)
-            val open3d = if (depth) onOpen3d else null
-            addView(wideChip(chip("RENAME", "Rename ${layer.name}") { renameLayer(layer) }, last = !depth))
-            if (depth) {
+        // Depth layers: their own tools on a second row.
+        if (controller.depthSourceFor(layer.id) != null) {
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(0, context.dp(6), 0, 0)
                 addView(wideChip(chip("COLOURS", "Depth colours for ${layer.name}") {
                     onEditDepthColours(layer)
-                }, last = open3d == null))
-                open3d?.let { open ->
+                }, last = onOpen3d == null))
+                onOpen3d?.let { open ->
                     addView(wideChip(chip("3D VIEW", "Show ${layer.name} in 3D") { open(layer) }, last = true))
                 }
-            }
-        })
+            })
+        }
+    }
+
+    /** A chip that can't do anything right now: dimmed and not tappable. */
+    private fun TextView.setUsable(usable: Boolean) {
+        isEnabled = usable
+        alpha = if (usable) 1f else 0.35f
     }
 
     /**
