@@ -1,0 +1,1 @@
+Rename any map layer from the layers panel, so a download can be called something like Moreton Bay banks. Tidier layer buttons: the arrows move layers up or down and dim when they can't.

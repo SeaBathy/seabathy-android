@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.6 — 2026-11-17
 
 - **Rename layers:** a RENAME button on every layer in the layers panel, so a download like
   "High detail 27.30S 153.30E (0.97°)" can be called "Moreton Bay banks". Only the name in the
