@@ -25,7 +25,7 @@ object SeabedDownload {
     private const val MAX_LNG = 180.0
 
     data class Area(val south: Double, val west: Double, val north: Double, val east: Double, val trimmed: Boolean) {
-        /** "Seabed 18.05S 146.55E": the same area gets the same file. */
+        /** "Seabed 20.15S 148.95E": the same area gets the same file. */
         val name: String
             get() {
                 val lat = (south + north) / 2

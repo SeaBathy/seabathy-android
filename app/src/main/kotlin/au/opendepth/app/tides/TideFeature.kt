@@ -461,7 +461,7 @@ class TideFeature(
         }
     }
 
-    /** The tide now, for a photo's record: "Tide at Mission Beach 1.26 m, rising, high 14:56"; null with none. */
+    /** The tide now, for a photo's record: "Tide at Airlie Beach 1.26 m, rising, high 14:56"; null with none. */
     fun snapshotLine(now: Long = System.currentTimeMillis()): String? {
         val s = settings
         val format = NavFormat(callbacks.units())
