@@ -216,7 +216,7 @@ class SettingsPanel(
         fun depths(body: android.widget.LinearLayout) {
             panels.addRow(
                 body,
-                panels.row("Get seabed depths for this area", "Free depth data, anywhere in the world") {
+                panels.row("Get seabed depths", "Draw the area on the chart. Free depth data, anywhere in the world") {
                     closeAll()
                     callbacks.onGetSeabed()
                 }

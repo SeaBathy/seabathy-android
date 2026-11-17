@@ -97,7 +97,8 @@ area, up to 10 m detail.
 <details>
 <summary><b>Get free seabed depths for anywhere</b></summary>
 
-Move the map to the area, then **Settings** → **Get seabed depths for this area**. The depths
+**Settings** → **Depths** → **Get seabed depths**, then drag a finger across the chart to draw
+the area (drag the box to move it, or a corner to resize it). The depths
 come from GMRT, a free worldwide model built from ship surveys. They're sharpest where ships
 have surveyed and coarser elsewhere, and they're saved on the phone for offline use.
 </details>

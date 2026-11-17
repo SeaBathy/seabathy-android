@@ -988,47 +988,67 @@ class MainActivity : AppCompatActivity() {
             visible.latitudeSouth, visible.longitudeWest, visible.latitudeNorth, visible.longitudeEast,
             target.latitude, target.longitude
         )
-        val note = if (area.trimmed) " The most one download holds is about ${SeabedDownload.MAX_SPAN_KM} km across, so this is the middle of the screen." else ""
         if (au.opendepth.app.storage.HighDetailDepths.covers(area)) {
             au.opendepth.app.ui.InfoCard(this).apply {
                 badge = "Seabed depths"
                 title = "Which depths?"
                 rows += au.opendepth.app.ui.InfoCard.Row("High detail",
-                    "Australian waters only. The IMAS composite with AusSeabed and state multibeam surveys on top: down to a metre or two where surveyed. You draw the box (up to about ${au.opendepth.app.storage.HighDetailDepths.MAX_SPAN_KM} km across) and see the download size first.")
+                    "Australian waters only. The IMAS composite with AusSeabed and state multibeam surveys on top: down to a metre or two where surveyed. Up to about ${au.opendepth.app.storage.HighDetailDepths.MAX_SPAN_KM} km across.")
                 rows += au.opendepth.app.ui.InfoCard.Row("Standard",
-                    "GMRT, worldwide. Ship surveys blended with the GEBCO grid; much coarser away from surveys. Up to about 55 MB, quick.")
-                fine = "Either one is added as a layer that also works in 3D and offline.$note"
+                    "GMRT, worldwide. Ship surveys blended with the GEBCO grid; much coarser away from surveys. Up to about ${SeabedDownload.MAX_SPAN_KM} km across, 55 MB at most, quick.")
+                fine = "Next you draw the area on the chart and see its size first. Either one is added as a layer that also works in 3D and offline."
                 actions += au.opendepth.app.ui.InfoCard.Action("Standard") {
                     sidePanel.close()
-                    layerImports.downloadSeabed(area)
+                    pickStandardArea()
                 }
                 actions += au.opendepth.app.ui.InfoCard.Action("High detail", primary = true) {
                     sidePanel.close()
-                    pickHighDetailArea(area)
+                    pickHighDetailArea()
                 }
             }.show()
             return
         }
         panels.confirm(
             title = "Get seabed depths?",
-            message = "Downloads depths for the area on screen from GMRT, which blends ship surveys with the global " +
-                "GEBCO grid, and adds them as a layer that also works in 3D and offline. Detail is best where ships " +
-                "have surveyed; elsewhere it's much coarser. Up to about 55 MB.$note",
-            confirmLabel = "Download",
+            message = "Downloads depths from GMRT, which blends ship surveys with the global GEBCO grid, and adds " +
+                "them as a layer that also works in 3D and offline. Detail is best where ships have surveyed; " +
+                "elsewhere it's much coarser. Next you draw the area on the chart (up to about " +
+                "${SeabedDownload.MAX_SPAN_KM} km across); a smaller area comes sharper. Up to about 55 MB.",
+            confirmLabel = "Choose area",
             destructive = false
         ) {
             sidePanel.close()
-            layerImports.downloadSeabed(area)
+            pickStandardArea()
         }
+    }
+
+    /** Standard (GMRT): the user draws the box on the chart, then it downloads. */
+    private fun pickStandardArea() {
+        val map = mapHolder.map ?: return
+        au.opendepth.app.ui.AreaPicker(
+            context = this,
+            root = views.mapView.parent as android.view.ViewGroup,
+            mapView = views.mapView,
+            map = map,
+            maxKm = SeabedDownload.MAX_SPAN_KM.toDouble(),
+            confirmLabel = "Get depths",
+            title = "SEABED DEPTHS",
+            describe = { _, show -> show("From GMRT, 55 MB at most. A smaller box comes sharper.") },
+            onConfirm = { box ->
+                val area = SeabedDownload.areaFor(box.south, box.west, box.north, box.east,
+                    (box.south + box.north) / 2, (box.west + box.east) / 2)
+                layerImports.downloadSeabed(area)
+            },
+            onCancel = {}
+        ).show()
     }
 
     /**
      * High detail: the user draws the box on the chart (two fingers still move the map), sees the
-     * size and the download it means, then builds it. Starts with the middle of the screen.
+     * size and the download it means, then builds it. Starts empty, so it's clear the box is drawn.
      */
-    private fun pickHighDetailArea(screen: SeabedDownload.Area) {
+    private fun pickHighDetailArea() {
         val map = mapHolder.map ?: return
-        val start = au.opendepth.app.storage.HighDetailDepths.fit(screen)
         au.opendepth.app.ui.AreaPicker(
             context = this,
             root = views.mapView.parent as android.view.ViewGroup,
@@ -1047,7 +1067,7 @@ class MainActivity : AppCompatActivity() {
             },
             onConfirm = { box -> layerImports.downloadHighDetail(box.toArea()) },
             onCancel = {}
-        ).show(au.opendepth.app.ui.AreaPicker.Box(start.south, start.west, start.north, start.east))
+        ).show()
     }
 
     private fun au.opendepth.app.ui.AreaPicker.Box.toArea() = SeabedDownload.Area(south, west, north, east, trimmed = false)

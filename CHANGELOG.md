@@ -5,6 +5,9 @@
 - **Polite offline downloads:** saving a map keeps a steady pace (about 20 tiles a second), pauses
   whenever the map's server asks it to slow down, and stops if the server keeps refusing, instead
   of retrying. It then suggests a map service that gives you your own key.
+- **Draw the depths area:** getting seabed depths (High detail or Standard) now starts with an
+  empty chart: drag a finger to draw the box, then drag it to move it or a corner to resize it.
+  Before, the box filled the screen, so it wasn't clear you could draw one.
 - **Clearer wording:** the save screens say plainly that you're responsible for having the right
   to save a map offline.
 

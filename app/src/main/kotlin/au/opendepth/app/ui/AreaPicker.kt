@@ -21,14 +21,17 @@ import org.maplibre.android.maps.MapView
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.cos
+import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
 
 /**
- * Lets the user draw a box on the chart: drag with one finger to draw it, two fingers still
- * move and zoom the map. The box stays on the chart as the map moves. A bar at the bottom shows
- * the box's size (and anything [describe] adds, such as the download size), with Cancel and the
- * confirm button. Boxes larger than [maxKm] across are shown in red and can't be confirmed.
+ * Lets the user pick an area on the chart. It starts empty: drag with one finger to draw a box,
+ * then drag the box to move it or a corner to resize it (dragging outside it draws a new one).
+ * Two fingers still move and zoom the map, and the box stays on the chart as the map moves. A bar
+ * at the bottom shows the box's size (and anything [describe] adds, such as the download size),
+ * with Cancel and the confirm button. Boxes larger than [maxKm] across are shown in red and
+ * can't be confirmed.
  */
 class AreaPicker(
     private val context: Context,
@@ -40,7 +43,9 @@ class AreaPicker(
     /** A line about the box (download size, say); call the callback on the main thread. null clears it. */
     private val describe: (Box, (String?) -> Unit) -> Unit,
     private val onConfirm: (Box) -> Unit,
-    private val onCancel: () -> Unit
+    private val onCancel: () -> Unit,
+    /** The small heading in the bar. */
+    private val title: String = "HIGH-DETAIL DEPTHS"
 ) {
     data class Box(val south: Double, val west: Double, val north: Double, val east: Double) {
         val widthKm: Double get() = (east - west) * 111.32 * cos(Math.toRadians((south + north) / 2))
@@ -53,12 +58,13 @@ class AreaPicker(
     private var bar: LinearLayout? = null
     private lateinit var sizeText: TextView
     private lateinit var infoText: TextView
+    private lateinit var hintText: TextView
     private lateinit var confirm: Button
     private val cameraListener = MapLibreMap.OnCameraMoveListener { overlay?.invalidate() }
     private var describeToken = 0
 
-    /** Shows the picker, starting with [initial] (or nothing, for the user to draw). */
-    fun show(initial: Box?) {
+    /** Shows the picker, starting with [initial], or empty (the usual) for the user to draw. */
+    fun show(initial: Box? = null) {
         val o = Overlay(context)
         root.addView(o, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         o.elevation = context.dpF(30f)
@@ -89,21 +95,27 @@ class AreaPicker(
         overlay?.invalidate()
         val token = ++describeToken
         if (b == null) {
-            sizeText.text = "Drag on the chart to draw a box"
-            infoText.text = "Two fingers move and zoom the map."
+            sizeText.text = "Drag a finger across the chart to draw the area"
+            infoText.text = String.format(Locale.US, "Up to about %.0f km across. Two fingers move and zoom the map.", maxKm)
+            hintText.visibility = View.GONE
             enable(false)
             return
         }
+        hintText.visibility = View.VISIBLE
         val tooBig = max(b.widthKm, b.heightKm) > maxKm
-        sizeText.text = String.format(Locale.US, "%s × %s", km(b.widthKm), km(b.heightKm))
+        showSize(b)
         if (tooBig) {
-            infoText.text = String.format(Locale.US, "Too big: up to about %.0f km across. Draw a smaller box.", maxKm)
+            infoText.text = String.format(Locale.US, "Too big: up to about %.0f km across. Make the box smaller.", maxKm)
             enable(false)
             return
         }
         infoText.text = "Working out the download…"
         enable(true)
         describe(b) { line -> if (token == describeToken) infoText.text = line ?: "" }
+    }
+
+    private fun showSize(b: Box) {
+        sizeText.text = String.format(Locale.US, "%s × %s", km(b.widthKm), km(b.heightKm))
     }
 
     private fun km(v: Double) = if (v < 10) String.format(Locale.US, "%.1f km", v) else String.format(Locale.US, "%.0f km", v)
@@ -121,16 +133,27 @@ class AreaPicker(
             isClickable = true // touches on the bar don't draw a box under it
         }
         bar.addView(TextView(context).apply {
-            text = "HIGH-DETAIL DEPTHS"
+            text = title
             textSize = 11f
             setTextColor(palette.accent)
             letterSpacing = 0.08f
         })
         sizeText = TextView(context).apply { textSize = 17f; setTextColor(palette.primaryText); setPadding(0, context.dp(2), 0, 0) }
-        infoText = TextView(context).apply { textSize = 13f; setTextColor(palette.secondaryText); setPadding(0, context.dp(2), 0, context.dp(8)) }
+        infoText = TextView(context).apply { textSize = 13f; setTextColor(palette.secondaryText); setPadding(0, context.dp(2), 0, 0) }
+        hintText = TextView(context).apply {
+            textSize = 12f
+            setTextColor(palette.secondaryText)
+            alpha = 0.8f
+            text = "Drag the box to move it, or a corner to resize it."
+        }
         bar.addView(sizeText)
         bar.addView(infoText)
-        val buttons = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.END }
+        bar.addView(hintText)
+        val buttons = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END
+            setPadding(0, context.dp(8), 0, 0)
+        }
         fun button(label: String, primary: Boolean, onClick: () -> Unit) = Button(context).apply {
             text = label
             isAllCaps = false
@@ -148,7 +171,10 @@ class AreaPicker(
         return bar
     }
 
-    /** Draws the box and turns one-finger drags into a new box; anything else goes to the map. */
+    /**
+     * Draws the box with a handle on each corner. One finger draws, moves or resizes it;
+     * anything else goes to the map.
+     */
     @SuppressLint("ViewConstructor")
     private inner class Overlay(context: Context) : View(context) {
         private val fill = Paint().apply { color = Color.argb(46, 25, 198, 179) }
@@ -158,8 +184,22 @@ class AreaPicker(
             color = palette.accent
         }
         private val dashed = Paint(edge).apply { pathEffect = DashPathEffect(floatArrayOf(context.dpF(8f), context.dpF(6f)), 0f) }
+        private val handleFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
+        private val handleEdge = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = context.dpF(2.5f)
+        }
         private val shade = Paint().apply { color = Color.argb(70, 0, 0, 0) }
+        private val handleRadius = context.dpF(9f)
+        private val grabRadius = context.dpF(36f)
+        private val minSide = context.dpF(24f)
+
+        private var mode = Mode.DRAW
         private var start: PointF? = null
+        /** The corner that stays put while resizing. */
+        private var anchor: PointF? = null
+        /** The box as it was when a move started. */
+        private var moveFrom: RectF? = null
         private var drag: RectF? = null
         private var forwarding = false
         private var firstDown: MotionEvent? = null
@@ -176,16 +216,55 @@ class AreaPicker(
             canvas.drawRect(0f, r.top, r.left, r.bottom, shade)
             canvas.drawRect(r.right, r.top, width.toFloat(), r.bottom, shade)
             canvas.drawRect(r, fill)
-            val tooBig = box?.let { max(it.widthKm, it.heightKm) > maxKm } == true && drag == null
-            edge.color = if (tooBig) palette.destructive else palette.accent
-            canvas.drawRect(r, if (drag != null) dashed else edge)
+            val shown = drag?.let { toBox(it) } ?: box
+            val tooBig = shown?.let { max(it.widthKm, it.heightKm) > maxKm } == true
+            val colour = if (tooBig) palette.destructive else palette.accent
+            edge.color = colour
+            dashed.color = colour
+            canvas.drawRect(r, if (drag != null && mode == Mode.DRAW) dashed else edge)
+            handleEdge.color = colour
+            for (c in corners(r)) {
+                canvas.drawCircle(c.x, c.y, handleRadius, handleFill)
+                canvas.drawCircle(c.x, c.y, handleRadius, handleEdge)
+            }
         }
+
+        private fun corners(r: RectF) = listOf(
+            PointF(r.left, r.top), PointF(r.right, r.top), PointF(r.right, r.bottom), PointF(r.left, r.bottom)
+        )
 
         private fun screenRect(b: Box): RectF {
             val p = map.projection
             val a = p.toScreenLocation(LatLng(b.north, b.west))
             val c = p.toScreenLocation(LatLng(b.south, b.east))
             return RectF(min(a.x, c.x), min(a.y, c.y), max(a.x, c.x), max(a.y, c.y))
+        }
+
+        private fun toBox(r: RectF): Box {
+            val p = map.projection
+            val nw = p.fromScreenLocation(PointF(r.left, r.top))
+            val se = p.fromScreenLocation(PointF(r.right, r.bottom))
+            return Box(min(nw.latitude, se.latitude), min(nw.longitude, se.longitude),
+                max(nw.latitude, se.latitude), max(nw.longitude, se.longitude))
+        }
+
+        private fun rectOf(a: PointF, x: Float, y: Float) = RectF(min(a.x, x), min(a.y, y), max(a.x, x), max(a.y, y))
+
+        /** What a touch at (x, y) does: grab a corner, move the box, or draw a new one. */
+        private fun startGesture(x: Float, y: Float) {
+            val r = box?.let { screenRect(it) }
+            anchor = null
+            moveFrom = null
+            mode = Mode.DRAW
+            if (r == null) return
+            val near = corners(r).minByOrNull { hypot(it.x - x, it.y - y) }
+            if (near != null && hypot(near.x - x, near.y - y) <= grabRadius) {
+                mode = Mode.RESIZE
+                anchor = PointF(if (near.x == r.left) r.right else r.left, if (near.y == r.top) r.bottom else r.top)
+            } else if (r.contains(x, y)) {
+                mode = Mode.MOVE
+                moveFrom = RectF(r)
+            }
         }
 
         @SuppressLint("ClickableViewAccessibility")
@@ -200,6 +279,7 @@ class AreaPicker(
                     start = PointF(e.x, e.y)
                     firstDown?.recycle()
                     firstDown = MotionEvent.obtain(e)
+                    startGesture(e.x, e.y)
                 }
                 MotionEvent.ACTION_POINTER_DOWN -> {
                     // Two fingers: this gesture is for the map. Hand it over from the first touch.
@@ -208,11 +288,18 @@ class AreaPicker(
                     forwarding = true
                     firstDown?.let { mapView.dispatchTouchEvent(it) }
                     mapView.dispatchTouchEvent(e)
+                    box?.let { showSize(it) }
                     invalidate()
                 }
                 MotionEvent.ACTION_MOVE -> start?.let { s ->
-                    if (drag != null || abs(e.x - s.x) + abs(e.y - s.y) > context.dpF(12f)) {
-                        drag = RectF(min(s.x, e.x), min(s.y, e.y), max(s.x, e.x), max(s.y, e.y))
+                    val threshold = if (mode == Mode.RESIZE) context.dpF(4f) else context.dpF(10f)
+                    if (drag != null || abs(e.x - s.x) + abs(e.y - s.y) > threshold) {
+                        drag = when (mode) {
+                            Mode.DRAW -> rectOf(s, e.x, e.y)
+                            Mode.RESIZE -> rectOf(anchor ?: s, e.x, e.y)
+                            Mode.MOVE -> RectF(moveFrom ?: return@let).apply { offset(e.x - s.x, e.y - s.y) }
+                        }
+                        drag?.let { showSize(toBox(it)) }
                         invalidate()
                     }
                 }
@@ -220,18 +307,23 @@ class AreaPicker(
                     val r = drag
                     drag = null
                     start = null
-                    if (r != null && r.width() > context.dpF(24f) && r.height() > context.dpF(24f)) {
-                        val p = map.projection
-                        val nw = p.fromScreenLocation(PointF(r.left, r.top))
-                        val se = p.fromScreenLocation(PointF(r.right, r.bottom))
-                        setBox(Box(min(nw.latitude, se.latitude), min(nw.longitude, se.longitude),
-                            max(nw.latitude, se.latitude), max(nw.longitude, se.longitude)))
+                    if (r != null && r.width() > minSide && r.height() > minSide) {
+                        setBox(toBox(r))
+                    } else {
+                        box?.let { showSize(it) }
                     }
                     invalidate()
                 }
-                MotionEvent.ACTION_CANCEL -> { drag = null; start = null; invalidate() }
+                MotionEvent.ACTION_CANCEL -> {
+                    drag = null
+                    start = null
+                    box?.let { showSize(it) }
+                    invalidate()
+                }
             }
             return true
         }
     }
+
+    private enum class Mode { DRAW, MOVE, RESIZE }
 }
