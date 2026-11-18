@@ -8,14 +8,16 @@ app, see the [README](README.md). For building, signing and the device test, see
 
     app/src/main/kotlin/au/opendepth/app/
       MainActivity.kt   screen coordination and lifecycle
-      conditions/       sea conditions download, cache and map layers
+      backup/           backup and restore of waypoints, routes, tracks and settings
+      conditions/       sea conditions: download, cache, map layers, the shore cut
+                        (coastline), good-weather alerts and their background check
       data/             waypoint, layer and data-source persistence
       diagnostics/      shareable debug log and resource tracking
       download/         offline tile downloads (foreground service, retries)
       gdal/             native GDAL path for large surveys and BigTIFFs
       geotiff/          GeoTIFF decoding, projections, depth grids, palettes,
                         relief shading
-      location/         location provider
+      location/         location providers (GPS, network, fused) and the first position
       map/              map style, overlay stack, tools and depth queries
       model/            plain data types
       nav/              routes, live navigation, boat profile, alarms
@@ -27,6 +29,12 @@ app, see the [README](README.md). For building, signing and the device test, see
       track/            track recording
       ui/               panels, dialogs and view binding
       util/             small shared helpers
+    app/src/main/java/com/seabathy/bathypicker/core/
+                        the high-detail depths engine (from BathyPicker)
+    app/src/main/assets/
+                        marine park zones, buoys and beacons, the built-in world
+                        coastline, map fonts, the PROJ database, licences.txt
+    app/src/github/     what only the GitHub build has (its storage permissions)
     terrain3d-web/      source of the bundled 3D viewer (three.js, esbuild)
 
 ## Quick start
@@ -92,15 +100,21 @@ To update it, replace the AAR with a newer release and change the file name in
 | Permission | Used for |
 |---|---|
 | `INTERNET`, `ACCESS_NETWORK_STATE` | Online maps and data; pausing downloads while offline |
-| `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_DATA_SYNC`, `POST_NOTIFICATIONS` | Offline downloads in the background, with a progress notification |
+| `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_DATA_SYNC`, `POST_NOTIFICATIONS` | Offline downloads in the background, with a progress notification; good-weather alerts |
 | `ACCESS_FINE_LOCATION`, `ACCESS_COARSE_LOCATION` | Locate, follow, tracks and navigation |
+| `ACCESS_MEDIA_LOCATION` | Reading where a gallery photo was taken, for a waypoint from a photo |
 | `VIBRATE` | Navigation and anchor alarms |
 | `FOREGROUND_SERVICE_LOCATION` | Track recording and the anchor alarm keep running with the screen off |
 | `USE_FULL_SCREEN_INTENT`, `WAKE_LOCK` | The anchor alarm can wake the screen when the anchor drags |
 
-There are no storage permissions (Google Play restricts them). Surveys and charts are picked
-with the system file picker, and Android won't let the app reopen a picked file by its path.
-So:
+The good-weather alert's check runs with Android's WorkManager every 4 hours (only with a
+connection, not on low battery). It needs no location permission: it checks the places the
+user picked, or the last position the app saw.
+
+The Google Play build has no storage permissions (Google Play restricts them). The GitHub
+build adds them (`app/src/github/AndroidManifest.xml`, "All files access") so offline maps
+can be saved to a folder the user can see. Surveys and charts are picked with the system
+file picker, and Android won't let the app reopen a picked file by its path. So:
 
 - **Big GeoTIFFs (over 300 MB) and BigTIFFs** are read **in place**, at any size, never copied:
   the app keeps the picked document open and GDAL reads it through a small native virtual file
@@ -118,10 +132,14 @@ there instead. See
 
 ## Tests
 
-`./gradlew testDebugUnitTest` covers GPX import and export, coordinate parsing and
+`./gradlew testGithubDebugUnitTest` covers GPX import and export, coordinate parsing and
 formatting, great-circle maths, the depth ramp, relief shading, route depth checks, live
 navigation (cross-track, arrival, VMG, ETA, fuel), tide curves, units, 3D grid sampling,
-TIFF format routing, download retries and file naming, and the Kotlin GeoTIFF reader. The
+TIFF format routing, download retries and file naming, polite tile downloading (against a
+local test server), and the Kotlin GeoTIFF reader. For the sea conditions it covers the
+forecast and satellite readers, which saved areas are kept or removed, the freshness dot,
+where an inland spot's area goes, reading the coastline from map tiles, and the
+good-weather alert's rules (limits, hours, what's new and what's gone). The
 GeoTIFF tests build small synthetic rasters at test time (`SyntheticGeoTiff`), so no
 sample data is checked in.
 

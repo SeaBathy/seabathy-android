@@ -93,3 +93,32 @@ screens need a device or emulator (`arm64-v8a` or `x86_64`):
 15. Turn GPS off and on, try locate and follow, and send the app to the background and back.
 16. Rotate the screen and check the layers and waypoints are restored.
 17. Open a depth layer in 3D and check it renders and rotates smoothly.
+18. Turn the GPS on: the boat should show within a couple of seconds. With Android's
+    Location switched off, the app should say so.
+19. **Settings → Depths → Get seabed depths**: draw a box, move it, resize it by a corner.
+20. Turn on **Sea conditions** and a layer (wind, say). The forecast should show within
+    seconds, the colours should stop at the shore (sharp once zoomed in), and the dot on the
+    box should be green. Play the time slider.
+21. **Sea conditions → Good-weather alert**: add a place on the map, then **Check now**.
+22. Turn on marine park zones (**Settings → Australia**) and tap a zone.
+
+## Releasing
+
+Version numbers have three parts and every release adds one to the last (1.3.2, 1.3.3 …
+1.3.9, then 1.4.0). The GitHub and Google Play builds share the number.
+
+1. In `app/build.gradle.kts` raise `versionCode` by one and set `versionName`.
+2. In `README.md` update the version badge and the download link's file name.
+3. In `CHANGELOG.md` turn `## Unreleased` into `## X.Y.Z — date`.
+4. Add `fastlane/metadata/android/en-US/changelogs/<versionCode>.txt` (under 500 characters).
+5. Run the unit tests, then `./gradlew assembleGithubPhone bundlePlayRelease`.
+6. Check the APK: `apksigner verify --print-certs` (the same certificate as the last
+   release, or phones can't update), `aapt2 dump badging` (version, not debuggable), a
+   virus scan, and the device smoke test above or a `monkey` run.
+7. Replace the APK in `download/` with the new one (`SeaBathy-X.Y.Z.apk`), commit as
+   `X.Y.Z`, push, and create the GitHub release `vX.Y.Z` from `main` with the APK attached
+   and the changelog section as its notes.
+8. Check the release's file matches the build (SHA-256), it's marked Latest, and the
+   README's download link works.
+
+The Google Play bundle (`.aab`) is never committed or attached to a GitHub release.
