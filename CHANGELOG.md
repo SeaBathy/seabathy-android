@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- **Sea conditions stop at the shore:** wind, waves and the rest are cut along OpenStreetMap's
+  coastline (the one the chart draws) instead of in blocks over the land, sharp even zoomed right
+  in. The coastline for an area is saved with its weather, so it works offline, and is removed
+  with it. Until it's saved a built-in world outline is used. Your other layers show on land as before.
+
 ## 1.3.1 — 2026-11-18
 
 - **Faster sea conditions:** the forecast downloads several parts at once and shows as soon as it's

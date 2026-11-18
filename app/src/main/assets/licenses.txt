@@ -6,6 +6,7 @@ MAPS AND DATA
 
 Each map's credit shows on screen while it's shown. The services behind the app, and their terms, are listed in DATA_ATTRIBUTION.md in the source code.
 - Basemaps: OpenFreeMap, © OpenMapTiles, data © OpenStreetMap contributors
+- Sea conditions cut at the shore: the coastline from OpenFreeMap map tiles, © OpenMapTiles, data © OpenStreetMap contributors (ODbL); built-in world outline: Natural Earth (public domain).
 - Tides and sea forecasts: Open-Meteo (CC BY 4.0, https://open-meteo.com), with E.U. Copernicus Marine Service Information, Météo-France, ECMWF, DWD and NOAA models. Tides are worked out from this data, and are modelled: not an official tide table.
 - Place search: Open-Meteo Geocoding (GeoNames, CC BY 4.0). Suggested place names: © OpenStreetMap contributors, Nominatim (ODbL).
 - Buoys, beacons, pipelines and cables (beta, off by default): Transport for NSW (CC BY), WA Department of Transport (CC BY 3.0 AU), Victorian Government (Vicmap, CC BY 4.0), State of Queensland (CC BY 4.0), AMSA (CC BY 4.0), NOPTA, Geoscience Australia (CC BY 4.0), ACMA, and © OpenStreetMap contributors (ODbL). Not for navigation.

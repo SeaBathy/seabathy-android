@@ -194,6 +194,14 @@ class ConditionsFeature(
     /** The last picture drawn, kept to put back after a style change; and what it was drawn from. */
     private var lastBitmap: Bitmap? = null
     private var lastQuad: LatLngQuad? = null
+    /** What the last picture covers (south, west, north, east): the whole area, or the part on screen. */
+    private var lastRegion: DoubleArray? = null
+    /** Where the sea ends, to cut the picture at the shore. */
+    private val coastline = Coastline(activity)
+    /** The last coastline mask, by region and size: it doesn't change with the time shown. */
+    private var maskCache: Pair<String, ByteArray?>? = null
+    private var coastFetching = false
+    private var coastTriedAt = 0L
     private var lastPictureKey: String? = null
     /** What the drawing under way is of. */
     private var drawingKey: String? = null
@@ -608,7 +616,7 @@ class ConditionsFeature(
         // before, or saved last time) rather than drawing it again.
         val a = area
         val bitmap = lastBitmap
-        if (shown && a != null && bitmap != null) showPicture(a, bitmap, lastPictureKey ?: "")
+        if (shown && a != null && bitmap != null) showPicture(a, bitmap, lastPictureKey ?: "", lastRegion)
         if (shown) redraw() else clearMap()
     }
 
@@ -620,6 +628,9 @@ class ConditionsFeature(
         map.addOnCameraIdleListener {
             updateBox()
             showNewestHere()
+            // Zoomed in or out, or moved on: the picture for what's on screen now.
+            val a = area
+            if (shown && a != null && lastRegion?.let { regionKey(it) } != regionKey(pictureRegion(a))) redraw()
         }
     }
 
@@ -689,7 +700,8 @@ class ConditionsFeature(
         val arrowChoice = flow
         showFlowLines(a, time)
         // A satellite picture doesn't change with the time; a range set for the colours changes any temperature's.
-        val key = "${a.id}:${a.fetchedMillis}:$choice:" + (if (choice.forecast) (time / PICTURE_STEP_MS) else 0) +
+        val region = pictureRegion(a)
+        val key = "${a.id}:${a.fetchedMillis}:$choice:${regionKey(region)}:" + (if (choice.forecast) (time / PICTURE_STEP_MS) else 0) +
             (if (choice.isTemperature) ":$temperatureRange:$targetBand" else "")
         // Already drawing this very picture (a style change asks again at start-up): let it finish.
         val u = units()
@@ -709,10 +721,14 @@ class ConditionsFeature(
             } else {
                 withContext(work) {
                     val started = System.nanoTime()
-                    val sampler = sampler(a, choice, time) ?: return@withContext null
+                    val sampler = sampler(a, choice, time, clipped = true) ?: return@withContext null
                     val maxSide = satellite?.let { min(MAX_PICTURE_SIDE, max(it.grid.rows, it.grid.cols) * 2) } ?: FORECAST_PICTURE_SIDE
                     val band = targetBand?.takeIf { choice.isTemperature }?.let { it.first..it.second }
-                    val pixels = ConditionsPicture.render(a.south, a.west, a.north, a.east, max(64, maxSide), scaleFor(a, choice), sampler, band) { !isActive }
+                    // Zoomed in: just the part on screen, in more detail, so the shore is sharp.
+                    val side = if (isWhole(a, region)) max(64, maxSide) else REGION_PICTURE_SIDE
+                    val pixels = ConditionsPicture.render(region[0], region[1], region[2], region[3], side, scaleFor(a, choice), sampler, band) { !isActive }
+                    // Cut at the shore: the land see-through, so the layers under it show there as before.
+                    maskFor(a, region, pixels.width, pixels.height)?.let { Coastline.applyMask(pixels.argb, it) }
                     Bitmap.createBitmap(pixels.argb, pixels.width, pixels.height, Bitmap.Config.ARGB_8888).also {
                         DiagnosticLog.log(TAG, "picture $choice ${pixels.width}x${pixels.height} in ${(System.nanoTime() - started) / 1_000_000} ms")
                     }
@@ -725,23 +741,25 @@ class ConditionsFeature(
                 runCatching { contourGeoJson(a, choice, u) }.onFailure { DiagnosticLog.logError(TAG, "contours FAILED", it) }.getOrNull()
             }?.also { contourCache = linesKey to it } ?: MapLayerIds.EMPTY_GEOJSON
             val newLines = contourJson !== shownContours
-            showPicture(a, picture, key)
+            showPicture(a, picture, key, region)
             mapHolder.style?.getSourceAs<GeoJsonSource>(ARROW_SOURCE)?.setGeoJson(arrowJson)
             if (newLines) {
                 mapHolder.style?.getSourceAs<GeoJsonSource>(CONTOUR_SOURCE)?.setGeoJson(contourJson)
                 shownContours = contourJson
             }
-            if (picture != null) savePreview(a, choice, picture)
+            if (picture != null && isWhole(a, region)) savePreview(a, choice, picture)
         }
     }
 
-    private fun showPicture(a: ConditionsArea, bitmap: Bitmap?, key: String) {
+    private fun showPicture(a: ConditionsArea, bitmap: Bitmap?, key: String, region: DoubleArray? = null) {
+        val r = region ?: doubleArrayOf(a.south, a.west, a.north, a.east)
         val style = mapHolder.style
         if (style == null) {
             // Drawn before the map was ready: kept, and put on when it is.
             if (bitmap != null) {
                 lastBitmap = bitmap
                 lastPictureKey = key
+                lastRegion = r
             }
             return
         }
@@ -753,7 +771,7 @@ class ConditionsFeature(
             lastPictureKey = null
             return
         }
-        val quad = LatLngQuad(LatLng(a.north, a.west), LatLng(a.north, a.east), LatLng(a.south, a.east), LatLng(a.south, a.west))
+        val quad = LatLngQuad(LatLng(r[2], r[1]), LatLng(r[2], r[3]), LatLng(r[0], r[3]), LatLng(r[0], r[1]))
         runCatching {
             val source = style.getSourceAs<ImageSource>(IMAGE_SOURCE)
             if (source == null) {
@@ -777,6 +795,71 @@ class ConditionsFeature(
         lastBitmap = bitmap
         lastQuad = quad
         lastPictureKey = key
+        lastRegion = r
+    }
+
+    /**
+     * What the picture covers: the whole area when most of it is on screen; zoomed in, a square
+     * about twice the screen round it, snapped so small moves keep the same picture.
+     */
+    private fun pictureRegion(a: ConditionsArea): DoubleArray {
+        val whole = doubleArrayOf(a.south, a.west, a.north, a.east)
+        val b = mapHolder.map?.projection?.visibleRegion?.latLngBounds ?: return whole
+        val latSpan = b.latitudeNorth - b.latitudeSouth
+        val lngSpan = b.longitudeEast - b.longitudeWest
+        if (latSpan <= 0 || lngSpan <= 0 || lngSpan > 180) return whole
+        if (latSpan * lngSpan > WHOLE_AREA_SHARE * (a.north - a.south) * (a.east - a.west)) return whole
+        // A power of two across, at least the screen: so the same picture serves a range of zooms.
+        val size = Math.pow(2.0, kotlin.math.ceil(kotlin.math.log2(max(latSpan, lngSpan))))
+        val step = size / 2
+        val cLat = Math.round((b.latitudeSouth + b.latitudeNorth) / 2 / step) * step
+        val cLng = Math.round((b.longitudeWest + b.longitudeEast) / 2 / step) * step
+        val s = max(a.south, cLat - size)
+        val n = min(a.north, cLat + size)
+        val w = max(a.west, cLng - size)
+        val e = min(a.east, cLng + size)
+        if (s >= n || w >= e) return whole
+        return doubleArrayOf(s, w, n, e)
+    }
+
+    private fun isWhole(a: ConditionsArea, r: DoubleArray) = r[0] == a.south && r[1] == a.west && r[2] == a.north && r[3] == a.east
+
+    private fun regionKey(r: DoubleArray) = String.format(Locale.US, "%.4f,%.4f,%.4f,%.4f", r[0], r[1], r[2], r[3])
+
+    /**
+     * The shore mask for a [width]x[height] picture of [region]: OpenStreetMap's coastline when
+     * it's saved for the area (fetched now if not, then the picture is drawn again), the built-in
+     * outline meanwhile. On the drawing thread.
+     */
+    private fun maskFor(a: ConditionsArea, region: DoubleArray, width: Int, height: Int): ByteArray? {
+        val sharp = coastline.covers(region[0], region[1], region[2], region[3])
+        val key = "${regionKey(region)}:${width}x$height:$sharp"
+        maskCache?.takeIf { it.first == key }?.let { return it.second }
+        if (!coastline.covers(a.south, a.west, a.north, a.east)) scope.launch { fetchCoastline(a) }
+        val started = System.nanoTime()
+        val mask = runCatching { coastline.mask(region[0], region[1], region[2], region[3], width, height) }
+            .onFailure { DiagnosticLog.logError(TAG, "coastline mask FAILED", it) }.getOrNull()
+        DiagnosticLog.log(TAG, "coastline mask ${width}x$height (${if (sharp) "OpenStreetMap" else "built-in"}) in ${(System.nanoTime() - started) / 1_000_000} ms")
+        maskCache = key to mask
+        return mask
+    }
+
+    /** Saves the coastline for [a] when it isn't saved yet (online, and not more often than every few minutes), then draws again. */
+    private suspend fun fetchCoastline(a: ConditionsArea) {
+        val now = System.currentTimeMillis()
+        if (coastFetching || now - coastTriedAt < COAST_RETRY_MS || !online()) return
+        coastFetching = true
+        coastTriedAt = now
+        val failed = withContext(Dispatchers.IO) {
+            runCatching { coastline.fetch(a.south, a.west, a.north, a.east) }
+                .onFailure { DiagnosticLog.logError(TAG, "coastline FAILED", it) }.getOrDefault(-1)
+        }
+        coastFetching = false
+        if (failed == 0) {
+            maskCache = null
+            lastPictureKey = null
+            if (shown) redraw()
+        }
     }
 
     // The last picture, saved so the next start shows colours at once ----------
@@ -824,7 +907,9 @@ class ConditionsFeature(
      * its 1 km coastline masks the land, so the coarse forecast reaches the
      * shore and the 9 km chlorophyll stops at it, instead of in blocks.
      */
-    private fun sampler(a: ConditionsArea, choice: ColourChoice, time: Long): ConditionsPicture.Sampler? {
+    /** [clipped]: the picture is cut at the shore afterwards, so the values reach right to it. */
+    private fun sampler(a: ConditionsArea, choice: ColourChoice, time: Long, clipped: Boolean = false): ConditionsPicture.Sampler? {
+        if (clipped) return rawSampler(a, choice, time, coastal = true)
         val raw = rawSampler(a, choice, time, coastal = a.satellites.containsKey(SatelliteKind.SEA_TEMP)) ?: return null
         if (choice == ColourChoice.SEA_TEMP_SATELLITE || choice == ColourChoice.SEA_TEMP_BREAKS || !a.satellites.containsKey(SatelliteKind.SEA_TEMP)) return raw
         return ConditionsPicture.Sampler { lat, lng -> if (a.isSea(lat, lng) == false) Float.NaN else raw.at(lat, lng) }
@@ -1422,6 +1507,9 @@ class ConditionsFeature(
                     store.delete(summary.id)
                     preferences.edit().remove(KEY_SATELLITES_AT + summary.id).apply()
                     DiagnosticLog.log(TAG, "removed ${summary.name}: " + if (reason == ConditionsPolicy.Reason.EXPIRED) "its forecast ran out" else "a newer download covers it")
+                }.also {
+                    // The coastline goes with the last area that needed it.
+                    if (it.isNotEmpty()) coastline.prune(store.summaries().map { s -> doubleArrayOf(s.south, s.west, s.north, s.east) })
                 }
             }
             if (removed.any { it.first.id == area?.id }) {
@@ -2493,6 +2581,8 @@ class ConditionsFeature(
                 return@launch
             }
             if (first.forecast != null) showDownloaded(first, quiet)
+            // The shore for this area, saved with it so the picture is cut sharp offline too.
+            scope.launch { fetchCoastline(first) }
 
             // 2. Satellite pictures: they change once a day, so they're fetched once a day.
             val kinds = if (satellites) satelliteKindsDue(first) else emptyList()
@@ -2785,6 +2875,11 @@ class ConditionsFeature(
         private const val PLAY = "Play"
         private const val PAUSE = "Pause"
         private const val FORECAST_PICTURE_SIDE = 320
+        /** Zoomed in: the picture of the part on screen, sharp enough for the shore. */
+        private const val REGION_PICTURE_SIDE = 768
+        /** More of the area than this on screen: the picture is of the whole area. */
+        private const val WHOLE_AREA_SHARE = 0.25
+        private const val COAST_RETRY_MS = 5 * 60_000L
         private const val MAX_PICTURE_SIDE = 512
         /** The forecast picture is redrawn as the time moves on by this much. */
         private const val PICTURE_STEP_MS = 10 * 60_000L
