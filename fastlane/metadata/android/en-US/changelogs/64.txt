@@ -1,0 +1,1 @@
+The boat shows on the chart as soon as you turn the GPS on, with a message if Location is off or it's still waiting. Sea conditions no longer sit on downloading when the connection drops.

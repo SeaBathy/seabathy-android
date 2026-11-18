@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.3.3 — 2026-11-18
 
 - **The boat shows straight away:** turning the GPS on puts the boat on the chart at once from the
   phone's newest recent position, and uses Android's fused location (GPS, Wi-Fi and phone masts) for
