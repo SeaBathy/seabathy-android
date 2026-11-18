@@ -90,6 +90,17 @@ class CoastlineTest {
     }
 
     @Test
+    fun theWindingNumberTellsSeaFromLand() {
+        // Sea: the whole tile, with an island (a hole, wound the other way) in the middle.
+        val sea = shortArrayOf(0, 0, 4096, 0, 4096, 4096, 0, 4096)
+        val island = shortArrayOf(1000, 1000, 1000, 2000, 2000, 2000, 2000, 1000)
+        val rings = arrayOf(sea, island)
+        assertTrue(Coastline.windingNumber(rings, 500.0, 500.0) != 0)
+        assertEquals(0, Coastline.windingNumber(rings, 1500.0, 1500.0))
+        assertEquals(0, Coastline.windingNumber(arrayOf(shortArrayOf(0, 0, 100, 0, 100, 100)), 3000.0, 3000.0))
+    }
+
+    @Test
     fun tileMaths() {
         val n = 1 shl Coastline.ZOOM
         assertEquals(n / 2, Coastline.tileX(0.0, n))

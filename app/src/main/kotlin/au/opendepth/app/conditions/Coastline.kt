@@ -69,6 +69,21 @@ class Coastline(context: Context) {
 
     fun has(t: Tile) = file(t).exists()
 
+    /**
+     * Whether [lat]/[lng] is sea by OpenStreetMap's coastline, from the saved tile there; null when
+     * that tile isn't saved. Quick: one tile's outline, kept in memory once read.
+     */
+    fun isSea(lat: Double, lng: Double): Boolean? {
+        val n = 1 shl ZOOM
+        val t = Tile(tileX(lng, n), tileY(lat, n))
+        if (!has(t)) return null
+        val rings = read(t) ?: return null
+        if (rings.isEmpty()) return false
+        val gx = ((lng + 180) / 360 * n - t.x) * EXTENT
+        val gy = ((PI - mercatorY(lat)) / (2 * PI) * n - t.y) * EXTENT
+        return windingNumber(rings, gx, gy) != 0
+    }
+
     /** All of the area's coastline is saved. */
     fun covers(south: Double, west: Double, north: Double, east: Double) = tilesFor(south, west, north, east).all(::has)
 
@@ -270,6 +285,27 @@ class Coastline(context: Context) {
         fun tileY(lat: Double, n: Int): Int {
             val r = Math.toRadians(lat.coerceIn(-85.0, 85.0))
             return floor((1 - ln(tan(r) + 1 / kotlin.math.cos(r)) / PI) / 2 * n).toInt().coerceIn(0, n - 1)
+        }
+
+        /** The winding number of [rings] (x0, y0, x1, y1 …, each closed implicitly) round [x]/[y]: not 0 inside. Pure, unit-tested. */
+        fun windingNumber(rings: Array<ShortArray>, x: Double, y: Double): Int {
+            var wn = 0
+            for (r in rings) {
+                val count = r.size / 2
+                if (count < 3) continue
+                for (i in 0 until count) {
+                    val x1 = r[i * 2].toDouble(); val y1 = r[i * 2 + 1].toDouble()
+                    val j = (i + 1) % count
+                    val x2 = r[j * 2].toDouble(); val y2 = r[j * 2 + 1].toDouble()
+                    val side = (x2 - x1) * (y - y1) - (x - x1) * (y2 - y1)
+                    if (y1 <= y) {
+                        if (y2 > y && side > 0) wn++
+                    } else if (y2 <= y && side < 0) {
+                        wn--
+                    }
+                }
+            }
+            return wn
         }
 
         fun mercatorY(lat: Double): Double = ln(tan(PI / 4 + Math.toRadians(lat.coerceIn(-85.0, 85.0)) / 2))

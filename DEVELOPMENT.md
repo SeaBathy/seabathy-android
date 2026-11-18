@@ -9,8 +9,9 @@ app, see the [README](README.md). For building, signing and the device test, see
     app/src/main/kotlin/au/opendepth/app/
       MainActivity.kt   screen coordination and lifecycle
       backup/           backup and restore of waypoints, routes, tracks and settings
-      conditions/       sea conditions: download, cache, map layers, the shore cut
-                        (coastline), good-weather alerts and their background check
+      conditions/       sea conditions: WeatherEngine (what to download and when, one at
+                        a time, retries; SpotRules, WeatherReadings), the download client,
+                        cache, map layers, the shore cut (coastline), good-weather alerts
       data/             waypoint, layer and data-source persistence
       diagnostics/      shareable debug log and resource tracking
       download/         offline tile downloads (foreground service, retries)

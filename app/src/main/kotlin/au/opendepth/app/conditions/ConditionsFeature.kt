@@ -109,6 +109,60 @@ class ConditionsFeature(
     private val work = conditionsThread("sea-conditions", android.os.Process.THREAD_PRIORITY_DEFAULT)
     private val downloads = conditionsThread("sea-conditions-download", android.os.Process.THREAD_PRIORITY_BACKGROUND)
     private val client = ConditionsClient()
+
+    /** What to download and when, one at a time: see [WeatherEngine]. */
+    private val engine: WeatherEngine by lazy {
+        WeatherEngine(
+            store = store,
+            net = object : WeatherNet {
+                override fun forecast(south: Double, west: Double, north: Double, east: Double, days: Int, onProgress: (Double) -> Unit): ForecastGrid {
+                    val span = max(north - south, east - west)
+                    val grid = GeoGrid.covering(south, west, north, east, max(MIN_STEP_DEG, span / (MAX_POINTS_PER_SIDE - 1)), MAX_POINTS_PER_SIDE)
+                    val windGrid = GeoGrid.covering(south, west, north, east, max(MIN_STEP_DEG, span / (MAX_WIND_POINTS_PER_SIDE - 1)), MAX_WIND_POINTS_PER_SIDE)
+                    return client.forecast(grid, days, windGrid, onProgress)
+                }
+                override fun satellite(kind: SatelliteKind, south: Double, west: Double, north: Double, east: Double, depthM: Int) =
+                    client.satellite(kind, south, west, north, east, depthM)
+                override fun seaAt(points: List<Pair<Double, Double>>) = client.seaAt(points)
+                override fun latestRun() = client.latestRunMillis()
+                override fun coastline(south: Double, west: Double, north: Double, east: Double) {
+                    if (coastline.fetch(south, west, north, east) > 0) throw java.io.IOException("some coastline tiles didn't come")
+                }
+            },
+            kv = object : WeatherKeyValues {
+                override fun get(key: String): String? = preferences.all[key]?.toString()
+                override fun put(key: String, value: String?) {
+                    preferences.edit().apply { if (value == null) remove(key) else putString(key, value) }.apply()
+                }
+            },
+            settings = { WeatherSettings(days, withSatellite, belowDepthM, keepUpdated) },
+            clock = System::currentTimeMillis,
+            online = ::online,
+            scope = scope,
+            io = downloads,
+            parallel = Dispatchers.IO,
+            timer = { delayMs, run ->
+                val r = Runnable(run)
+                ticker.postDelayed(r, delayMs)
+                ({ ticker.removeCallbacks(r) })
+            },
+            events = object : WeatherEvents {
+                override fun saved(area: ConditionsArea, isSpot: Boolean) = onSaved(area, isSpot)
+                override fun stateChanged(state: WeatherState) {
+                    updateBox()
+                    refreshDialog()
+                }
+                override fun finished(area: ConditionsArea?, problems: List<String>, userAsked: Boolean, note: String?) =
+                    onFinished(area, problems, userAsked, note)
+                override fun coastlineReady() {
+                    boatReadingCache = null
+                    maskCache = null
+                    lastPictureKey = null
+                    if (shown) redraw()
+                }
+            }
+        )
+    }
     private val palette = AppTheme.palette
 
     private var shown = preferences.getBoolean(KEY_SHOWN, false)
@@ -154,15 +208,8 @@ class ConditionsFeature(
     private var picking = false
     /** The map's parent, for the alert place picker. */
     private var boundRoot: ViewGroup? = null
-    private var lastAutoAttempt = 0L
-    /** When the forecast models last had a new run, as last checked; and when that was. */
-    private var latestRun: Long? = null
-    private var lastRunCheck = 0L
-    /** No download starts before this: Open-Meteo allows 600 requests a minute, and one area is about 360. */
-    private var nextDownloadAllowed = 0L
-    private val retrySpot = Runnable { keepSpotUpdated(force = true) }
-    /** The area kept around the spot, when there is one. */
-    private var spotArea: ConditionsArea? = null
+    /** The area kept around the spot, when there is one (the engine keeps it). */
+    private val spotArea: ConditionsArea? get() = engine.spotArea
 
     /** Stepping through the forecast by itself. */
     private var playing = false
@@ -181,14 +228,10 @@ class ConditionsFeature(
 
     private var area: ConditionsArea? = null
     private var drawJob: Job? = null
-    private var downloadJob: Job? = null
-    /** Set for the whole download, cleared before the sheet is redrawn at the end (the job is still active then). */
-    private var downloading = false
-    /** Looking for the nearest sea before a spot download (inland). */
-    private var findingSea = false
-    /** Why the last download got nothing (shown in the box when there's nothing saved to show), or null. */
-    private var lastProblem: String? = null
-    private var status: String? = null
+    /** A download is under way (the engine's). */
+    private val downloading: Boolean get() = engine.busy
+    /** What's downloading now, for the settings sheet. */
+    private val status: String? get() = (engine.state as? WeatherState.Working)?.what
     private var dialog: Dialog? = null
     private var dialogBody: LinearLayout? = null
     private var cameraListening = false
@@ -219,7 +262,9 @@ class ConditionsFeature(
     private val tick = object : Runnable {
         override fun run() {
             if (shown && live) redraw() else updateBox()
-            checkForUpdates()
+            engine.checkRun()
+            engine.setSpot(spotTarget())
+            area?.let { engine.keepFresh(it) }
             ticker.postDelayed(this, TICK_MS)
         }
     }
@@ -477,8 +522,8 @@ class ConditionsFeature(
             val started = System.nanoTime()
             val (picked, spot) = withContext(work) { pickArea() to store.load(SPOT_ID) }
             DiagnosticLog.log(TAG, "saved areas read in ${(System.nanoTime() - started) / 1_000_000} ms")
-            area = picked
-            spotArea = spot
+            area = picked ?: spot
+            engine.start(spot)
             // Last time's picture straight away; the fresh one replaces it when drawn.
             val choice = colour
             if (shown && picked != null && lastBitmap == null) {
@@ -487,10 +532,11 @@ class ConditionsFeature(
             if (shown) redraw() else updateBox()
             callbacks.creditsChanged()
             removeOldAreas()
-            // Let the chart and its layers load first; the update can wait a few seconds.
+            // Let the chart and its layers load first; the update can wait a moment.
             delay(STARTUP_DOWNLOAD_DELAY_MS)
             startupDone = true
-            checkForUpdates(force = true)
+            engine.setSpot(spotTarget())
+            engine.checkRun(force = true)
         }
     }
 
@@ -519,7 +565,7 @@ class ConditionsFeature(
         }
         if (!followGps) return
         updateBox()
-        keepSpotUpdated()
+        if (startupDone) engine.setSpot(spotTarget())
     }
 
     /**
@@ -532,7 +578,7 @@ class ConditionsFeature(
         wasOffline = false
         onlineAt = 0L
         DiagnosticLog.log(TAG, "back online: checking for updates")
-        checkForUpdates(force = true)
+        engine.onOnline()
         updateBox()
     }
 
@@ -549,7 +595,8 @@ class ConditionsFeature(
         // Back to the app after a while: is there a newer forecast? (At start-up
         // the saved data is still being read: the start-up check comes after.)
         if (startupDone) {
-            checkForUpdates()
+            engine.checkRun()
+            engine.setSpot(spotTarget())
             // The alert's check may have saved a forecast while the app was away.
             scope.launch {
                 withContext(work) {
@@ -578,14 +625,11 @@ class ConditionsFeature(
     }
 
     fun release() {
-        ticker.removeCallbacks(retryShown)
         work.close()
         downloads.close()
         ticker.removeCallbacks(tick)
         ticker.removeCallbacks(play)
-        ticker.removeCallbacks(retrySpot)
         drawJob?.cancel()
-        downloadJob?.cancel()
     }
 
     /** The style was rebuilt: everything custom is gone, so put the layers back. */
@@ -1160,54 +1204,55 @@ class ConditionsFeature(
         }
         box.visibility = View.VISIBLE
         val time = timeMillis
-        val a: ConditionsArea
-        val lat: Double
-        val lng: Double
-        val wanted: Set<String>?
-        val shownArea = area
-        if (shown && shownArea != null && target != null && shownArea.contains(target.latitude, target.longitude)) {
-            // The map layer is on: everything, where the crosshair is.
-            a = shownArea
-            lat = target.latitude
-            lng = target.longitude
-            wanted = if (boxOpen) null else setOfNotNull("Wind", rowNameOf(colour))
-            boxTitle.text = "At the crosshair · " + if (live) "now" else clock(time)
-        } else {
-            val boat = spot()
-            val sea = boat?.let { nearestSeaFor(it) }
-            val spot = sea ?: boat
-            val data = listOfNotNull(spotArea, shownArea).firstOrNull { spot != null && it.contains(spot.first, spot.second) }
-            if (spot == null || data == null) {
-                boxTitle.text = when {
-                    downloading || findingSea -> "Sea conditions · downloading…"
-                    lastProblem != null -> "Sea conditions · ${lastProblem}"
-                    spot == null && followGps -> "Sea conditions · waiting for the GPS"
+        val format = NavFormat(units())
+        val loaded = listOfNotNull(area, spotArea)
+        // Sea, by OpenStreetMap's coastline where it's saved (else the satellite's, else the forecast's),
+        // with values to show.
+        val hasSea = { a: ConditionsArea, lat: Double, lng: Double ->
+            coastline.isSea(lat, lng) != false && values(a, lat, lng, time, format).isNotEmpty()
+        }
+        val boat = spot()
+        // The map layer on, the crosshair over sea with data: everything there. Otherwise the boat (or
+        // the set spot): its own reading, or the nearest sea when it's on land. Whatever is saved
+        // shows, old or not, while anything downloads.
+        val atCrosshair = if (shown && target != null) {
+            WeatherReadings.best(loaded, target.latitude, target.longitude, time, nearest = false, hasSea = hasSea)
+        } else null
+        val reading = atCrosshair ?: boat?.let { b -> boatReading(loaded, b, time, hasSea) }
+        if (reading == null) {
+            boxTitle.text = when (val st = engine.state) {
+                is WeatherState.Working -> "Sea conditions · downloading…"
+                is WeatherState.Waiting -> "Sea conditions · ${st.reason}"
+                else -> when {
+                    boat == null && followGps -> "Sea conditions · waiting for the GPS"
                     keepUpdated && !online() -> "Sea conditions · none saved here (offline)"
                     else -> "Sea conditions · tap to set up"
                 }
-                boxRows.forEach { it.view.visibility = View.GONE }
-                boxWarning.visibility = View.GONE
-                showFreshness(null)
-                return
             }
-            a = data
-            // On land (a boat on the trailer, at home): the nearest sea in the downloaded area,
-            // rather than "no sea data here".
-            val shore = if (sea == null && boat != null) nearestSeaInArea(data, boat, time) else null
-            lat = (shore ?: spot).first
-            lng = (shore ?: spot).second
-            val seaShown = sea ?: shore
+            boxRows.forEach { it.view.visibility = View.GONE }
+            boxWarning.visibility = View.GONE
+            showFreshness(null)
+            return
+        }
+        val a = reading.area
+        val lat = reading.lat
+        val lng = reading.lng
+        val wanted: Set<String>?
+        if (reading === atCrosshair) {
+            wanted = if (boxOpen) null else setOfNotNull("Wind", rowNameOf(colour))
+            boxTitle.text = "At the crosshair · " + if (live) "now" else clock(time)
+        } else {
             wanted = if (boxOpen) null else setOfNotNull("Wind", rowNameOf(colour).takeIf { shown })
             boxTitle.text = (
-                if (seaShown != null && boat != null) String.format(Locale.US, "Nearest sea, %.0f km", au.opendepth.app.nav.NavGeo.distanceM(boat.first, boat.second, seaShown.first, seaShown.second) / 1000)
+                if (reading.distanceKm >= 0.5) String.format(Locale.US, "Nearest sea, %.0f km", reading.distanceKm)
                 else if (followGps) "At the boat" else "At your spot"
                 ) + " · " + if (live) "now" else clock(time)
         }
         showFreshness(a)
         // The card already says when the layer's area is old.
-        if (shown && a === shownArea) boxWarning.visibility = View.GONE else showWarning(boxWarning, a)
+        if (shown && a === area) boxWarning.visibility = View.GONE else showWarning(boxWarning, a)
         // Wind first (it's what the box shows closed), then the rest in a fixed order.
-        val values = values(a, lat, lng, time, NavFormat(units()))
+        val values = values(a, lat, lng, time, format)
             .filter { wanted == null || it.row in wanted }
             .sortedBy { ROW_ORDER.indexOf(it.row).let { i -> if (i < 0) ROW_ORDER.size else i } }
         val bearing = map.cameraPosition.bearing
@@ -1234,28 +1279,88 @@ class ConditionsFeature(
         if (values.isEmpty()) {
             val forecast = a.forecast
             boxTitle.text = if (forecast != null && time > forecast.endMillis + ForecastGrid.HOUR_MS) "The forecast has run out: update it"
-            else "No sea data here (on land?)"
+            else "Sea conditions · nothing at this time"
         }
     }
 
-    /** The last nearest-sea search: area, its download time and the spot (rounded), and the answer. */
-    private var shoreCache: Pair<String, Pair<Double, Double>?>? = null
+    /** The last boat reading worked out, and what for: the box is updated on every map move. */
+    private var boatReadingCache: Pair<String, WeatherReadings.Reading?>? = null
+
+    /** What the box shows for the boat: its own reading, or on land the nearest sea (remembered until something changes). */
+    private fun boatReading(
+        loaded: List<ConditionsArea>, b: Pair<Double, Double>, time: Long, hasSea: (ConditionsArea, Double, Double) -> Boolean
+    ): WeatherReadings.Reading? {
+        val key = loaded.joinToString { "${it.id}:${it.fetchedMillis}:${it.satellites.size}" } +
+            String.format(Locale.US, "|%.4f,%.4f|%d|%b", b.first, b.second, time / (15 * 60_000L), coastline.isSea(b.first, b.second))
+        boatReadingCache?.takeIf { it.first == key }?.let { return it.second }
+        val r = WeatherReadings.best(loaded, b.first, b.second, time, hasSea = hasSea)
+            ?: engine.nearestSeaFor(b)?.let { sea ->
+                WeatherReadings.best(loaded, sea.first, sea.second, time, hasSea = hasSea)?.let { r ->
+                    r.copy(distanceKm = au.opendepth.app.nav.NavGeo.distanceM(b.first, b.second, r.lat, r.lng) / 1000)
+                }
+            }
+        boatReadingCache = key to r
+        return r
+    }
 
     /**
-     * When [spot] has no sea values in [a] (it's on land): the nearest point of [a]'s forecast
-     * grid that has them, or null when the spot is at sea or the area has none. Remembered, as
-     * the box is updated each time the map moves.
+     * Where the spot's area is kept: the spot (the boat, or the set spot), or while there's no
+     * position, the middle of what's saved for it.
      */
-    private fun nearestSeaInArea(a: ConditionsArea, spot: Pair<Double, Double>, time: Long): Pair<Double, Double>? {
-        val key = String.format(Locale.US, "%s:%d:%.3f,%.3f", a.id, a.fetchedMillis, spot.first, spot.second)
-        shoreCache?.takeIf { it.first == key }?.let { return it.second }
-        val format = NavFormat(units())
-        val hasSea = { lat: Double, lng: Double -> values(a, lat, lng, time, format).isNotEmpty() }
-        val found = if (hasSea(spot.first, spot.second)) null else a.forecast?.grid?.let { grid ->
-            nearestMatching(grid.lats, grid.lngs, spot.first, spot.second, hasSea)
+    private fun spotTarget(): Pair<Double, Double>? =
+        spot() ?: spotArea?.let { (it.south + it.north) / 2 to (it.west + it.east) / 2 }
+
+    /** An area was saved by the engine: shown straight away where it belongs. */
+    private fun onSaved(saved: ConditionsArea, isSpot: Boolean) {
+        // The very first download: show it on the map, so it's clear it worked. Once only:
+        // after that the layer stays as the user leaves it.
+        if (!preferences.contains(KEY_SHOWN) && saved.forecast != null) {
+            if (!preferences.contains(KEY_COLOUR)) {
+                colour = ColourChoice.WIND
+                preferences.edit().putString(KEY_COLOUR, colour.name).apply()
+            }
+            area = saved
+            areaId = saved.id
+            setShown(true)
         }
-        shoreCache = key to found
-        return found
+        val current = area
+        // The map shows it when it's what's on the map, or the spot's and nothing else is shown.
+        if (current == null || current.id == saved.id || (isSpot && !shown)) {
+            area = saved
+            areaId = saved.id
+            preferences.edit().putString(KEY_AREA, saved.id).apply()
+            lastPictureKey = null
+            scaleCache = null
+            maskCache = null
+        }
+        if (shown && area?.id == saved.id) redraw() else updateBox()
+        callbacks.creditsChanged()
+        refreshDialog()
+    }
+
+    /** A download finished: messages for one the user asked for; the first ever shows on the map. */
+    private fun onFinished(result: ConditionsArea?, problems: List<String>, userAsked: Boolean, note: String?) {
+        if (result == null) {
+            if (userAsked) callbacks.toast("Couldn't get the sea conditions. " + problems.joinToString(" "))
+            updateBox()
+            refreshDialog()
+            return
+        }
+        if (userAsked) {
+            val saved = if (problems.isEmpty()) "Sea conditions saved for ${if (result.id == SPOT_ID) SPOT_NAME else result.name}." else "Saved ${result.name}, but: " + problems.joinToString(" ")
+            callbacks.toast(listOfNotNull(saved, note).joinToString(" "))
+            if (result.id != SPOT_ID) live = true
+        }
+        if (userAsked && result.id != SPOT_ID) {
+            area = result
+            areaId = result.id
+            preferences.edit().putString(KEY_AREA, result.id).apply()
+            lastPictureKey = null
+            if (!shown) setShown(true) else redraw()
+        }
+        updateBox()
+        removeOldAreas()
+        refreshDialog()
     }
 
     /** Working internet, asked of the phone at most every few seconds (this runs as the map moves). */
@@ -1335,7 +1440,7 @@ class ConditionsFeature(
      * it's older than the update interval, or the spot has moved out of its middle.
      */
     private fun freshnessOf(a: ConditionsArea): ConditionsPolicy.Freshness = ConditionsPolicy.freshness(
-        a.fetchedMillis, a.forecast?.endMillis, latestRun, System.currentTimeMillis(), downloading || findingSea
+        a.fetchedMillis, a.forecast?.endMillis, engine.latestRun, System.currentTimeMillis(), engine.busy
     )
 
     /** The box's dot for [a]: green, amber or red; hidden with nothing on show. */
@@ -1373,153 +1478,17 @@ class ConditionsFeature(
                 !online() -> callbacks.toast("Out of date ($age). No internet: it updates when you're back online")
                 a.id == SPOT_ID -> {
                     callbacks.toast("Out of date ($age): updating")
-                    val (lat, lng) = spot() ?: ((a.south + a.north) / 2 to (a.west + a.east) / 2)
-                    lastAutoAttempt = now
-                    downloadSpot(lat, lng, quiet = true)
+                    engine.setSpot(spotTarget())
+                    engine.evaluate(userAsked = true)?.let { callbacks.toast(it) }
                 }
                 else -> {
                     callbacks.toast("Out of date ($age): updating")
-                    download(a.south, a.west, a.north, a.east, replacingId = a.id, quiet = true)
+                    engine.downloadArea(a.south, a.west, a.north, a.east, a.id, userAsked = true)?.let { callbacks.toast(it) }
                 }
             }
         }
         updateBox()
     }
-
-    private fun keepSpotUpdated(force: Boolean = false) {
-        if (!keepUpdated || downloading || findingSea) return
-        val now = System.currentTimeMillis()
-        // No position yet (GPS off, just started): keep the last spot's area fresh, or the
-        // area on the map's, rather than nothing.
-        val (lat, lng) = spot() ?: (spotArea ?: area)?.let { (it.south + it.north) / 2 to (it.west + it.east) / 2 } ?: run {
-            DiagnosticLog.log(TAG, "spot not updated: no GPS position yet and nothing saved to go by")
-            return
-        }
-        val saved = spotArea
-        // The pause between tries is for retrying; a boat that has left its area gets the new one
-        // straight away (still no more than one download every MIN_DOWNLOAD_GAP_MS).
-        val leftArea = saved != null && spotMoved(saved, lat, lng)
-        if (!force && !leftArea && now - lastAutoAttempt < AUTO_RETRY_MS) return
-        val fresh = saved != null && !ConditionsPolicy.needsUpdate(saved.fetchedMillis, latestRun, now) && !spotMoved(saved, lat, lng)
-        if (fresh) return
-        if (!online()) {
-            DiagnosticLog.log(TAG, "spot needs an update but there's no internet: showing the saved data")
-            return
-        }
-        if (now < nextDownloadAllowed) {
-            // Too soon after the last one: try again when it's allowed.
-            ticker.removeCallbacks(retrySpot)
-            ticker.postDelayed(retrySpot, nextDownloadAllowed - now + 500)
-            return
-        }
-        lastAutoAttempt = now
-        DiagnosticLog.log(
-            TAG,
-            "updating the spot: " + when {
-                saved == null -> "nothing saved yet"
-                spotMoved(saved, lat, lng) -> "the spot moved well away from where its area was downloaded"
-                else -> "saved ${ago(saved.fetchedMillis, now)}, newest forecast run ${latestRun?.let { ago(it, now) } ?: "unknown"}"
-            }
-        )
-        downloadSpot(lat, lng, quiet = true)
-    }
-
-    /** Where the spot's area was last downloaded for (the boat then). */
-    private fun spotOrigin(): Pair<Double, Double>? =
-        preferences.getString(KEY_SPOT_FROM, null)?.split(',')?.mapNotNull { it.toDoubleOrNull() }?.takeIf { it.size == 2 }?.let { it[0] to it[1] }
-
-    /** The boat is far enough from where the spot's area was downloaded for to need a new one. */
-    private fun spotMoved(saved: ConditionsArea, lat: Double, lng: Double): Boolean {
-        val from = spotOrigin() ?: return !saved.middleContains(lat, lng)
-        return au.opendepth.app.nav.NavGeo.distanceM(from.first, from.second, lat, lng) > SPOT_MOVE_KM * 1000
-    }
-
-    /** Block middles (and the nearest sea, inland) worked out for spots, by spot rounded to about 10 km. */
-    private val seaCentres = HashMap<String, Pair<Pair<Double, Double>, Pair<Double, Double>?>>()
-
-    /** For an inland spot: the nearest sea found for it, where the box reads the conditions. */
-    private fun nearestSeaFor(spot: Pair<Double, Double>): Pair<Double, Double>? {
-        val v = preferences.getString(KEY_SPOT_SEA, null)?.split(',')?.mapNotNull { it.toDoubleOrNull() }?.takeIf { it.size == 4 } ?: return null
-        // Found for about here (the boat moves about inland a little between downloads).
-        if (au.opendepth.app.nav.NavGeo.distanceM(v[0], v[1], spot.first, spot.second) > SPOT_MOVE_KM * 1000) return null
-        return v[2] to v[3]
-    }
-
-    /**
-     * Downloads the spot's area for the boat at [lat]/[lng]: round the boat on the water; inland,
-     * over the nearest sea ([SpotBlock]), not a block of land with a sliver of sea at its edge.
-     */
-    private fun downloadSpot(lat: Double, lng: Double, quiet: Boolean) {
-        if (downloading || findingSea) return
-        findingSea = true
-        updateBox()
-        val key = String.format(Locale.US, "%.1f,%.1f", lat, lng)
-        scope.launch {
-            val found = seaCentres[key] ?: withContext(downloads) {
-                runCatching {
-                    // The boat first (one point); the rings only when it isn't on the water.
-                    if (client.seaAt(listOf(lat to lng)).first() != null) (lat to lng) to null
-                    else client.seaAt(SpotBlock.ringPoints(lat, lng)).let { sea ->
-                        SpotBlock.centre(lat, lng, sea) to SpotBlock.nearestSea(lat, lng, sea)
-                    }
-                }.onFailure { DiagnosticLog.logError(TAG, "finding the nearest sea FAILED", it) }.getOrNull()
-            }?.also { seaCentres[key] = it }
-            val centre = found?.first
-            // Inland, the box shows the nearest sea rather than "no sea data here".
-            preferences.edit().apply {
-                val near = found?.second
-                if (near != null) putString(KEY_SPOT_SEA, String.format(Locale.US, "%.5f,%.5f,%.5f,%.5f", lat, lng, near.first, near.second))
-                else if (found != null) remove(KEY_SPOT_SEA)
-            }.apply()
-            findingSea = false
-            val (cLat, cLng) = centre ?: (lat to lng)
-            if (centre != null && centre != lat to lng) {
-                DiagnosticLog.log(TAG, String.format(Locale.US, "inland: spot area centred on the nearest sea, %.0f km away",
-                    au.opendepth.app.nav.NavGeo.distanceM(lat, lng, cLat, cLng) / 1000))
-            }
-            preferences.edit().putString(KEY_SPOT_FROM, String.format(Locale.US, "%.5f,%.5f", lat, lng)).apply()
-            val b = boxAround(cLat, cLng, SPOT_RADIUS_KM)
-            download(b[0], b[1], b[2], b[3], replacingId = SPOT_ID, quiet = quiet)
-        }
-    }
-
-    /**
-     * When online, at most every [RUN_CHECK_MS] (or now, with [force]):
-     * asks whether a newer forecast run is out, then updates the spot's area
-     * and the area on the map when theirs is older. Offline it does nothing:
-     * the saved data stays on show, marked as old.
-     */
-    private fun checkForUpdates(force: Boolean = false) {
-        if (!keepUpdated) return
-        val now = System.currentTimeMillis()
-        if (!force && now - lastRunCheck < RUN_CHECK_MS) return
-        if (!online()) return
-        lastRunCheck = now
-        scope.launch {
-            val run = withContext(downloads) { runCatching { client.latestRunMillis() }.getOrNull() }
-            if (run != null) latestRun = run
-            DiagnosticLog.log(TAG, "update check: newest forecast run ${run?.let { ago(it, System.currentTimeMillis()) } ?: "couldn't be read"}")
-            keepSpotUpdated(force = true)
-            updateShownArea()
-        }
-    }
-
-    /** The area on the map, when it isn't the spot's: updated the same way, after any download under way. */
-    private fun updateShownArea() {
-        val a = area ?: return
-        if (a.id == SPOT_ID || !keepUpdated) return
-        val now = System.currentTimeMillis()
-        if (!ConditionsPolicy.needsUpdate(a.fetchedMillis, latestRun, now) || !online()) return
-        if (downloading || now < nextDownloadAllowed) {
-            ticker.removeCallbacks(retryShown)
-            ticker.postDelayed(retryShown, max(nextDownloadAllowed - now, 5_000L) + 500)
-            return
-        }
-        DiagnosticLog.log(TAG, "updating ${a.name}: saved ${ago(a.fetchedMillis, now)}")
-        download(a.south, a.west, a.north, a.east, replacingId = a.id, quiet = true)
-    }
-
-    private val retryShown = Runnable { updateShownArea() }
 
     /**
      * Removes saved areas that are of no more use: forecasts that ran out
@@ -1611,7 +1580,7 @@ class ConditionsFeature(
 
     private fun spotChanged() {
         preferences.edit().putBoolean(KEY_SPOT_GPS, followGps).apply()
-        keepSpotUpdated(force = true)
+        engine.setSpot(spotTarget())
         updateBox()
         refreshDialog()
     }
@@ -1987,7 +1956,8 @@ class ConditionsFeature(
             panels.showChoicePanel("Update automatically", choices.map { autoLabel(it) }, if (keepUpdated) 0 else 1) { i ->
                 autoHours = choices[i]
                 preferences.edit().putInt(KEY_AUTO_HOURS, autoHours).apply()
-                checkForUpdates(force = true)
+                engine.checkRun(force = true)
+                engine.setSpot(spotTarget())
                 refreshDialog()
             }
         })
@@ -1999,16 +1969,8 @@ class ConditionsFeature(
         ))
         panels.addRow(body, panels.row(if (downloading) "Downloading…" else "Update now", "${dayText(days)} of forecast" + if (withSatellite) " + satellite" else "") {
             if (downloading) return@row
-            val (lat, lng) = spot() ?: spotArea?.let { (it.south + it.north) / 2 to (it.west + it.east) / 2 } ?: run {
-                callbacks.toast("Waiting for the GPS: set a spot, or turn the GPS on")
-                return@row
-            }
-            if (!callbacks.isOnline()) {
-                callbacks.toast("No internet: the saved data is still shown")
-                return@row
-            }
-            lastAutoAttempt = System.currentTimeMillis()
-            downloadSpot(lat, lng, quiet = false)
+            engine.setSpot(spotTarget())
+            engine.evaluate(userAsked = true)?.let { callbacks.toast(it) }
         })
 
         body.addView(panels.sectionHeader("ALERTS"))
@@ -2050,7 +2012,9 @@ class ConditionsFeature(
                 belowDepthM = choices[i]
                 preferences.edit().putInt(KEY_BELOW_DEPTH, belowDepthM).apply()
                 refreshDialog()
-                refreshBelowDepth()
+                (area ?: spotArea)?.let { target ->
+                    engine.downloadDepth(target.id)?.let { callbacks.toast(it) }
+                } ?: callbacks.toast("Saved: the next download gets the temperature at that depth")
             }
         })
         val opacityLabel = panels.caption("Colour opacity ${(opacity * 100).roundToInt()}%", topPaddingDp = 4)
@@ -2392,15 +2356,11 @@ class ConditionsFeature(
                 1 -> selectArea(s.id, goTo = true)
                 2 -> scope.launch {
                     val saved = withContext(Dispatchers.IO) { store.load(s.id) } ?: return@launch
-                    download(saved.south, saved.west, saved.north, saved.east, replacingId = saved.id)
+                    engine.downloadArea(saved.south, saved.west, saved.north, saved.east, saved.id, userAsked = true)?.let { callbacks.toast(it) }
                 }
                 3 -> rename(s)
                 4 -> panels.confirm("Delete ${s.name}?", "Its saved sea conditions are removed from the phone.") {
-                    if (s.id == SPOT_ID) {
-                        spotArea = null
-                        // Not straight back: it downloads again at the next update.
-                        lastAutoAttempt = System.currentTimeMillis()
-                    }
+                    if (s.id == SPOT_ID) engine.spotDeleted()
                     val wasShown = area?.id == s.id
                     if (wasShown) area = null
                     scope.launch {
@@ -2491,239 +2451,7 @@ class ConditionsFeature(
             crossesDateLine -> "This was the side of the date line the crosshair is on."
             else -> null
         }
-        download(south, west, north, east, replacingId = null, note = note)
-    }
-
-    /** Downloads an area; [replacingId] updates that saved area (otherwise one with the same bounds is replaced). */
-    /**
-     * After "How far down" changes: downloads only the temperature at the new depth for the area on the map (or
-     * the spot's), so it shows straight away without downloading the whole forecast again.
-     */
-    private fun refreshBelowDepth() {
-        val target = area ?: spotArea
-        val depthText = NavFormat(units()).depth(belowDepthM.toDouble())
-        when {
-            target == null -> { callbacks.toast("Saved: the next download gets the temperature $depthText down"); return }
-            downloading -> { callbacks.toast("Saved: the next download gets the temperature $depthText down"); return }
-            !callbacks.isOnline() -> { callbacks.toast("No internet: the temperature $depthText down comes with the next update"); return }
-        }
-        val a = target ?: return
-        val depth = belowDepthM
-        downloading = true
-        status = "Downloading the temperature $depthText down…"
-        refreshDialog()
-        downloadJob = scope.launch {
-            val updated = withContext(downloads) {
-                runCatching {
-                    val grid = client.satellite(SatelliteKind.TEMP_BELOW, a.south, a.west, a.north, a.east, depth)
-                    ConditionsArea(
-                        id = a.id, name = a.name, south = a.south, west = a.west, north = a.north, east = a.east,
-                        fetchedMillis = System.currentTimeMillis(), forecast = a.forecast,
-                        satellites = a.satellites + (SatelliteKind.TEMP_BELOW to grid), belowDepthM = depth
-                    ).also { store.save(it) }
-                }
-            }
-            status = null
-            downloading = false
-            updated.onSuccess { fresh ->
-                if (spotArea?.id == fresh.id) spotArea = fresh
-                if (area?.id == fresh.id) {
-                    area = fresh
-                    lastPictureKey = null
-                    scaleCache = null
-                }
-                if (shown) redraw() else updateBox()
-                callbacks.toast("Temperature $depthText down updated for ${fresh.name}")
-            }.onFailure {
-                DiagnosticLog.logError(TAG, "temperature at depth download FAILED", it)
-                callbacks.toast("Couldn't get the temperature $depthText down: ${message(it)}")
-            }
-            refreshDialog()
-        }
-        downloadJob?.invokeOnCompletion { downloading = false }
-    }
-
-    private fun download(
-        south: Double, west: Double, north: Double, east: Double, replacingId: String?, note: String? = null,
-        /** An automatic update: no messages unless it gets nothing. */
-        quiet: Boolean = false
-    ) {
-        if (downloading) return
-        val now = System.currentTimeMillis()
-        if (now < nextDownloadAllowed) {
-            if (!quiet) callbacks.toast("Just downloaded: try again in ${(nextDownloadAllowed - now + 999) / 1000} s")
-            return
-        }
-        nextDownloadAllowed = now + MIN_DOWNLOAD_GAP_MS
-        downloading = true
-        updateBox()
-        val dayCount = days
-        val satellites = withSatellite
-        val depth = belowDepthM
-        status = "Downloading the forecast…"
-        refreshDialog()
-        downloadJob = scope.launch {
-            val problems = java.util.Collections.synchronizedList(mutableListOf<String>())
-            // 1. The forecast, shown as soon as it's in: the satellite pictures follow.
-            val first = withContext(downloads) {
-                // Named: that one (even if it isn't saved yet). Otherwise one already covering these bounds.
-                val replacing = if (replacingId != null) store.load(replacingId)
-                else store.summaries().firstOrNull { it.sameBoundsAs(south, west, north, east) }?.let { store.load(it.id) }
-                val span = max(north - south, east - west)
-                val grid = GeoGrid.covering(south, west, north, east, max(MIN_STEP_DEG, span / (MAX_POINTS_PER_SIDE - 1)), MAX_POINTS_PER_SIDE)
-                val windGrid = GeoGrid.covering(south, west, north, east, max(MIN_STEP_DEG, span / (MAX_WIND_POINTS_PER_SIDE - 1)), MAX_WIND_POINTS_PER_SIDE)
-                val started = System.nanoTime()
-                val forecast = runCatching {
-                    client.forecast(grid, dayCount, windGrid) { p ->
-                        scope.launch(Dispatchers.Main) {
-                            status = "Downloading the forecast… ${(p * 100).roundToInt()}%"
-                            refreshDialog()
-                        }
-                    }
-                }.onFailure {
-                    DiagnosticLog.logError(TAG, "forecast download FAILED", it)
-                    problems += "Forecast: ${message(it)}"
-                }.getOrNull()
-                if (forecast != null) DiagnosticLog.log(TAG, "forecast ($dayCount days) in ${(System.nanoTime() - started) / 1_000_000} ms")
-                // What an update can't get again is kept rather than lost, unless it was for another depth.
-                val keptSats = replacing?.satellites?.filterKeys { !(it == SatelliteKind.TEMP_BELOW && replacing.belowDepthM != depth) }.orEmpty()
-                if (forecast == null && replacing == null && !satellites) return@withContext null
-                val area = ConditionsArea(
-                    id = replacing?.id ?: replacingId ?: UUID.randomUUID().toString(),
-                    name = replacing?.name ?: if (replacingId == SPOT_ID) SPOT_NAME else defaultName(south, west, north, east),
-                    south = south, west = west, north = north, east = east,
-                    // A failed forecast keeps the old one, and its age.
-                    fetchedMillis = if (forecast != null) System.currentTimeMillis() else replacing?.fetchedMillis ?: System.currentTimeMillis(),
-                    forecast = forecast ?: replacing?.forecast,
-                    satellites = keptSats,
-                    belowDepthM = depth
-                )
-                if (forecast != null) {
-                    runCatching { store.save(area) }.onFailure { problems += "Saving: ${message(it)}" }
-                }
-                area
-            }
-            if (first == null) {
-                finishDownload(null, problems, quiet, note)
-                return@launch
-            }
-            if (first.forecast != null) showDownloaded(first, quiet)
-            // The shore for this area, saved with it so the picture is cut sharp offline too.
-            scope.launch { fetchCoastline(first) }
-
-            // 2. Satellite pictures: they change once a day, so they're fetched once a day.
-            val kinds = if (satellites) satelliteKindsDue(first) else emptyList()
-            var result: ConditionsArea? = first.takeIf { it.forecast != null }
-            if (kinds.isNotEmpty()) {
-                status = "Getting satellite pictures…"
-                refreshDialog()
-                val started = System.nanoTime()
-                val got = kotlinx.coroutines.coroutineScope {
-                    kinds.map { kind ->
-                        async(Dispatchers.IO) {
-                            kind to runCatching { client.satellite(kind, south, west, north, east, depth) }
-                                .onFailure {
-                                    DiagnosticLog.logError(TAG, "${kind.name} download FAILED", it)
-                                    // Salinity and the rest often have nothing near a coast: only said for the main ones.
-                                    if (kind.required) problems += "${kind.label}: ${message(it)}"
-                                }.getOrNull()
-                        }
-                    }.map { it.await() }
-                }
-                val fresh = got.mapNotNull { (kind, grid) -> grid?.let { kind to it } }.toMap()
-                DiagnosticLog.log(TAG, "satellite pictures ${fresh.keys.joinToString { it.name }} in ${(System.nanoTime() - started) / 1_000_000} ms")
-                preferences.edit().putLong(KEY_SATELLITES_AT + first.id, System.currentTimeMillis()).apply()
-                if (fresh.isNotEmpty() || first.forecast == null) {
-                    result = withContext(downloads) {
-                        val merged = ConditionsArea(
-                            id = first.id, name = first.name, south = first.south, west = first.west, north = first.north, east = first.east,
-                            fetchedMillis = first.fetchedMillis, forecast = first.forecast,
-                            satellites = first.satellites + fresh, belowDepthM = first.belowDepthM
-                        )
-                        if (merged.forecast == null && merged.satellites.isEmpty()) null
-                        else runCatching { store.save(merged) }.onFailure { problems += "Saving: ${message(it)}" }.map { merged }.getOrNull()
-                    }
-                    result?.let { showDownloaded(it, quiet) }
-                }
-            }
-            finishDownload(result, problems, quiet, note)
-        }
-        // However it ends (cancelled, or an error), it isn't downloading any more.
-        downloadJob?.invokeOnCompletion { downloading = false }
-    }
-
-    /**
-     * The satellite pictures to fetch for [area]: all of them once a day; sooner only the main ones
-     * that are missing (a server was down), tried again after an hour. (A new depth fetches its own: [refreshBelowDepth].)
-     */
-    private fun satelliteKindsDue(area: ConditionsArea): List<SatelliteKind> {
-        val last = preferences.getLong(KEY_SATELLITES_AT + area.id, 0L)
-        val age = System.currentTimeMillis() - last
-        val all = SatelliteKind.entries.toList()
-        return when {
-            area.satellites.isEmpty() || age > SATELLITE_EVERY_MS -> all
-            else -> all.filter { kind ->
-                kind !in area.satellites && kind.required && age > SATELLITE_RETRY_MS
-            }
-        }
-    }
-
-    /** A download (or part of one) is in: it goes on the map if it's the area being looked at. */
-    private fun showDownloaded(result: ConditionsArea, quiet: Boolean) {
-        if (result.id == SPOT_ID) spotArea = result
-        // An update of the spot only changes the map if the spot's area is the one on it.
-        val showIt = !quiet || area == null || area?.id == result.id
-        if (showIt) {
-            area = result
-            areaId = result.id
-            preferences.edit().putString(KEY_AREA, result.id).apply()
-            lastPictureKey = null
-            scaleCache = null
-        }
-        if (!quiet) {
-            live = true
-            if (!shown) setShown(true) else redraw()
-        } else if (shown) {
-            redraw()
-        } else {
-            updateBox()
-        }
-        callbacks.creditsChanged()
-    }
-
-    private fun finishDownload(result: ConditionsArea?, problems: List<String>, quiet: Boolean, note: String?) {
-        status = null
-        downloading = false
-        if (result == null) {
-            lastProblem = if (problems.any { "no internet" in it }) "no internet: will try again" else "couldn't download: will try again"
-            if (!quiet) callbacks.toast("Couldn't get the sea conditions. " + problems.joinToString(" "))
-            updateBox()
-        } else {
-            lastProblem = null
-            if (!quiet) {
-                val saved = if (problems.isEmpty()) "Sea conditions saved for ${result.name}." else "Saved ${result.name}, but: " + problems.joinToString(" ")
-                callbacks.toast(listOfNotNull(saved, note).joinToString(" "))
-            }
-            // The very first download: show it on the map, so it's clear it worked. Once only:
-            // after that the layer stays as the user leaves it.
-            if (!preferences.contains(KEY_SHOWN) && result.forecast != null) {
-                if (!preferences.contains(KEY_COLOUR)) {
-                    colour = ColourChoice.WIND
-                    preferences.edit().putString(KEY_COLOUR, colour.name).apply()
-                }
-                if (area == null) area = result
-                setShown(true)
-            }
-            updateBox()
-            removeOldAreas()
-        }
-        refreshDialog()
-    }
-
-    private fun message(error: Throwable): String = when (error) {
-        is java.net.UnknownHostException, is java.net.ConnectException -> "no internet connection"
-        is java.net.SocketTimeoutException -> "the service didn't answer in time"
-        else -> error.message ?: error.javaClass.simpleName
+        engine.downloadArea(south, west, north, east, replacingId = null, userAsked = true, note = note)?.let { callbacks.toast(it) }
     }
 
     // Helpers ----------------------------------------------------------------------
@@ -2794,7 +2522,7 @@ class ConditionsFeature(
         /** Days of forecast downloaded unless the user picks more: enough for the next trip, and quick. */
         const val DEFAULT_DAYS = 2
         /** + an area's id: when its satellite pictures were last fetched. */
-        private const val KEY_SATELLITES_AT = "conditions_sat_at_"
+        private const val KEY_SATELLITES_AT = WeatherEngine.KEY_SATELLITES_AT
         /** Satellite pictures are new once a day. */
         private const val SATELLITE_EVERY_MS = 20 * 3_600_000L
         /** A main picture that couldn't be got (its server down) is tried again after this. */
@@ -2816,7 +2544,7 @@ class ConditionsFeature(
         /** How often, at most, to ask whether there's a new forecast. */
         private const val RUN_CHECK_MS = 15 * 60_000L
         private const val FIX_SAVE_MS = 60_000L
-        private const val STARTUP_DOWNLOAD_DELAY_MS = 8_000L
+        private const val STARTUP_DOWNLOAD_DELAY_MS = 2_000L
         private const val ONLINE_CHECK_MS = 5_000L
         private const val LAST_KNOWN_MS = 30_000L
         private const val CLOSED_MARK = "▾"
@@ -2831,7 +2559,7 @@ class ConditionsFeature(
 
         /** The area kept round the spot has this id, so each update replaces it. */
         const val SPOT_ID = "spot"
-        private const val SPOT_NAME = "My spot"
+        const val SPOT_NAME = "My spot"
         private const val SPOT_RADIUS_KM = 200.0
         private const val FRESH_COLOUR = 0xFF22C55E.toInt()
         private const val UPDATING_COLOUR = 0xFFF59E0B.toInt()
@@ -2839,9 +2567,7 @@ class ConditionsFeature(
         /** The spot's area is downloaded again once the boat is this far from where it was downloaded for. */
         private const val SPOT_MOVE_KM = 100.0
         /** Where the spot's area was last downloaded for: "lat,lng". */
-        private const val KEY_SPOT_FROM = "conditions_spot_from"
         /** An inland spot's nearest sea: "spotLat,spotLng,seaLat,seaLng". */
-        private const val KEY_SPOT_SEA = "conditions_spot_sea"
         /** Cells a side in the flow lines' grid: about 3 km apart over a 400 km area. */
         private const val FLOW_GRID_SIDE = 128
         /** Between automatic tries, so a failing service isn't asked again and again. */
@@ -2922,7 +2648,7 @@ class ConditionsFeature(
         private const val MAX_PICTURE_SIDE = 512
         /** The forecast picture is redrawn as the time moves on by this much. */
         private const val PICTURE_STEP_MS = 10 * 60_000L
-        private const val TICK_MS = 5 * 60_000L
+        private const val TICK_MS = 60_000L
         private const val CARD_BOTTOM_DP = 96
 
         /** In the phone's language at the time, as it can change while the app runs. */

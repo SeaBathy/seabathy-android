@@ -644,11 +644,35 @@ class MainActivity : AppCompatActivity() {
         if (!hasLocationPermission()) return null
         return runCatching {
             val manager = getSystemService(android.location.LocationManager::class.java) ?: return null
-            manager.getProviders(true)
+            val known = manager.getProviders(true)
                 .mapNotNull { provider -> runCatching { manager.getLastKnownLocation(provider) }.getOrNull() }
                 .maxByOrNull { it.time }
                 ?.let { it.latitude to it.longitude }
+            if (known == null) askForOnePosition(manager)
+            known
         }.getOrNull()
+    }
+
+    private var onePositionAskedAt = 0L
+
+    /**
+     * The phone remembers no position (just restarted, or the GPS hasn't been used): asks Android
+     * once for where it is now, without turning the GPS button on, so the sea conditions can follow
+     * the boat from the start. At most once a minute.
+     */
+    @android.annotation.SuppressLint("MissingPermission")
+    private fun askForOnePosition(manager: android.location.LocationManager) {
+        if (android.os.Build.VERSION.SDK_INT < 30 || !hasLocationPermission()) return
+        val now = System.currentTimeMillis()
+        if (now - onePositionAskedAt < 60_000L) return
+        onePositionAskedAt = now
+        val provider = listOf(android.location.LocationManager.FUSED_PROVIDER, android.location.LocationManager.GPS_PROVIDER, android.location.LocationManager.NETWORK_PROVIDER)
+            .firstOrNull { runCatching { manager.isProviderEnabled(it) }.getOrDefault(false) } ?: return
+        runCatching {
+            manager.getCurrentLocation(provider, null, mainExecutor) { location ->
+                if (location != null && ::conditions.isInitialized) conditions.onLocation(location.latitude, location.longitude)
+            }
+        }
     }
 
     /** True when the phone's network has been checked to reach the internet. */

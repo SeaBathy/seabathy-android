@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+- **Sea conditions rebuilt under the hood** (the screens are the same): one engine now decides
+  what to download and when, one download at a time, so it can't get stuck or forget:
+  - It downloads when nothing is saved, the boat has moved 100 km, the forecast runs out within
+    12 hours, a newer forecast is out, or it's 6 hours old. Hundreds of kilometres offshore it
+    follows the boat the same way.
+  - A failed download is tried again after 30 s, 1, 2, 5, 10, then every 15 minutes, and at once
+    when the internet comes back or you tap update. Never more than 6 automatic downloads an hour.
+  - Whatever is saved stays on show while anything downloads; the box says when it's waiting for
+    the internet instead of showing nothing.
+- **The box shows the boat's weather when the map is over land** (after loading a TIFF, say),
+  instead of "No sea data here". On land, it's the nearest sea, told by OpenStreetMap's coastline
+  rather than the satellite sea temperature (whose servers are often down).
+- **The weather is there from the start:** with no remembered position, the app asks Android once
+  where it is, without turning the GPS button on.
+- **The first download shows on the map as soon as the forecast is in,** not after the satellite
+  pictures.
+- **Changing the depth of the temperature down below** no longer marks the whole forecast as new.
+
 ## 1.3.5 — 2026-11-18
 
 - **Sea conditions show on the map straight away:** the first time they download, the map layer
