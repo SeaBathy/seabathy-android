@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- **Faster sea conditions:** the forecast downloads several parts at once and shows as soon as it's
+  in, usually within a few seconds; the satellite pictures follow. They only change once a day, so
+  they're only downloaded once a day, and a satellite server that's down is skipped quickly instead
+  of holding everything up for minutes.
+- **2 days of forecast by default** (up to 8 if you choose), about a third of the download.
+- **Inland:** the area round your spot goes over the nearest sea instead of being mostly land, and
+  the box shows the conditions at the nearest sea and how far away it is.
+- **Up to date at a glance:** a dot on the sea conditions box, green for the latest forecast, amber
+  while it updates, red when it's out of date. Tap it to update.
+
 ## 1.3.0 — 2026-11-18
 
 - **Polite offline downloads:** saving a map keeps a steady pace (about 20 tiles a second), pauses

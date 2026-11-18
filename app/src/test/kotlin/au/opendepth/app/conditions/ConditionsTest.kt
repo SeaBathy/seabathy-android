@@ -385,7 +385,7 @@ UTC,m,degrees_north,degrees_east,mg m^-3
     fun `a server that is down moves on to the backup`() {
         val asked = mutableListOf<String>()
         val client = ConditionsClient(
-            http = { url ->
+            satelliteHttp = { url ->
                 asked += url
                 if ("jplMURSST41" in url) throw ConditionsClient.ServiceBusyException("down")
                 "time,latitude,longitude,analysed_sst\nUTC,degrees_north,degrees_east,degree_C\n" +
@@ -395,15 +395,40 @@ UTC,m,degrees_north,degrees_east,mg m^-3
         )
         val sst = client.satellite(SatelliteKind.SEA_TEMP, -20.0, 149.0, -19.9, 149.1)
         assertEquals(27.5f, sst.values[0], 0.001f)
-        // Each MUR server asked twice, then the blended data.
-        assertEquals(5, asked.size)
+        // Each MUR server asked once (no waiting to ask again), then the blended data.
+        assertEquals(3, asked.size)
         assertTrue("noaacwBLENDEDsstDNDaily" in asked.last())
+    }
+
+    @Test
+    fun `a server that is down is left alone for a while`() {
+        var now = 0L
+        val asked = mutableListOf<String>()
+        val client = ConditionsClient(
+            satelliteHttp = { url ->
+                asked += url
+                if ("coastwatch.noaa.gov" in url) throw java.net.SocketTimeoutException("no answer")
+                "time,altitude,latitude,longitude,sss\nUTC,m,degrees_north,degrees_east,PSU\n" +
+                    "2026-11-01T12:00:00Z,0.0,-19.0,179.0,35.5\n2026-11-01T12:00:00Z,0.0,-19.0,179.25,35.5\n"
+            },
+            clock = { now }
+        )
+        // Sea level is only on the NOAA server: asked once, it doesn't answer.
+        runCatching { client.satellite(SatelliteKind.SEA_LEVEL, -19.0, 179.0, -18.5, 179.5) }
+        assertEquals(1, asked.size)
+        // Salinity is on the same server: not asked again while it's down.
+        assertTrue(runCatching { client.satellite(SatelliteKind.SALINITY, -19.0, 179.0, -18.5, 179.5) }.isFailure)
+        assertEquals(1, asked.size)
+        // Half an hour on, it's tried again.
+        now += ConditionsClient.HOST_DOWN_MS + 1
+        runCatching { client.satellite(SatelliteKind.SALINITY, -19.0, 179.0, -18.5, 179.5) }
+        assertEquals(2, asked.size)
     }
 
     @Test
     fun `salinity falls through to the second satellite when the first has none`() {
         val client = ConditionsClient(
-            http = { url ->
+            satelliteHttp = { url ->
                 val value = if ("SMAP" in url) "NaN" else "35.5"
                 "time,altitude,latitude,longitude,sss\nUTC,m,degrees_north,degrees_east,PSU\n" +
                     "2026-11-01T12:00:00Z,0.0,-19.0,179.0,$value\n2026-11-01T12:00:00Z,0.0,-19.0,179.25,$value\n"

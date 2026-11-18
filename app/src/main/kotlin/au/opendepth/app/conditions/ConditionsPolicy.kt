@@ -24,6 +24,24 @@ object ConditionsPolicy {
     fun needsUpdate(fetchedMillis: Long, latestRunMillis: Long?, nowMillis: Long): Boolean =
         (latestRunMillis != null && latestRunMillis > fetchedMillis) || nowMillis - fetchedMillis > MAX_AGE_MS
 
+    /** How up to date the sea conditions on show are: the dot on the box. */
+    enum class Freshness { CURRENT, UPDATING, OUT_OF_DATE }
+
+    /** The forecast is "running out" when it has less than this left. */
+    const val RUNNING_OUT_MS = 6 * 3_600_000L
+
+    /**
+     * [Freshness.UPDATING] while a download is under way; [Freshness.OUT_OF_DATE] when a newer
+     * forecast run is out, it's older than [MAX_AGE_MS], or its forecast is running out;
+     * otherwise [Freshness.CURRENT]. Pure, unit-tested.
+     */
+    fun freshness(fetchedMillis: Long, forecastEndMillis: Long?, latestRunMillis: Long?, nowMillis: Long, downloading: Boolean): Freshness = when {
+        downloading -> Freshness.UPDATING
+        needsUpdate(fetchedMillis, latestRunMillis, nowMillis) -> Freshness.OUT_OF_DATE
+        forecastEndMillis != null && forecastEndMillis - nowMillis < RUNNING_OUT_MS -> Freshness.OUT_OF_DATE
+        else -> Freshness.CURRENT
+    }
+
     /** The newest saved area covering [lat]/[lng]: the one to use there. */
     fun newestCovering(lat: Double, lng: Double, areas: List<ConditionsStore.Summary>): ConditionsStore.Summary? =
         areas.filter { lat in it.south..it.north && lng in it.west..it.east }.maxByOrNull { it.fetchedMillis }

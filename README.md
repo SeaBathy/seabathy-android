@@ -151,7 +151,10 @@ moon. Save weeks or months ahead for offline use.
 **Settings** → **Sea conditions**. Pick what to show on the map (wind, current, waves, swell,
 sea temperature, temperature breaks, chlorophyll, sea level, salinity, or the temperature at a
 depth you choose). Data for 200 km round your spot is downloaded and kept up to date, with a
-time slider and Play.
+time slider and Play. Inland, the area goes over the nearest sea instead, and the box shows the
+conditions there. The forecast comes first and shows within seconds (2 days unless you choose up
+to 8); the satellite pictures follow, once a day. The dot on the box is green when it's the
+latest forecast, amber while it updates, and red when it's out of date: tap it to update.
 
 The values box shows the readings at the boat, or at the crosshair while a layer is on: surface
 temperature and chlorophyll, then the temperature at your chosen depth, then salinity and sea

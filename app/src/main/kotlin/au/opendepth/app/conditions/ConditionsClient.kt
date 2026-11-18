@@ -29,8 +29,13 @@ class ConditionsClient(
     private val http: (String) -> String = ::httpGet,
     private val httpBytes: (String) -> ByteArray = ::httpGetBytes,
     /** Before asking a busy server again. */
-    private val pause: (Long) -> Unit = { Thread.sleep(it) }
+    private val pause: (Long) -> Unit = { Thread.sleep(it) },
+    /** Satellite pictures: a server that's down is given up on quickly (see [SATELLITE_READ_TIMEOUT_S]). */
+    private val satelliteHttp: (String) -> String = ::httpGetQuick,
+    private val clock: () -> Long = System::currentTimeMillis
 ) {
+    /** Satellite servers that failed just now (host → until when they're left alone). */
+    private val downHosts = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
     /**
      * The forecast for [grid], [days] days from today; [onProgress] gets 0..1.
@@ -43,18 +48,43 @@ class ConditionsClient(
         val chunks = points.chunked(POINTS_PER_REQUEST)
         val windChunks = windPoints.chunked(POINTS_PER_REQUEST)
         val total = (chunks.size + windChunks.size).toDouble()
-        val marine = ArrayList<PointSeries>(points.size)
-        chunks.forEachIndexed { i, chunk ->
-            marine += parseOpenMeteo(http(marineUrl(chunk, days)))
-            onProgress((i + 1) / total)
+        // A few requests at once (the same requests, so the same use of the free service), in order.
+        val done = java.util.concurrent.atomic.AtomicInteger()
+        fun fetch(url: String): java.util.concurrent.Future<List<PointSeries>> = pool.submit<List<PointSeries>> {
+            parseOpenMeteo(http(url)).also { onProgress(done.incrementAndGet() / total) }
+        }
+        val marineJobs = chunks.map { fetch(marineUrl(it, days)) }
+        val windJobs = windChunks.map { fetch(windUrl(it, days)) }
+        fun <T> java.util.concurrent.Future<T>.value(): T = try {
+            get()
+        } catch (e: java.util.concurrent.ExecutionException) {
+            throw e.cause ?: e
+        }
+        val marine = try {
+            marineJobs.flatMap { it.value() }
+        } catch (e: Throwable) {
+            (marineJobs + windJobs).forEach { it.cancel(true) }
+            throw e
         }
         // Wind is a separate service; a forecast without it still has the sea.
-        val weather = runCatching {
-            windChunks.flatMapIndexed { i, chunk ->
-                parseOpenMeteo(http(windUrl(chunk, days))).also { onProgress((chunks.size + i + 1) / total) }
-            }
-        }.getOrNull()
+        val weather = runCatching { windJobs.flatMap { it.value() } }.getOrNull()
         return assemble(grid, points, marine, weather, windGrid = windGrid)
+    }
+
+    /**
+     * For each of [points]: where the marine model has sea at or right next to it, or null on
+     * land. One small request (a day of wave heights).
+     */
+    fun seaAt(points: List<Pair<Double, Double>>): List<Pair<Double, Double>?> {
+        val url = "https://marine-api.open-meteo.com/v1/marine?" + coords(points) +
+            "&hourly=wave_height&forecast_days=1&timeformat=unixtime&cell_selection=sea"
+        val reply = JsonParser.parseString(http(url))
+        val results = if (reply.isJsonArray) reply.asJsonArray.map { it.asJsonObject } else listOf(reply.asJsonObject)
+        return results.map { r ->
+            val heights = r.getAsJsonObject("hourly")?.getAsJsonArray("wave_height")
+            if (heights == null || heights.count { !it.isJsonNull } < 6) null
+            else (r.get("latitude")?.asDouble ?: return@map null) to (r.get("longitude")?.asDouble ?: return@map null)
+        }
     }
 
     private fun pointsOf(grid: GeoGrid) = buildList { for (r in 0 until grid.rows) for (c in 0 until grid.cols) add(grid.lats[r] to grid.lngs[c]) }
@@ -83,10 +113,20 @@ class ConditionsClient(
         }
         var failure: Exception? = null
         for (url in satelliteUrls(kind, south, west, north, east)) {
+            val host = hostOf(url)
+            if ((downHosts[host] ?: 0L) > clock()) {
+                failure = failure ?: IOException("${kind.label}: its server is down just now")
+                continue
+            }
             try {
-                return retrying { parseErddapCsv(http(url), kind) }
+                return parseErddapCsv(satelliteHttp(url), kind)
             } catch (e: IOException) {
                 failure = e
+                // Down or not answering: leave the whole server alone for a while, so its other
+                // pictures don't each wait for it too. (No data for the area isn't the server's fault.)
+                if (e is ServiceBusyException || e is java.net.SocketTimeoutException || e is java.net.ConnectException) {
+                    downHosts[host] = clock() + HOST_DOWN_MS
+                }
             }
         }
         throw failure ?: IOException("No source for ${kind.label}")
@@ -108,6 +148,17 @@ class ConditionsClient(
 
     companion object {
         const val MAX_DAYS = 8
+        /** Forecast requests sent at once. */
+        private const val PARALLEL_REQUESTS = 4
+        private val pool by lazy {
+            java.util.concurrent.Executors.newFixedThreadPool(PARALLEL_REQUESTS) { r -> Thread(r, "conditions-fetch").apply { isDaemon = true } }
+        }
+        /** A satellite server that failed is left alone this long. */
+        const val HOST_DOWN_MS = 30 * 60_000L
+        /** A satellite server silent this long is taken as down (a working one starts sending within a few seconds). */
+        private const val SATELLITE_READ_TIMEOUT_S = 12L
+
+        private fun hostOf(url: String) = url.substringAfter("://").substringBefore('/')
         private const val POINTS_PER_REQUEST = 48
         const val MAX_SATELLITE_SIDE = 250
         /** Five days of pictures come back as one row per point per day. */
@@ -138,6 +189,18 @@ class ConditionsClient(
 
         fun httpGet(url: String): String =
             client.newCall(Request.Builder().url(url).header("User-Agent", "SeaBathy (Android sea conditions)").build()).execute().use { response ->
+                val body = response.body?.string().orEmpty()
+                if (!response.isSuccessful) throw serviceError(url, response.code, body)
+                body
+            }
+
+        private val quickClient by lazy {
+            client.newBuilder().connectTimeout(8, TimeUnit.SECONDS).readTimeout(SATELLITE_READ_TIMEOUT_S, TimeUnit.SECONDS).build()
+        }
+
+        /** As [httpGet], giving up sooner on a server that doesn't answer. */
+        fun httpGetQuick(url: String): String =
+            quickClient.newCall(Request.Builder().url(url).header("User-Agent", "SeaBathy (Android sea conditions)").build()).execute().use { response ->
                 val body = response.body?.string().orEmpty()
                 if (!response.isSuccessful) throw serviceError(url, response.code, body)
                 body

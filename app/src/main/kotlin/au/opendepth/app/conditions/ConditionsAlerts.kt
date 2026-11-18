@@ -392,7 +392,7 @@ object ConditionsAlerts {
             return
         }
         val store = ConditionsStore(conditionsDir(context))
-        val days = prefs.getInt(ConditionsFeature.KEY_DAYS, 7).coerceIn(1, ConditionsClient.MAX_DAYS)
+        val days = prefs.getInt(ConditionsFeature.KEY_DAYS, ConditionsFeature.DEFAULT_DAYS).coerceIn(1, ConditionsClient.MAX_DAYS)
         val client = ConditionsClient()
         for ((place, good) in results) {
             if (good.isEmpty()) continue
