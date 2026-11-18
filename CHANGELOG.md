@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- **The boat shows straight away:** turning the GPS on puts the boat on the chart at once from the
+  phone's newest recent position, and uses Android's fused location (GPS, Wi-Fi and phone masts) for
+  a quick first fix indoors or under a roof. It says when Location is off in Android, or when it's
+  still waiting for a position, instead of showing nothing.
+- **No more long "downloading":** a connection that has gone quiet is given up on in seconds, and
+  the sea conditions box says when it couldn't download (no internet) and will try again.
+
 ## 1.3.2 — 2026-11-18
 
 - **Sea conditions stop at the shore:** wind, waves and the rest are cut along OpenStreetMap's

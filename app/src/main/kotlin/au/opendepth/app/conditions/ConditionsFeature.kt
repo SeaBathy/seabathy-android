@@ -186,6 +186,8 @@ class ConditionsFeature(
     private var downloading = false
     /** Looking for the nearest sea before a spot download (inland). */
     private var findingSea = false
+    /** Why the last download got nothing (shown in the box when there's nothing saved to show), or null. */
+    private var lastProblem: String? = null
     private var status: String? = null
     private var dialog: Dialog? = null
     private var dialogBody: LinearLayout? = null
@@ -1177,7 +1179,8 @@ class ConditionsFeature(
             val data = listOfNotNull(spotArea, shownArea).firstOrNull { spot != null && it.contains(spot.first, spot.second) }
             if (spot == null || data == null) {
                 boxTitle.text = when {
-                    downloading -> "Sea conditions · downloading…"
+                    downloading || findingSea -> "Sea conditions · downloading…"
+                    lastProblem != null -> "Sea conditions · ${lastProblem}"
                     spot == null && followGps -> "Sea conditions · waiting for the GPS"
                     keepUpdated && !online() -> "Sea conditions · none saved here (offline)"
                     else -> "Sea conditions · tap to set up"
@@ -2668,9 +2671,11 @@ class ConditionsFeature(
         status = null
         downloading = false
         if (result == null) {
+            lastProblem = if (problems.any { "no internet" in it }) "no internet: will try again" else "couldn't download: will try again"
             if (!quiet) callbacks.toast("Couldn't get the sea conditions. " + problems.joinToString(" "))
             updateBox()
         } else {
+            lastProblem = null
             if (!quiet) {
                 val saved = if (problems.isEmpty()) "Sea conditions saved for ${result.name}." else "Saved ${result.name}, but: " + problems.joinToString(" ")
                 callbacks.toast(listOfNotNull(saved, note).joinToString(" "))

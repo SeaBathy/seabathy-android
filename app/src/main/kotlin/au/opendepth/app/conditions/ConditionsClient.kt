@@ -184,7 +184,8 @@ class ConditionsClient(
         private const val WIND_VARIABLES = "wind_speed_10m,wind_direction_10m,wind_gusts_10m"
 
         private val client by lazy {
-            OkHttpClient.Builder().connectTimeout(20, TimeUnit.SECONDS).readTimeout(60, TimeUnit.SECONDS).build()
+            // A connection that's gone quiet is given up on in seconds, not left "downloading" for minutes.
+            OkHttpClient.Builder().connectTimeout(10, TimeUnit.SECONDS).readTimeout(25, TimeUnit.SECONDS).build()
         }
 
         fun httpGet(url: String): String =

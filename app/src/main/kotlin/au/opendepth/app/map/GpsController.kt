@@ -82,6 +82,13 @@ class GpsController(
 
     fun start() = locationController.start()
 
+    /** Location is switched on in Android's settings. */
+    val isLocationOn: Boolean get() = locationController.isLocationOn
+
+    /** When the last position came in (wall clock), 0 before any. */
+    var receivedAt = 0L
+        private set
+
     fun stop() = locationController.stop()
 
     /** Clears the on-map position marker without changing the mode. */
@@ -94,6 +101,7 @@ class GpsController(
     private fun handleLocation(location: Location) {
         val previous = lastLocation
         lastLocation = location
+        receivedAt = System.currentTimeMillis()
         onLocationChanged(location)
         // GPS reports every second even when still; don't redraw the chart for the same spot.
         if (previous != null && centredOnce && previous.distanceTo(location) < STILL_M) return

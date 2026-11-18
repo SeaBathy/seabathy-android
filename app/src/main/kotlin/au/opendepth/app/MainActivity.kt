@@ -222,6 +222,7 @@ class MainActivity : AppCompatActivity() {
     ) { granted ->
         if (granted[Manifest.permission.ACCESS_FINE_LOCATION] == true) {
             gpsController.start()
+            watchForFirstFix()
         } else {
             // Drop back to off so the button does not claim to be tracking.
             gpsController.turnOff()
@@ -903,6 +904,7 @@ class MainActivity : AppCompatActivity() {
             navFeature.refreshRoute()
         } else if (hasLocationPermission()) {
             gpsController.start()
+            watchForFirstFix()
         } else {
             locationPermission.launch(
                 arrayOf(
@@ -912,6 +914,23 @@ class MainActivity : AppCompatActivity() {
             )
         }
         updateGpsButton()
+    }
+
+    /**
+     * After the GPS is turned on: says so when Android's location is off, or when no position has
+     * come after a few seconds, rather than the chart just showing nothing.
+     */
+    private fun watchForFirstFix() {
+        if (!gpsController.isLocationOn) {
+            showAlert("Location is off. Turn on Location in Android's settings (pull down from the top of the screen) to see the boat on the chart.")
+            return
+        }
+        val startedAt = System.currentTimeMillis()
+        views.mapView.postDelayed({
+            if (gpsController.mode != GpsController.Mode.OFF && gpsController.receivedAt < startedAt) {
+                toast("Waiting for a GPS position: it can take a minute, quicker with a clear view of the sky")
+            }
+        }, FIRST_FIX_WAIT_MS)
     }
 
     private fun updateGpsButton() {
@@ -1980,6 +1999,8 @@ class MainActivity : AppCompatActivity() {
         const val REGION_3D_FRACTION = 0.6
         const val RESOURCE_SNAPSHOT_INTERVAL_MS = 60_000L
         const val GO_TO_ZOOM = 14.0
+        /** No position this long after the GPS is turned on: say it's still waiting. */
+        const val FIRST_FIX_WAIT_MS = 8_000L
         const val SHOW_AREA_PADDING_DP = 32
         /** Dark alert dialogs; the default one drew this app's light text on a white box. */
         val ALERT_THEME = androidx.appcompat.R.style.Theme_AppCompat_Dialog_Alert
