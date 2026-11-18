@@ -9,7 +9,7 @@ import android.os.Bundle
 import android.util.Log
 
 class LocationController(
-    context: Context,
+    private val context: Context,
     private val onLocation: (Location) -> Unit
 ) {
     private val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
@@ -19,7 +19,7 @@ class LocationController(
     fun start() {
         if (listener != null) return
         val activeListener = object : LocationListener {
-            override fun onLocationChanged(location: Location) = onLocation(location)
+            override fun onLocationChanged(location: Location) = offer(location)
             @Deprecated("Deprecated by Android")
             override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) = Unit
             override fun onProviderEnabled(provider: String) = Unit
@@ -31,7 +31,11 @@ class LocationController(
         // position comes in seconds indoors or under a roof, not minutes.
         if (android.os.Build.VERSION.SDK_INT >= 31 && LocationManager.FUSED_PROVIDER in locationManager.allProviders) {
             runCatching {
-                locationManager.requestLocationUpdates(LocationManager.FUSED_PROVIDER, 1_000L, 0f, activeListener)
+                // Asked for at high accuracy, or it answers with a rough phone-mast position.
+                val request = android.location.LocationRequest.Builder(1_000L)
+                    .setQuality(android.location.LocationRequest.QUALITY_HIGH_ACCURACY)
+                    .build()
+                locationManager.requestLocationUpdates(LocationManager.FUSED_PROVIDER, request, context.mainExecutor, activeListener)
                 registered = true
             }.onFailure { Log.w(TAG, "Fused provider unavailable", it) }
         }
@@ -50,8 +54,25 @@ class LocationController(
         }
         // The boat on the chart straight away from the newest recent position the phone has,
         // while the first fresh fix comes.
-        newestRecent()?.let { onLocation(it) }
+        accepted = null
+        newestRecent()?.let { offer(it) }
     }
+
+    /** The last position passed on. */
+    private var accepted: Location? = null
+
+    /**
+     * Passes [location] on unless a better one is still fresh: GPS, Wi-Fi and phone-mast
+     * positions arrive mixed together, and a mast position can be kilometres out. So a rough
+     * position never replaces a good recent one; it's only used while there's nothing better.
+     */
+    private fun offer(location: Location) {
+        if (!shouldUse(accepted?.let { it.accuracyOrRough() to it.time }, location.accuracyOrRough(), location.time)) return
+        accepted = location
+        onLocation(location)
+    }
+
+    private fun Location.accuracyOrRough(): Float = if (hasAccuracy()) accuracy else ROUGH_M
 
     /** The newest position any provider remembers, if it's from the last few minutes. */
     @SuppressLint("MissingPermission")
@@ -77,9 +98,28 @@ class LocationController(
         listener = null
     }
 
-    private companion object {
-        const val TAG = "SeaBathyLocation"
+    companion object {
+        private const val TAG = "SeaBathyLocation"
         /** A remembered position this recent is shown while the first fresh fix comes. */
         const val RECENT_MS = 5 * 60_000L
+        /** A position this accurate (metres) is always used. */
+        const val GOOD_M = 50f
+        /** Taken as the accuracy of a position that doesn't say. */
+        const val ROUGH_M = 500f
+        /** A good position counts as fresh this long: nothing worse replaces it meanwhile. */
+        const val FRESH_MS = 30_000L
+
+        /**
+         * Whether a new position (its accuracy in metres and time) should replace the last one
+         * used ([last]: accuracy and time, or null). Pure, unit-tested.
+         */
+        fun shouldUse(last: Pair<Float, Long>?, accuracy: Float, time: Long): Boolean {
+            if (last == null || accuracy <= GOOD_M) return true
+            val (lastAccuracy, lastTime) = last
+            // As good as, or better than, what's shown: use it.
+            if (accuracy <= lastAccuracy * 1.5f) return true
+            // Worse: only once what's shown has gone stale.
+            return time - lastTime > FRESH_MS
+        }
     }
 }

@@ -185,7 +185,7 @@ class ConditionsClient(
 
         private val client by lazy {
             // A connection that's gone quiet is given up on in seconds, not left "downloading" for minutes.
-            OkHttpClient.Builder().connectTimeout(10, TimeUnit.SECONDS).readTimeout(25, TimeUnit.SECONDS).build()
+            OkHttpClient.Builder().dns(au.opendepth.app.util.FallbackDns).connectTimeout(10, TimeUnit.SECONDS).readTimeout(25, TimeUnit.SECONDS).build()
         }
 
         fun httpGet(url: String): String =

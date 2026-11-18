@@ -18,7 +18,7 @@ services are listed separately in [`DATA_ATTRIBUTION.md`](DATA_ATTRIBUTION.md).
 | Material Components for Android | 1.11.0 | Apache 2.0 | https://github.com/material-components/material-components-android |
 | Kotlin standard library, kotlinx.coroutines | 2.2.10, 1.10.2 | Apache 2.0 | https://github.com/Kotlin/kotlinx.coroutines |
 | Gson | 2.10.1 | Apache 2.0 | https://github.com/google/gson |
-| OkHttp, Okio | 4.12.0, 3.6.0 | Apache 2.0 | https://github.com/square/okhttp |
+| OkHttp (with its DNS-over-HTTPS module), Okio | 4.12.0, 3.6.0 | Apache 2.0 | https://github.com/square/okhttp |
 | NanoHTTPD | 2.3.1 | BSD 3-Clause | https://github.com/NanoHttpd/nanohttpd |
 | NGA TIFF (mil.nga:tiff) | 3.0.0 | MIT | https://github.com/ngageoint/tiff-java |
 | three.js (3D view, in `terrain3d-web`) | 0.170.0 | MIT | https://github.com/mrdoob/three.js |

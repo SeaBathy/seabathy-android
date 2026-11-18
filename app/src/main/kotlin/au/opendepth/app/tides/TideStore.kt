@@ -146,7 +146,7 @@ class TideStore(context: Context) {
 
     private val cacheDir = File(context.filesDir, CACHE_DIR).apply { mkdirs() }
     private val client by lazy {
-        OkHttpClient.Builder().connectTimeout(15, TimeUnit.SECONDS).readTimeout(20, TimeUnit.SECONDS).build()
+        OkHttpClient.Builder().dns(au.opendepth.app.util.FallbackDns).connectTimeout(15, TimeUnit.SECONDS).readTimeout(20, TimeUnit.SECONDS).build()
     }
     /** Short-range model forecasts, as downloaded. */
     private val forecasts = mutableMapOf<String, TideForecast>()

@@ -154,3 +154,7 @@ Do not upload MBTiles or GeoTIFF files derived from:
 `app/src/main/assets/glyphs/Open Sans Regular/` holds MapLibre glyph ranges for
 Open Sans (Apache License 2.0), used for waypoint names on the app's built-in
 None and Custom basemaps so labels also render offline.
+
+## Looking up server names
+
+The app uses the phone's own DNS. Only when that can't find one of the data servers above, it asks Cloudflare's public DNS over HTTPS (`cloudflare-dns.com`) for that server's address. Only the server's name is sent. See Cloudflare's [1.1.1.1 privacy policy](https://developers.cloudflare.com/1.1.1.1/privacy/public-dns-resolver/).

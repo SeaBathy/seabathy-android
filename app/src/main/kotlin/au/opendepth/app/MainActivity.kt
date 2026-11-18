@@ -440,6 +440,7 @@ class MainActivity : AppCompatActivity() {
             mapHolder,
             onLocationChanged = { location ->
                 navFeature.onLocation(location)
+                noteApproximate(location)
                 if (::conditions.isInitialized) conditions.onLocation(location.latitude, location.longitude)
                 terrain3d.updateBoat(location)
                 if (mobPending) markOverboard(location)
@@ -931,6 +932,22 @@ class MainActivity : AppCompatActivity() {
                 toast("Waiting for a GPS position: it can take a minute, quicker with a clear view of the sky")
             }
         }, FIRST_FIX_WAIT_MS)
+    }
+
+    private var approximateToldAt = 0L
+
+    /**
+     * A position good only to hundreds of metres (phone masts, no GPS yet): said once in a
+     * while, so the boat a kilometre or two out isn't taken for where you are.
+     */
+    private fun noteApproximate(location: android.location.Location) {
+        if (!location.hasAccuracy() || location.accuracy < APPROXIMATE_M) return
+        val now = System.currentTimeMillis()
+        if (now - approximateToldAt < 60_000L) return
+        approximateToldAt = now
+        val km = location.accuracy / 1000f
+        val within = if (km >= 1f) String.format(Locale.US, "%.0f km", km) else "${(location.accuracy / 100).toInt() * 100} m"
+        toast("Approximate position (within about $within): no GPS fix yet. It sharpens outdoors with a clear view of the sky")
     }
 
     private fun updateGpsButton() {
@@ -2001,6 +2018,8 @@ class MainActivity : AppCompatActivity() {
         const val GO_TO_ZOOM = 14.0
         /** No position this long after the GPS is turned on: say it's still waiting. */
         const val FIRST_FIX_WAIT_MS = 8_000L
+        /** A position less accurate than this (metres) is called approximate. */
+        const val APPROXIMATE_M = 200f
         const val SHOW_AREA_PADDING_DP = 32
         /** Dark alert dialogs; the default one drew this app's light text on a white box. */
         val ALERT_THEME = androidx.appcompat.R.style.Theme_AppCompat_Dialog_Alert

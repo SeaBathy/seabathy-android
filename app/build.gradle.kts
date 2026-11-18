@@ -144,6 +144,8 @@ dependencies {
     implementation("org.nanohttpd:nanohttpd:2.3.1")
     // HTTP client for XYZ tile downloads (download/TileFetchClient.kt).
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // Looking server names up over HTTPS when the phone's DNS can't answer (FallbackDns).
+    implementation("com.squareup.okhttp3:okhttp-dnsoverhttps:4.12.0")
     // Debug-build-only leak detector; installs itself via its own
     // ContentProvider. Never present in a release build.
     debugImplementation("com.squareup.leakcanary:leakcanary-android:2.14")

@@ -199,11 +199,27 @@ object BaseMapLayers {
         )
     }
 
+    /** The accuracy circle's radius in pixels at a zoom whose scale is [scale] times zoom 0's. */
+    private fun accuracyRadius(scale: Float): org.maplibre.android.style.expressions.Expression {
+        return org.maplibre.android.style.expressions.Expression.max(
+            org.maplibre.android.style.expressions.Expression.literal(22f),
+            org.maplibre.android.style.expressions.Expression.product(org.maplibre.android.style.expressions.Expression.coalesce(org.maplibre.android.style.expressions.Expression.toNumber(org.maplibre.android.style.expressions.Expression.get("r0")), org.maplibre.android.style.expressions.Expression.literal(0f)), org.maplibre.android.style.expressions.Expression.literal(scale))
+        )
+    }
+
     private fun addGpsLayers(style: Style) {
         style.addSource(GeoJsonSource(MapLayerIds.GPS_SOURCE, MapLayerIds.EMPTY_GEOJSON))
         style.addLayer(
             CircleLayer(MapLayerIds.GPS_ACCURACY, MapLayerIds.GPS_SOURCE).withProperties(
-                PropertyFactory.circleRadius(22f),
+                // As big as the position is uncertain (never smaller than the usual ring).
+                PropertyFactory.circleRadius(
+                    org.maplibre.android.style.expressions.Expression.interpolate(
+                        org.maplibre.android.style.expressions.Expression.exponential(2f),
+                        org.maplibre.android.style.expressions.Expression.zoom(),
+                        org.maplibre.android.style.expressions.Expression.stop(0, accuracyRadius(1f)),
+                        org.maplibre.android.style.expressions.Expression.stop(22, accuracyRadius(4194304f))
+                    )
+                ),
                 PropertyFactory.circleColor(Color.parseColor("#1500C8B4")),
                 PropertyFactory.circleStrokeWidth(1.5f),
                 PropertyFactory.circleStrokeColor(ACCENT)

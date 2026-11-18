@@ -65,7 +65,7 @@ object SeabedDownload {
     )
 
     private val client by lazy {
-        OkHttpClient.Builder().connectTimeout(30, TimeUnit.SECONDS).readTimeout(3, TimeUnit.MINUTES).build()
+        OkHttpClient.Builder().dns(au.opendepth.app.util.FallbackDns).connectTimeout(30, TimeUnit.SECONDS).readTimeout(3, TimeUnit.MINUTES).build()
     }
 
     /**

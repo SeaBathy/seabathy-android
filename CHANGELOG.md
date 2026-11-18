@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- **The boat is where you are:** a rough position from phone masts (it can be kilometres out)
+  no longer replaces a GPS fix, and is only shown while there's nothing better. When it is
+  shown, the circle round the boat is as big as the position is uncertain, the chart zooms out
+  to fit it, and the app says it's approximate until the GPS has a fix.
+- **Sea conditions when the phone's DNS misbehaves:** if the phone can't look up one of the data
+  servers' names (some DNS filters, VPNs and mobile networks answer for some servers and not
+  others), the app looks it up with Cloudflare's public DNS over HTTPS instead, so the satellite
+  pictures and tides still download.
+
 ## 1.3.3 — 2026-11-18
 
 - **The boat shows straight away:** turning the GPS on puts the boat on the chart at once from the

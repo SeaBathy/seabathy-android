@@ -109,7 +109,7 @@ class GpsController(
             ?.getSourceAs<GeoJsonSource>(MapLayerIds.GPS_SOURCE)
             ?.setGeoJson(
                 GeoJson.featureCollection(
-                    listOf(GeoJson.point(location.latitude, location.longitude))
+                    listOf(GeoJson.point(location.latitude, location.longitude, accuracyProperties(location)))
                 )
             )
 
@@ -118,7 +118,7 @@ class GpsController(
                 mapHolder.map?.animateCamera(
                     CameraUpdateFactory.newLatLngZoom(
                         LatLng(location.latitude, location.longitude),
-                        LOCATE_ZOOM
+                        locateZoom(location)
                     )
                 )
                 centredOnce = true
@@ -131,6 +131,25 @@ class GpsController(
 
             Mode.OFF -> Unit
         }
+    }
+
+    /**
+     * For the accuracy circle: "r0", the accuracy's radius in screen pixels at zoom 0 (it doubles
+     * with each zoom level), so the circle on the chart is as big as the position is uncertain.
+     */
+    private fun accuracyProperties(location: Location): String {
+        val accuracy = if (location.hasAccuracy()) location.accuracy.toDouble() else 0.0
+        val metresPerPixelZoom0 = 78271.517 * Math.cos(Math.toRadians(location.latitude)).coerceAtLeast(0.01)
+        return String.format(java.util.Locale.US, "{\"r0\":%.9f}", accuracy / metresPerPixelZoom0)
+    }
+
+    /** The zoom for jumping to the boat: the usual one, or further out so a rough position's whole circle is on screen. */
+    private fun locateZoom(location: Location): Double {
+        if (!location.hasAccuracy() || location.accuracy < 200f) return LOCATE_ZOOM
+        val metresPerPixelZoom0 = 78271.517 * Math.cos(Math.toRadians(location.latitude)).coerceAtLeast(0.01)
+        // The circle about 300 px in radius.
+        val zoom = Math.log(300.0 * metresPerPixelZoom0 / location.accuracy) / Math.log(2.0)
+        return zoom.coerceIn(4.0, LOCATE_ZOOM)
     }
 
     private fun recentreOn(location: Location) {
