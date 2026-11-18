@@ -1,0 +1,1 @@
+The boat is where you are: a rough phone-mast position no longer replaces a GPS fix, and is shown with its real uncertainty until the GPS locks. Sea conditions download even when the phone's DNS can't find a data server.

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.3.4 — 2026-11-18
 
 - **The boat is where you are:** a rough position from phone masts (it can be kilometres out)
   no longer replaces a GPS fix, and is only shown while there's nothing better. When it is
