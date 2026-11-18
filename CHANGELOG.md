@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.3.1 — 2026-11-18
 
 - **Faster sea conditions:** the forecast downloads several parts at once and shows as soon as it's
   in, usually within a few seconds; the satellite pictures follow. They only change once a day, so

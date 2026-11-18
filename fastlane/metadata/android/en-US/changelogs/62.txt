@@ -1,0 +1,1 @@
+Sea conditions show within seconds; satellite pictures download once a day. 2 days of forecast by default. Inland, the area goes over the nearest sea. A dot shows if the forecast is up to date: tap a red one to update.
