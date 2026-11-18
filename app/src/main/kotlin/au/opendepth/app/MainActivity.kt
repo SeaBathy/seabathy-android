@@ -30,6 +30,7 @@ import au.opendepth.app.diagnostics.MapLibreDiagnostics
 import au.opendepth.app.diagnostics.ResourceTracker
 import au.opendepth.app.download.OfflineTileDownloadController
 import au.opendepth.app.download.isOfflineDownload
+import au.opendepth.app.download.offlineDownloadsDir
 import au.opendepth.app.download.CompletedDownloads
 import au.opendepth.app.download.DownloadPrompts
 import au.opendepth.app.map.DepthQueryController
@@ -378,7 +379,7 @@ class MainActivity : AppCompatActivity() {
         }
         if (intent?.action != ACTION_OFFER_IMPORT_DOWNLOAD) return
         val path = intent.getStringExtra(EXTRA_DOWNLOADED_FILE_PATH) ?: return
-        if (!isOfflineDownload(path)) {
+        if (!isOfflineDownload(path, offlineDownloadsDir(this))) {
             DiagnosticLog.log(TAG, "ignoring import offer for a path outside the offline downloads folder")
             intent.action = null
             return

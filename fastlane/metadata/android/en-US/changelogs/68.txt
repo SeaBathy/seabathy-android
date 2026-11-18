@@ -1,0 +1,1 @@
+Offline map downloads work again in the Google Play version: they save to Download/SeaBathy. The GitHub version is unchanged.

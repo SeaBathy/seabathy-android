@@ -165,7 +165,7 @@ class OfflineTileDownloadController(
             // Progress, the result and the "import it now?" offer all arrive as notifications.
             onError(
                 "Downloading ${source.name}. Notifications are off for SeaBathy, so there's no progress " +
-                    "or finished message: the file goes to SeaBathy/OfflineDownloads, to load as an MBTiles layer."
+                    "or finished message: the file goes to ${offlineDownloadsLabel(context)}, to load as an MBTiles layer."
             )
         }
     }

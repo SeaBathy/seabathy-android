@@ -41,7 +41,7 @@ class OfflineTileDownloadService : Service() {
     override fun onCreate() {
         super.onCreate()
         val connectivity = getSystemService(android.net.ConnectivityManager::class.java)
-        runner = TileDownloadRunner(isOnline = {
+        runner = TileDownloadRunner(offlineDownloadsDir(this), isOnline = {
             connectivity.getNetworkCapabilities(connectivity.activeNetwork)
                 ?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
         })

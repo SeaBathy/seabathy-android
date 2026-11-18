@@ -114,7 +114,10 @@ user picked, or the last position the app saw.
 
 The Google Play build has no storage permissions (Google Play restricts them). The GitHub
 build adds them (`app/src/github/AndroidManifest.xml`, "All files access") so offline maps
-can be saved to a folder the user can see. Surveys and charts are picked with the system
+can be saved to `SeaBathy/OfflineDownloads`. The Play build saves them to `Download/SeaBathy`
+instead (Android 11 and later let an app write its own files there), or to its own folder
+under `Android/data` before Android 11: see `offlineDownloadsDir` in `TileDownloadRunner.kt`.
+Check offline downloads on both builds; only the Play one takes that path. Surveys and charts are picked with the system
 file picker, and Android won't let the app reopen a picked file by its path. So:
 
 - **Big GeoTIFFs (over 300 MB) and BigTIFFs** are read **in place**, at any size, never copied:

@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.3.7 — 2026-11-19
+
+- **Google Play version: offline maps download again.** That version can't be given "All files
+  access", so saving to `SeaBathy/OfflineDownloads` failed every time with "Download failed". It
+  now saves to `Download/SeaBathy` (Android 11 and later) or the app's own folder (Android 8
+  to 10); neither needs a permission, and a file manager can open both.
+- The GitHub version is unchanged: it still saves to `SeaBathy/OfflineDownloads`.
+- With notifications off, the "downloading" message names the folder the map is saved in.
+
 ## 1.3.6 — 2026-11-18
 
 - **Sea conditions rebuilt under the hood** (the screens are the same): one engine now decides

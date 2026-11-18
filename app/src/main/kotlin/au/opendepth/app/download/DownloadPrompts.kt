@@ -37,7 +37,7 @@ class DownloadPrompts(
     private fun offerCompleted() {
         val pending = CompletedDownloads.pending(context) ?: return
         CompletedDownloads.clear(context)
-        if (!isOfflineDownload(pending.path) || !File(pending.path).isFile) return
+        if (!isOfflineDownload(pending.path, offlineDownloadsDir(context)) || !File(pending.path).isFile) return
         if (isLoaded(pending.path)) return
         offerImport(pending)
     }
@@ -53,7 +53,7 @@ class DownloadPrompts(
             val removed = withContext(Dispatchers.IO) {
                 runCatching {
                     val cutoff = System.currentTimeMillis() - STALE_PART_MS
-                    (offlineDownloadsDir().listFiles() ?: emptyArray())
+                    (offlineDownloadsDir(context).listFiles() ?: emptyArray())
                         .filter { it.isFile && it.name.contains(".mbtiles.part") && it.lastModified() < cutoff }
                         .filter { it.delete() }
                 }.getOrDefault(emptyList())

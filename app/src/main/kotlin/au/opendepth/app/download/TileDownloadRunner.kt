@@ -1,5 +1,9 @@
 package au.opendepth.app.download
 
+import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Environment
 import au.opendepth.app.diagnostics.DiagnosticLog
 import au.opendepth.app.model.DataSource
@@ -21,6 +25,8 @@ import java.util.Locale
  * [OfflineTileDownloadService]; no UI of its own.
  */
 class TileDownloadRunner(
+    /** The folder the map is written to: [offlineDownloadsDir]. */
+    private val downloadsDir: File,
     /** Whether the device has an internet connection right now (always true in tests). */
     private val isOnline: () -> Boolean = { true }
 ) {
@@ -43,7 +49,7 @@ class TileDownloadRunner(
         fetchClient.resetLogBudget()
         fetchClient.resetCancellation()
         fetchClient.resetPoliteness()
-        deleteStaleDownloadParts(offlineDownloadsDir()).takeIf { it.isNotEmpty() }?.let { removed ->
+        deleteStaleDownloadParts(downloadsDir).takeIf { it.isNotEmpty() }?.let { removed ->
             DiagnosticLog.log(TAG, "removed partial files left by an interrupted download: ${removed.joinToString { it.name }}")
         }
         val destination = destinationFile(source, bounds)
@@ -253,17 +259,19 @@ class TileDownloadRunner(
     }
 
     /**
-     * `SeaBathy/OfflineDownloads/<source>_<lat>_<lng>_<yyyyMMdd>.mbtiles` in
-     * shared storage, where a file manager can find it (the app's own
-     * `Android/data` folder is hidden). A `_2`, `_3`… suffix is added when the
-     * name is taken, so a download only ever writes or deletes its own file.
+     * `<source>_<lat>_<lng>_<yyyyMMdd>.mbtiles` in [downloadsDir]. A `_2`, `_3` and so on is added
+     * when the name is taken, so a download only ever writes or deletes its own file.
      */
     private fun destinationFile(source: DataSource, bounds: GeoBounds): File {
-        val dir = offlineDownloadsDir()
+        val dir = downloadsDir
         if (!dir.mkdirs() && !dir.isDirectory) {
             throw IOException(
-                "Couldn't create the SeaBathy/OfflineDownloads folder. Allow SeaBathy \"All files access\" " +
-                    "in Android Settings, then try again."
+                if (dir == sharedDownloadsDir()) {
+                    "Couldn't create the SeaBathy/OfflineDownloads folder. Allow SeaBathy \"All files access\" " +
+                        "in Android Settings, then try again."
+                } else {
+                    "Couldn't create the folder for offline maps (${dir.path}). Check the phone's free space, then try again."
+                }
             )
         }
 
@@ -325,15 +333,54 @@ private fun deletePart(partial: File) {
 
 private const val PART_SUFFIX = ".part"
 
-/** Shared-storage folder offline downloads are written to; see [TileDownloadRunner]'s destination doc. */
-fun offlineDownloadsDir(): File = File(Environment.getExternalStorageDirectory(), "SeaBathy/OfflineDownloads")
+/** Where a build saves its offline maps: see [offlineFolderFor]. */
+enum class OfflineFolder { SHARED, DOWNLOADS, APP }
+
+/**
+ * A build that may be given "All files access" (the GitHub one) saves to `SeaBathy/OfflineDownloads`
+ * in shared storage. A build that may not (Google Play doesn't allow that permission for this) saves
+ * to `Download/SeaBathy`, which Android 11 and later let any app write its own files to, and before
+ * Android 11 to its own folder under `Android/data`. A file manager can open all three.
+ */
+fun offlineFolderFor(mayHaveAllFilesAccess: Boolean, sdk: Int): OfflineFolder = when {
+    mayHaveAllFilesAccess -> OfflineFolder.SHARED
+    sdk >= Build.VERSION_CODES.R -> OfflineFolder.DOWNLOADS
+    else -> OfflineFolder.APP
+}
+
+/** The folder offline maps are written to and offered for loading from. */
+fun offlineDownloadsDir(context: Context): File = when (offlineFolder(context)) {
+    OfflineFolder.SHARED -> sharedDownloadsDir()
+    OfflineFolder.DOWNLOADS -> File(Environment.getExternalStorageDirectory(), Environment.DIRECTORY_DOWNLOADS + "/SeaBathy")
+    OfflineFolder.APP -> File(context.getExternalFilesDir(null) ?: context.filesDir, "OfflineDownloads")
+}
+
+/** [offlineDownloadsDir] as the user would look for it in a file manager. */
+fun offlineDownloadsLabel(context: Context): String = when (offlineFolder(context)) {
+    OfflineFolder.SHARED -> "SeaBathy/OfflineDownloads"
+    OfflineFolder.DOWNLOADS -> "Download/SeaBathy"
+    OfflineFolder.APP -> "Android/data/${context.packageName}/files/OfflineDownloads"
+}
+
+private fun sharedDownloadsDir(): File = File(Environment.getExternalStorageDirectory(), "SeaBathy/OfflineDownloads")
+
+private fun offlineFolder(context: Context): OfflineFolder =
+    offlineFolderFor(asksForSharedStorage(context), Build.VERSION.SDK_INT)
+
+/** Whether this build's manifest asks for shared storage at all (only then can the user allow it). */
+@Suppress("DEPRECATION")
+private fun asksForSharedStorage(context: Context): Boolean = runCatching {
+    val asked = context.packageManager
+        .getPackageInfo(context.packageName, PackageManager.GET_PERMISSIONS).requestedPermissions.orEmpty()
+    Manifest.permission.MANAGE_EXTERNAL_STORAGE in asked || Manifest.permission.WRITE_EXTERNAL_STORAGE in asked
+}.getOrDefault(false)
 
 /**
  * True only for an `.mbtiles` file directly inside [offlineDownloadsDir].
  * MainActivity is exported, so the path in an "import this download" intent
  * may come from another app, not from this app's own notification.
  */
-fun isOfflineDownload(path: String, downloadsDir: File = offlineDownloadsDir()): Boolean = runCatching {
+fun isOfflineDownload(path: String, downloadsDir: File): Boolean = runCatching {
     val file = File(path).canonicalFile
     file.extension.equals("mbtiles", ignoreCase = true) &&
         file.parentFile == downloadsDir.canonicalFile
