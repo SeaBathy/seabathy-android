@@ -1,0 +1,1 @@
+Sea conditions now stop at the shore, cut along the coastline the chart draws instead of in blocks over the land, sharp even zoomed right in. Works offline once downloaded.

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.3.2 — 2026-11-18
 
 - **Sea conditions stop at the shore:** wind, waves and the rest are cut along OpenStreetMap's
   coastline (the one the chart draws) instead of in blocks over the land, sharp even zoomed right
