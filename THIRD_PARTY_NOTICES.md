@@ -14,7 +14,7 @@ services are listed separately in [`DATA_ATTRIBUTION.md`](DATA_ATTRIBUTION.md).
 | MapLibre Java (GeoJSON, Turf) | 6.0.1 | MIT | https://github.com/maplibre/maplibre-java |
 | MapLibre Gestures | 0.0.4 | BSD 2-Clause | https://github.com/maplibre/maplibre-gestures-android |
 | Timber | 5.0.1 | Apache 2.0 | https://github.com/JakeWharton/timber |
-| AndroidX (core, appcompat, constraintlayout, lifecycle) | see `app/build.gradle.kts` | Apache 2.0 | https://developer.android.com/jetpack/androidx |
+| AndroidX (core, appcompat, constraintlayout, lifecycle, work) | see `app/build.gradle.kts` | Apache 2.0 | https://developer.android.com/jetpack/androidx |
 | Material Components for Android | 1.11.0 | Apache 2.0 | https://github.com/material-components/material-components-android |
 | Kotlin standard library, kotlinx.coroutines | 2.2.10, 1.10.2 | Apache 2.0 | https://github.com/Kotlin/kotlinx.coroutines |
 | Gson | 2.10.1 | Apache 2.0 | https://github.com/google/gson |
@@ -24,6 +24,7 @@ services are listed separately in [`DATA_ATTRIBUTION.md`](DATA_ATTRIBUTION.md).
 | three.js (3D view, in `terrain3d-web`) | 0.170.0 | MIT | https://github.com/mrdoob/three.js |
 | Open Sans glyphs (`assets/glyphs`) | — | Apache 2.0 (older releases), SIL OFL 1.1 (current) | https://github.com/googlefonts/opensans |
 | PROJ database (`assets/proj/proj.db`) | — | MIT | https://proj.org |
+| Natural Earth 1:10m land (`assets/ne_land.bin`, the built-in coastline for the sea conditions) | 5.1 | Public domain | https://www.naturalearthdata.com |
 | LeakCanary (debug builds only, not in release APKs) | 2.14 | Apache 2.0 | https://github.com/square/leakcanary |
 | High-detail depths engine (`app/src/main/java/com/seabathy/bathypicker/core`), from [BathyPicker](https://github.com/SeaBathy/BathyPicker) by the same authors | — | GPL-3.0 | this repository |
 | Code in that engine that follows GDAL 3.13.3: `Proximity.java` (from `gdalproximity.cpp`) and the resampling and scale steps in `Builder.java` (from `gdalwarpkernel.cpp` and `gdalwarpoperation.cpp`) | 3.13.3 | MIT (© Frank Warmerdam, Even Rouault); full text in `app/src/main/assets/licenses.txt` | https://github.com/OSGeo/gdal |

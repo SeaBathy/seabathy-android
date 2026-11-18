@@ -25,6 +25,7 @@ on the chart and in the 3D view.
 | Map | Credit shown | Provider's terms on offline copies |
 | --- | --- | --- |
 | OpenFreeMap Dark / Liberty (basemaps; free, no account or key) | OpenFreeMap © OpenMapTiles, © OpenStreetMap contributors | Basemap only: not offered for download |
+| Coastline for the sea conditions (OpenFreeMap map tiles round each saved area; built-in world outline) | OpenFreeMap © OpenMapTiles, © OpenStreetMap contributors (ODbL); Natural Earth (public domain) | Kept on the device with the sea conditions it belongs to, removed with them |
 | OpenStreetMap | © OpenStreetMap contributors | The [tile usage policy](https://operations.osmfoundation.org/policies/tiles/) bans bulk downloads |
 | OpenTopoMap | © OpenStreetMap contributors, SRTM, OpenTopoMap (CC-BY-SA) | Asks for no bulk downloads |
 | USGS Imagery | USGS The National Map | Allowed (US public domain) |
