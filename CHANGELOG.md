@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.3.5 — 2026-11-18
 
 - **Sea conditions show on the map straight away:** the first time they download, the map layer
   turns on by itself (wind), so it's clear it worked. After that it stays as you leave it.

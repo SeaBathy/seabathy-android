@@ -1,0 +1,1 @@
+Sea conditions show on the map as soon as they first download. On land, the values box shows the nearest sea and how far away it is, instead of no data.
