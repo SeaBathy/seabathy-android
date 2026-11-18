@@ -1,0 +1,1 @@
+Sea conditions rebuilt under the hood to be dependable: saved weather always stays on show, failed downloads retry by themselves, and the box shows the boat's weather (or the nearest sea) when the map is over land.

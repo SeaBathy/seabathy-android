@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.3.6 — 2026-11-18
 
 - **Sea conditions rebuilt under the hood** (the screens are the same): one engine now decides
   what to download and when, one download at a time, so it can't get stuck or forget:

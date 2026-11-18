@@ -27,8 +27,8 @@ android {
         // Google Play requires apps and updates to target Android 16 (API 36)
         // from 31 August 2026.
         targetSdk = 36
-        versionCode = 66
-        versionName = "1.3.5"
+        versionCode = 67
+        versionName = "1.3.6"
     }
     // Two builds of the same app. "github" keeps the original application id,
     // so the APKs already installed from GitHub keep updating. "play" is the
