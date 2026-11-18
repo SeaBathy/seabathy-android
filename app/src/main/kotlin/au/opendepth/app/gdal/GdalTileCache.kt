@@ -40,8 +40,11 @@ class GdalTileCache private constructor(
         pageSize = pragmaLong("page_size")
     )
 
-    /** Oldest-written first: INSERT OR REPLACE gives every write a new, higher rowid. */
-    /** 0 once closed (layer removed mid-check); a real DELETE failure (full disk, corruption) throws, for the budget check to log. */
+    /**
+     * Oldest-written first: INSERT OR REPLACE gives every write a new, higher rowid. 0 once closed
+     * (layer removed mid-check); a real DELETE failure (full disk, corruption) throws, for the
+     * budget check to log.
+     */
     override fun evictOldest(rows: Int): Int = try {
         database.compileStatement(
             "DELETE FROM tiles WHERE rowid IN (SELECT rowid FROM tiles ORDER BY rowid LIMIT ?)"

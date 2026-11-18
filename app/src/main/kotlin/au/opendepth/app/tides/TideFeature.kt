@@ -361,15 +361,19 @@ class TideFeature(
         if (saving) return
         saving = true
         saveJob = scope.launch {
-            showMain()
-            runCatching { store.saveOffline(target.id, target.lat, target.lng, period) }
-                .onSuccess {
-                    lastError = null
-                    val until = it.savedUntilMillis?.let { ms -> SimpleDateFormat("d MMM yyyy", Locale.US).format(Date(ms)) }
-                    callbacks.toast("Tides saved offline until $until")
-                }
-                .onFailure { lastError = it.message ?: "Couldn't save tides" }
-            saving = false
+            try {
+                showMain()
+                runCatching { store.saveOffline(target.id, target.lat, target.lng, period) }
+                    .onSuccess {
+                        lastError = null
+                        val until = it.savedUntilMillis?.let { ms -> SimpleDateFormat("d MMM yyyy", Locale.US).format(Date(ms)) }
+                        callbacks.toast("Tides saved offline until $until")
+                    }
+                    .onFailure { lastError = it.message ?: "Couldn't save tides" }
+            } finally {
+                // However it ends, saving can be asked for again.
+                saving = false
+            }
             refreshChip()
             callbacks.tidesChanged()
             if (key == target.id) showMain()

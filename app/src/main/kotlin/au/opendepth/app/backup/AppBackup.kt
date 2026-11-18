@@ -100,10 +100,6 @@ object AppBackup {
         return summary
     }
 
-    fun cancelPending(filesDir: File) {
-        File(filesDir, PENDING).delete()
-    }
-
     /** Reads the summary of a backup file, or throws if it isn't one. */
     fun summarise(file: File): Summary {
         val manifest = readManifest(file) ?: error("not a SeaBathy backup")

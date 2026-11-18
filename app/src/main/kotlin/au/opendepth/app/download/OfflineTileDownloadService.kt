@@ -274,7 +274,10 @@ class OfflineTileDownloadService : Service() {
         private const val EXTRA_ZOOM_MIN = "zoom_min"
         private const val EXTRA_ZOOM_MAX = "zoom_max"
 
-        /** Builds the start [Intent] for [context]; extras are primitives only, deliberately not a `Serializable`/`Parcelable` payload, so this never breaks across a process restart or an app update between starting and handling it. */
+        /**
+         * Builds the start [Intent] for [context]. Extras are primitives only, not a `Serializable` or
+         * `Parcelable`, so it still reads after a process restart or an app update.
+         */
         fun startIntent(context: Context, source: DataSource, bounds: GeoBounds, zoomRange: IntRange): Intent =
             Intent(context, OfflineTileDownloadService::class.java).apply {
                 putExtra(EXTRA_SOURCE_ID, source.id)

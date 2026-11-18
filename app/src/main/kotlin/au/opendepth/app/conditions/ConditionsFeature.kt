@@ -38,7 +38,6 @@ import au.opendepth.app.ui.roundedBackground
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.async
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -46,7 +45,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.geometry.LatLngQuad
-import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.style.expressions.Expression
 import org.maplibre.android.style.layers.Property
 import org.maplibre.android.style.layers.PropertyFactory
@@ -540,7 +538,6 @@ class ConditionsFeature(
         }
     }
 
-    /** A GPS fix: the spot follows it when set to. */
     /**
      * What the sea is doing at a point now, as the values box words it, for
      * a waypoint photo's record. The sun and moon are always there; the rest
@@ -555,6 +552,7 @@ class ConditionsFeature(
         return list.map { it.text }
     }
 
+    /** A GPS fix: the spot follows it when set to. */
     fun onLocation(lat: Double, lng: Double) {
         gpsFix = lat to lng
         // Remembered now and then, not on every fix.
@@ -896,11 +894,15 @@ class ConditionsFeature(
         if (coastFetching || now - coastTriedAt < COAST_RETRY_MS || !online()) return
         coastFetching = true
         coastTriedAt = now
-        val failed = withContext(Dispatchers.IO) {
-            runCatching { coastline.fetch(a.south, a.west, a.north, a.east) }
-                .onFailure { DiagnosticLog.logError(TAG, "coastline FAILED", it) }.getOrDefault(-1)
+        val failed = try {
+            withContext(Dispatchers.IO) {
+                runCatching { coastline.fetch(a.south, a.west, a.north, a.east) }
+                    .onFailure { DiagnosticLog.logError(TAG, "coastline FAILED", it) }.getOrDefault(-1)
+            }
+        } finally {
+            // However it ends (cancelled too), it's free for the next try.
+            coastFetching = false
         }
-        coastFetching = false
         if (failed == 0) {
             maskCache = null
             lastPictureKey = null
@@ -949,11 +951,10 @@ class ConditionsFeature(
     private fun arrowOpacity(): Float = max(0.55f, opacity)
 
     /**
-     * What the colours show at a point. With satellite temperature saved,
-     * its 1 km coastline masks the land, so the coarse forecast reaches the
-     * shore and the 9 km chlorophyll stops at it, instead of in blocks.
+     * What the colours show at a point. [clipped]: the picture is cut at the shore afterwards
+     * (the coastline), so the values reach right to it. Otherwise the satellite temperature's
+     * 1 km coastline masks the land, when it's saved.
      */
-    /** [clipped]: the picture is cut at the shore afterwards, so the values reach right to it. */
     private fun sampler(a: ConditionsArea, choice: ColourChoice, time: Long, clipped: Boolean = false): ConditionsPicture.Sampler? {
         if (clipped) return rawSampler(a, choice, time, coastal = true)
         val raw = rawSampler(a, choice, time, coastal = a.satellites.containsKey(SatelliteKind.SEA_TEMP)) ?: return null
@@ -2523,10 +2524,6 @@ class ConditionsFeature(
         const val DEFAULT_DAYS = 2
         /** + an area's id: when its satellite pictures were last fetched. */
         private const val KEY_SATELLITES_AT = WeatherEngine.KEY_SATELLITES_AT
-        /** Satellite pictures are new once a day. */
-        private const val SATELLITE_EVERY_MS = 20 * 3_600_000L
-        /** A main picture that couldn't be got (its server down) is tried again after this. */
-        private const val SATELLITE_RETRY_MS = 3_600_000L
         private const val KEY_SATELLITE = "conditions_satellite"
         private const val KEY_STYLE = "conditions_direction_style"
         private const val KEY_BOX = "conditions_box"
@@ -2564,14 +2561,8 @@ class ConditionsFeature(
         private const val FRESH_COLOUR = 0xFF22C55E.toInt()
         private const val UPDATING_COLOUR = 0xFFF59E0B.toInt()
         private const val OLD_COLOUR = 0xFFEF4444.toInt()
-        /** The spot's area is downloaded again once the boat is this far from where it was downloaded for. */
-        private const val SPOT_MOVE_KM = 100.0
-        /** Where the spot's area was last downloaded for: "lat,lng". */
-        /** An inland spot's nearest sea: "spotLat,spotLng,seaLat,seaLng". */
         /** Cells a side in the flow lines' grid: about 3 km apart over a 400 km area. */
         private const val FLOW_GRID_SIDE = 128
-        /** Between automatic tries, so a failing service isn't asked again and again. */
-        private const val AUTO_RETRY_MS = 15 * 60_000L
         private const val WARNING = 0xFFF5B942.toInt()
 
         private const val IMAGE_SOURCE = "conditions-image-src"
@@ -2629,8 +2620,6 @@ class ConditionsFeature(
          */
         const val MAX_POINTS_PER_SIDE = 16
         const val MAX_WIND_POINTS_PER_SIDE = 10
-        /** Between downloads, so two never land in the same minute of Open-Meteo's limit. */
-        private const val MIN_DOWNLOAD_GAP_MS = 75_000L
         private const val MAX_ARROWS_PER_SIDE = 12
         private const val BOX_ROWS = 9
         private val SATELLITE_ROWS = setOf("Sea", "Depth", "Water")
@@ -2679,10 +2668,6 @@ class ConditionsFeature(
         }
 
         /**
-         * South, west, north and east of a square [radiusKm] each way from
-         * [lat]/[lng], stopping at the date line (the data services do too).
-         */
-        /**
          * The point of the grid [lats] x [lngs] nearest [lat]/[lng] for which [matches] is true,
          * or null when none is. Pure, unit-tested.
          */
@@ -2694,6 +2679,10 @@ class ConditionsFeature(
             return points.firstOrNull { (pLat, pLng) -> matches(pLat, pLng) }
         }
 
+        /**
+         * South, west, north and east of a square [radiusKm] each way from
+         * [lat]/[lng], stopping at the date line (the data services do too).
+         */
         fun boxAround(lat: Double, lng: Double, radiusKm: Double): DoubleArray {
             val dLat = radiusKm / 111.0
             val dLng = radiusKm / (111.0 * kotlin.math.cos(Math.toRadians(lat)).coerceAtLeast(0.2))

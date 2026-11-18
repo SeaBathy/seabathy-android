@@ -125,7 +125,6 @@ class GeoTiffImporter(private val context: Context, private val tileCacheDir: Fi
         return PrivateFileImporter(contentResolver, dir, EXTENSION, "survey", context).import(uri).file
     }
 
-    /** Opens a file the app itself saved: the layer records its plain path. */
     /**
      * Opens [file] through GDAL whatever its size: for files built tiled with overviews (the
      * high-detail depths), so only the part on screen is ever read into memory.
@@ -133,6 +132,7 @@ class GeoTiffImporter(private val context: Context, private val tileCacheDir: Fi
     fun importFileOnDemand(file: File): ImportedGeoTiff =
         importViaGdal(file.absolutePath, file.absolutePath, file.nameWithoutExtension)
 
+    /** Opens a file the app itself saved: the layer records its plain path. */
     fun importFile(file: File): ImportedGeoTiff =
         importFromLocalFile(file.absolutePath, file.nameWithoutExtension, sourceLabel = file.absolutePath, gdalAllowed = true)
 

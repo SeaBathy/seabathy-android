@@ -38,7 +38,6 @@ object HighDetailDepths {
     private const val S = -60.0
     private const val N = -8.0
 
-    /** The most one build may write. Auto resolution picks the finest detail that fits. */
     /** The size choices in Settings, in MB; 0 is Auto (from this phone's memory). */
     val LIMIT_CHOICES = listOf(0, 100, 250, 500, 1000)
     private const val KEY_LIMIT = "high_detail_limit_mb"

@@ -286,7 +286,11 @@ class TileDownloadRunner(
         const val WRITE_BATCH_SIZE = 200
         /** Never more than this many tile fetches in flight at once. */
         const val CONCURRENT_FETCH_LIMIT = 6
-        /** Written as the MBTiles metadata "format" — this app's own reader (OverlayLayerController.readMbtilesMetadata) only branches on "pbf"/"mvt" (vector) vs anything else (raster), so the exact raster format string only matters to other MBTiles consumers, not to this app reading its own file back. */
+        /**
+         * Written as the MBTiles metadata "format". This app's own reader only tells "pbf"/"mvt"
+         * (vector) from anything else (raster), so the exact raster format matters to other apps
+         * reading the file, not to this one.
+         */
         const val TILE_FORMAT = "jpg"
         /** How long a download waits for a lost connection before finishing with what it has. */
         const val NETWORK_WAIT_MS = 15 * 60_000L

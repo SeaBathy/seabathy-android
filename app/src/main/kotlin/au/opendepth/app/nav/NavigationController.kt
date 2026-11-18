@@ -33,7 +33,6 @@ class NavigationController(
     private val preferences: SharedPreferences,
     private val gson: Gson,
     private val settings: () -> NavSettings,
-    /** Tide above the survey datum now, metres, or null when not applied. */
     /** The tide to add at a position, or null (off, unknown, or too far from the tide spot). */
     private val tideNow: (lat: Double, lng: Double) -> Double?,
     /** The tide now as a tide table gives it, for the HUD. */

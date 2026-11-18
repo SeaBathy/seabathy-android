@@ -29,9 +29,9 @@ class TideGraphView(context: Context) : View(context) {
     var curve: TideCurve? = null
         set(value) { field = value; invalidate() }
 
-    /** Added to every height (chart datum offset), so the graph matches the readouts. */
     /** Heights in the units chosen in Settings. */
     var heightFormat: NavFormat = NavFormat(NavUnits())
+    /** Added to every height (chart datum offset), so the graph matches the readouts. */
     var offsetM: Double = 0.0
         set(value) { field = value; invalidate() }
 

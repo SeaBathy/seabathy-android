@@ -24,7 +24,6 @@ import au.opendepth.app.map.RouteController
 import au.opendepth.app.map.RouteDepthCheck
 import au.opendepth.app.model.RoutePoint
 import au.opendepth.app.model.Waypoint
-import au.opendepth.app.storage.GpxImporter
 import au.opendepth.app.tides.TideFeature
 import au.opendepth.app.track.TrackFeature
 import au.opendepth.app.ui.ChartHud

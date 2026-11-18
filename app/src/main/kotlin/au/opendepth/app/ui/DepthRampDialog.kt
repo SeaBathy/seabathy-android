@@ -18,7 +18,6 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.TextView
-import au.opendepth.app.geotiff.DepthGrid
 import au.opendepth.app.geotiff.DepthGridRenderer
 import au.opendepth.app.geotiff.DepthPalette
 import au.opendepth.app.model.DepthRampSettings

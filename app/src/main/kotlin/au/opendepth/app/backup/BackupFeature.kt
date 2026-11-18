@@ -11,7 +11,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import au.opendepth.app.BuildConfig
 import au.opendepth.app.diagnostics.DiagnosticLog
 import au.opendepth.app.ui.PanelDialogs
-import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale

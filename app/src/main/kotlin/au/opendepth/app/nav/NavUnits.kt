@@ -147,7 +147,6 @@ class NavFormat(private val units: NavUnits, private val timeZone: TimeZone = Ti
         if (knots == null || !knots.isFinite()) "—"
         else String.format(Locale.US, "%.1f %s", knots * units.speed.perKnot, units.speed.label)
 
-    /** A depth below the surface, in metres (positive down). */
     /** A depth of water; below zero the bottom is above the water ("dries 0.4 m"). */
     fun depth(metres: Double?): String = when {
         metres == null || !metres.isFinite() -> "—"

@@ -82,8 +82,7 @@ object GdalDepthImporter {
     /**
      * Rotation/CRS/bounds resolution and one full-band statistics pass, done
      * once up front before [GdalTileSource] serves tiles on demand.
-     */
-    /**
+     *
      * [knownMinMax], when given, is the band's min/max from an earlier open of
      * the same unchanged file: computing it reads every pixel, which for a
      * 1 GB+ survey takes tens of seconds on a phone at every app start.

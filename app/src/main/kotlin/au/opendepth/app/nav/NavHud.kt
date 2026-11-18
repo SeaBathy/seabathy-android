@@ -11,7 +11,6 @@ import au.opendepth.app.R
 import android.widget.LinearLayout
 import android.widget.TextView
 import au.opendepth.app.ui.AppTheme
-import au.opendepth.app.ui.applySecondaryStyle
 import au.opendepth.app.ui.dp
 import au.opendepth.app.ui.dpF
 import kotlin.math.abs

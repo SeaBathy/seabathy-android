@@ -505,7 +505,6 @@ class OverlayLayerController(
         onStackChanged()
     }
 
-    /** Applies a new palette or depth range without re-reading the file. */
     /**
      * Applies a new depth-colour tile size (from the GeoTIFF quality setting)
      * to every GDAL-backed layer, and re-attaches them so MapLibre fetches
@@ -528,6 +527,7 @@ class OverlayLayerController(
         }
     }
 
+    /** Applies a new palette or depth range without re-reading the file. */
     fun setRamp(id: String, ramp: DepthRampSettings) {
         val layer = updateLayer(id) { it.copy(ramp = ramp.normalised()) } ?: return
         val depthSource = depthSources[id] ?: return

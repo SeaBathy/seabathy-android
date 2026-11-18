@@ -18,7 +18,10 @@ data class DepthRampSettings(
      * ramps saved before this existed read back as.)
      */
     val showOutside: Boolean = false,
-    /** See [MIN_HILLSHADE_EXAGGERATION]/[MAX_HILLSHADE_EXAGGERATION] for the valid range; out-of-range values are not rejected here, only by [coerceHillshadeExaggeration]. */
+    /**
+     * Valid from [MIN_HILLSHADE_EXAGGERATION] to [MAX_HILLSHADE_EXAGGERATION]; out-of-range values
+     * aren't rejected here, only by [coerceHillshadeExaggeration].
+     */
     val hillshadeExaggeration: Double = DEFAULT_HILLSHADE_EXAGGERATION
 ) {
     /** Normalises the pair so shallow is always the surface-most value. */

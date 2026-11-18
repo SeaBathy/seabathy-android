@@ -16,7 +16,6 @@ import android.util.Log
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AlertDialog
 import androidx.core.app.ActivityCompat
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -1552,8 +1551,11 @@ class MainActivity : AppCompatActivity() {
             if (!noTakeLoading) {
                 noTakeLoading = true
                 scope.launch {
-                    noTake = withContext(Dispatchers.IO) { runCatching { au.opendepth.app.map.NoTakeZones.load(this@MainActivity) }.getOrNull() }
-                    noTakeLoading = false
+                    try {
+                        noTake = withContext(Dispatchers.IO) { runCatching { au.opendepth.app.map.NoTakeZones.load(this@MainActivity) }.getOrNull() }
+                    } finally {
+                        noTakeLoading = false
+                    }
                 }
             }
             return
@@ -2045,8 +2047,6 @@ class MainActivity : AppCompatActivity() {
         /** A position less accurate than this (metres) is called approximate. */
         const val APPROXIMATE_M = 200f
         const val SHOW_AREA_PADDING_DP = 32
-        /** Dark alert dialogs; the default one drew this app's light text on a white box. */
-        val ALERT_THEME = androidx.appcompat.R.style.Theme_AppCompat_Dialog_Alert
         const val SATELLITE_DEFAULT_OPACITY = 0.7f
         const val GPS_LOCATE_COLOR = "#22C55E"
         const val GPS_FOLLOW_COLOR = "#F97316"

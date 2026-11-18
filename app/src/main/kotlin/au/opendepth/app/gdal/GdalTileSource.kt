@@ -3,7 +3,6 @@ package au.opendepth.app.gdal
 import au.opendepth.app.diagnostics.ResourceTracker
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.Color
 import au.opendepth.app.diagnostics.DiagnosticLog
 import au.opendepth.app.geotiff.DepthGrid
 import au.opendepth.app.geotiff.DepthGridRenderer
@@ -306,7 +305,6 @@ class GdalTileSource private constructor(
         )
     }
 
-    /** A capped-resolution overview — for the layer panel's auto-fit ramp and a cheap initial render, not the tiles MapLibre actually displays. */
     /**
      * GDAL's approximate histogram (it reads overviews, or skips through the
      * file), so even a survey of several hundred MB answers in a second or two.
@@ -330,6 +328,7 @@ class GdalTileSource private constructor(
         return histogram.takeUnless { it.isEmpty }?.also { cachedHistogram = it }
     }
 
+    /** A capped-resolution overview: for the layer panel's auto-fit ramp and a cheap first render, not the tiles the map shows. */
     override fun previewGrid(): DepthGrid {
         cachedPreview?.let { return it }
         synchronized(lock) {
@@ -708,13 +707,13 @@ class GdalTileSource private constructor(
         /** Parallel tile reads per layer: a core or two left for the map and the UI. */
         private val READERS = (Runtime.getRuntime().availableProcessors() - 2).coerceIn(1, 3)
 
+        /** Surveys open now, sharing [VALUE_CACHE_BYTES]. */
+        private val openSources = java.util.concurrent.atomic.AtomicInteger()
+
         /**
          * Memory for [valueCache]: about a screenful of tiles at the largest
          * tile size (768 px = 2.4 MB of depths each), less on small heaps.
          */
-        /** Surveys open now, sharing [VALUE_CACHE_BYTES]. */
-        private val openSources = java.util.concurrent.atomic.AtomicInteger()
-
         private val VALUE_CACHE_BYTES: Long = min(Runtime.getRuntime().maxMemory() / 8, 64L * 1024 * 1024)
 
         /** What a colour-tile cache holds: renderer version and tile size. */

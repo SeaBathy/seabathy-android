@@ -225,7 +225,10 @@ class TileFetchClient {
         private const val MAX_LOGGED_FAILURES = 50
         private const val MAX_LOGGED_STACK_TRACES = 3
         private const val TAG = "OfflineTileDownload"
-        /** HTTP statuses worth retrying: 429 (rate limited) and 5xx (server-side, likely transient) — a normal 4xx (404 chief among them) means "no tile here," not "try again." */
+        /**
+         * Server errors worth another try. "Slow down" (429, 503) and "refused" (401, 403) are
+         * handled before these; any other 4xx (404 above all) means "no tile here", not "try again".
+         */
         private val RETRYABLE_HTTP_CODES = setOf(500, 502, 504)
         /** Far beyond any real 256px raster tile. */
         private const val MAX_TILE_BYTES = 8L * 1024 * 1024
