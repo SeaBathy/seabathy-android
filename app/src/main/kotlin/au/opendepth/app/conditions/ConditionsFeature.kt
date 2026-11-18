@@ -1191,11 +1191,15 @@ class ConditionsFeature(
                 return
             }
             a = data
-            lat = spot.first
-            lng = spot.second
+            // On land (a boat on the trailer, at home): the nearest sea in the downloaded area,
+            // rather than "no sea data here".
+            val shore = if (sea == null && boat != null) nearestSeaInArea(data, boat, time) else null
+            lat = (shore ?: spot).first
+            lng = (shore ?: spot).second
+            val seaShown = sea ?: shore
             wanted = if (boxOpen) null else setOfNotNull("Wind", rowNameOf(colour).takeIf { shown })
             boxTitle.text = (
-                if (sea != null && boat != null) String.format(Locale.US, "Nearest sea, %.0f km", au.opendepth.app.nav.NavGeo.distanceM(boat.first, boat.second, sea.first, sea.second) / 1000)
+                if (seaShown != null && boat != null) String.format(Locale.US, "Nearest sea, %.0f km", au.opendepth.app.nav.NavGeo.distanceM(boat.first, boat.second, seaShown.first, seaShown.second) / 1000)
                 else if (followGps) "At the boat" else "At your spot"
                 ) + " · " + if (live) "now" else clock(time)
         }
@@ -1232,6 +1236,26 @@ class ConditionsFeature(
             boxTitle.text = if (forecast != null && time > forecast.endMillis + ForecastGrid.HOUR_MS) "The forecast has run out: update it"
             else "No sea data here (on land?)"
         }
+    }
+
+    /** The last nearest-sea search: area, its download time and the spot (rounded), and the answer. */
+    private var shoreCache: Pair<String, Pair<Double, Double>?>? = null
+
+    /**
+     * When [spot] has no sea values in [a] (it's on land): the nearest point of [a]'s forecast
+     * grid that has them, or null when the spot is at sea or the area has none. Remembered, as
+     * the box is updated each time the map moves.
+     */
+    private fun nearestSeaInArea(a: ConditionsArea, spot: Pair<Double, Double>, time: Long): Pair<Double, Double>? {
+        val key = String.format(Locale.US, "%s:%d:%.3f,%.3f", a.id, a.fetchedMillis, spot.first, spot.second)
+        shoreCache?.takeIf { it.first == key }?.let { return it.second }
+        val format = NavFormat(units())
+        val hasSea = { lat: Double, lng: Double -> values(a, lat, lng, time, format).isNotEmpty() }
+        val found = if (hasSea(spot.first, spot.second)) null else a.forecast?.grid?.let { grid ->
+            nearestMatching(grid.lats, grid.lngs, spot.first, spot.second, hasSea)
+        }
+        shoreCache = key to found
+        return found
     }
 
     /** Working internet, asked of the phone at most every few seconds (this runs as the map moves). */
@@ -2680,6 +2704,16 @@ class ConditionsFeature(
                 val saved = if (problems.isEmpty()) "Sea conditions saved for ${result.name}." else "Saved ${result.name}, but: " + problems.joinToString(" ")
                 callbacks.toast(listOfNotNull(saved, note).joinToString(" "))
             }
+            // The very first download: show it on the map, so it's clear it worked. Once only:
+            // after that the layer stays as the user leaves it.
+            if (!preferences.contains(KEY_SHOWN) && result.forecast != null) {
+                if (!preferences.contains(KEY_COLOUR)) {
+                    colour = ColourChoice.WIND
+                    preferences.edit().putString(KEY_COLOUR, colour.name).apply()
+                }
+                if (area == null) area = result
+                setShown(true)
+            }
             updateBox()
             removeOldAreas()
         }
@@ -2922,6 +2956,18 @@ class ConditionsFeature(
          * South, west, north and east of a square [radiusKm] each way from
          * [lat]/[lng], stopping at the date line (the data services do too).
          */
+        /**
+         * The point of the grid [lats] x [lngs] nearest [lat]/[lng] for which [matches] is true,
+         * or null when none is. Pure, unit-tested.
+         */
+        fun nearestMatching(lats: DoubleArray, lngs: DoubleArray, lat: Double, lng: Double, matches: (Double, Double) -> Boolean): Pair<Double, Double>? {
+            val cosLat = kotlin.math.cos(Math.toRadians(lat)).coerceAtLeast(0.05)
+            val points = ArrayList<Pair<Double, Double>>(lats.size * lngs.size)
+            for (pLat in lats) for (pLng in lngs) points += pLat to pLng
+            points.sortBy { (pLat, pLng) -> (pLat - lat) * (pLat - lat) + (pLng - lng) * (pLng - lng) * cosLat * cosLat }
+            return points.firstOrNull { (pLat, pLng) -> matches(pLat, pLng) }
+        }
+
         fun boxAround(lat: Double, lng: Double, radiusKm: Double): DoubleArray {
             val dLat = radiusKm / 111.0
             val dLng = radiusKm / (111.0 * kotlin.math.cos(Math.toRadians(lat)).coerceAtLeast(0.2))

@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- **Sea conditions show on the map straight away:** the first time they download, the map layer
+  turns on by itself (wind), so it's clear it worked. After that it stays as you leave it.
+- **On land, the nearest sea:** with the boat on land (on the trailer, at home), the values box
+  shows the conditions at the nearest sea in the downloaded area, and how far away it is,
+  instead of "No sea data here".
+
 ## 1.3.4 — 2026-11-18
 
 - **The boat is where you are:** a rough position from phone masts (it can be kilometres out)
