@@ -69,7 +69,8 @@ phone or PC only. SeaBathy shows their credit on the map while they're shown.
 | --- | --- | --- |
 | Currents, waves, swell, sea temperature forecast | Open-Meteo Marine API, with E.U. Copernicus Marine Service Information (Météo-France SMOC and MFWAM), ECMWF, DWD and NOAA models | CC BY 4.0; free for non-commercial use. Credited on the map while shown |
 | Wind and gusts | Open-Meteo Forecast API (ECMWF, NOAA GFS and other national models) | CC BY 4.0; free for non-commercial use |
-| Satellite sea temperature | NASA JPL MUR SST v4.1, via NOAA CoastWatch ERDDAP; backup NOAA Geo-polar Blended (GHRSST) | Free and open; credit the source |
+| Backup forecast (wind, waves and swell), shown only when Open-Meteo can't be reached or is at its limit | NOAA GFS and NOAA WaveWatch III, via PacIOOS ERDDAP (University of Hawaii) | U.S. Government models, free and open; credited on the map while shown |
+| Satellite sea temperature | NASA JPL MUR SST v4.1, via NOAA CoastWatch ERDDAP; backups NOAA Coral Reef Watch CoralTemp, then NOAA Geo-polar Blended (GHRSST) | Free and open; credit the source |
 | Satellite chlorophyll | NOAA-20 VIIRS daily, via NOAA CoastWatch; backup Copernicus Sentinel-3A OLCI | Free to use and redistribute. Sentinel data must carry "Contains modified Copernicus Sentinel data" |
 | Sea level anomaly | NOAA CoastWatch blended altimetry (Sentinel-3, CryoSat-2, Jason, SARAL), generated using AVISO+ products | Free to use and redistribute with this credit: "Data courtesy of NOAA; Sentinel data courtesy of Copernicus Program; Generated using AVISO+ products" |
 | Salinity | NOAA CoastWatch SMAP, then SMOS, daily | Free to use and redistribute |
