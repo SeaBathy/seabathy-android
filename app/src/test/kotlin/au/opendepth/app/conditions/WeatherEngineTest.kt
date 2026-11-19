@@ -26,22 +26,52 @@ class WeatherEngineTest {
     private val timers = mutableListOf<Pair<Long, () -> Unit>>()
     private val saved = mutableListOf<ConditionsArea>()
     private val finished = mutableListOf<ConditionsArea?>()
+    private val latestFlags = mutableListOf<Boolean>()
     private var settings = WeatherSettings(days = 2, withSatellite = true, depthM = 10, autoUpdate = true)
 
     /** A network that answers from a simple model: sea everywhere east of [coastLng]. */
     private inner class FakeNet : WeatherNet {
         var forecasts = 0
+        var backups = 0
         var satellites = 0
         var seaQueries = 0
         var fail: (() -> Throwable)? = null
+        /** The backup is off unless a test turns it on. */
+        var backupFail: (() -> Throwable)? = { IOException("no backup in this test") }
+        /** What a picture's server does, by picture. */
+        var satelliteFail: ((SatelliteKind) -> Throwable?)? = null
         var run: Long? = null
+        /** The sea models' newest run, when it isn't the newest of all ([run]). */
+        var seaRun: Long? = null
+        /** Downloads that were the wind alone. */
+        var windOnly = 0
+        /** The wind alone can't be had (the whole forecast still can). */
+        var windOnlyFail: (() -> Throwable)? = null
         var coastLng = -1000.0
+        /** The hours ahead of now the service gives, whatever was asked (null: what was asked). */
+        var hoursAhead: Int? = null
 
-        override fun forecast(south: Double, west: Double, north: Double, east: Double, days: Int, onProgress: (Double) -> Unit): ForecastGrid {
+        override fun forecast(south: Double, west: Double, north: Double, east: Double, days: Int, userAsked: Boolean, keepSea: ForecastGrid?, onProgress: (Double) -> Unit): ForecastGrid {
             forecasts++
             fail?.let { throw it() }
+            if (keepSea != null) windOnlyFail?.let { throw it() }
+            val fresh = answer(south, west, north, east, hoursAhead ?: (days * 24 + 1))
+            if (keepSea == null) return fresh
+            // As the app's does: the wind alone, laid over the sea values kept, to their last hour.
+            windOnly++
+            return fresh.withSeaFrom(keepSea)
+        }
+
+        override fun backupForecast(south: Double, west: Double, north: Double, east: Double, days: Int): ForecastGrid {
+            backups++
+            backupFail?.let { throw it() }
+            return answer(south, west, north, east, days * 24 + 1)
+        }
+
+        /** As the service answers: from three hours back to [ahead] hours on. */
+        private fun answer(south: Double, west: Double, north: Double, east: Double, ahead: Int): ForecastGrid {
             val grid = GeoGrid(DoubleArray(5) { south + (north - south) * it / 4 }, DoubleArray(5) { west + (east - west) * it / 4 })
-            val times = LongArray(days * 24 + 2) { now - hour + it * hour }
+            val times = LongArray(ahead + 3) { now - 3 * hour + it * hour }
             val n = times.size * grid.size
             return ForecastGrid(grid, times, mapOf(
                 ForecastField.WIND_U to FloatArray(n) { 5f }, ForecastField.WIND_V to FloatArray(n) { 0f },
@@ -52,6 +82,7 @@ class WeatherEngineTest {
         override fun satellite(kind: SatelliteKind, south: Double, west: Double, north: Double, east: Double, depthM: Int): SatelliteGrid {
             satellites++
             fail?.let { throw it() }
+            satelliteFail?.invoke(kind)?.let { throw it }
             val grid = GeoGrid(doubleArrayOf(south, north), doubleArrayOf(west, east))
             return SatelliteGrid(kind, grid, now, FloatArray(grid.size) { 20f })
         }
@@ -61,7 +92,7 @@ class WeatherEngineTest {
             return points.map { if (it.second > coastLng) it else null }
         }
 
-        override fun latestRun() = run
+        override fun latestRuns() = RunTimes(run, seaRun ?: run)
         override fun coastline(south: Double, west: Double, north: Double, east: Double) {}
     }
 
@@ -83,11 +114,16 @@ class WeatherEngineTest {
         events = object : WeatherEvents {
             override fun saved(area: ConditionsArea, isSpot: Boolean) { saved += area }
             override fun stateChanged(state: WeatherState) {}
-            override fun finished(area: ConditionsArea?, problems: List<String>, userAsked: Boolean, note: String?) { finished += area }
+            override fun finished(area: ConditionsArea?, problems: List<String>, userAsked: Boolean, note: String?, alreadyLatest: Boolean) {
+                finished += area
+                latestFlags += alreadyLatest
+                said += problems
+            }
         },
         log = {}
     )
 
+    private val said = mutableListOf<List<String>>()
     private val atSea = -20.0 to 150.0
 
     private fun advance(ms: Long) {
@@ -95,6 +131,12 @@ class WeatherEngineTest {
         val due = timers.filter { it.first <= now }
         timers.removeAll(due)
         due.forEach { it.second() }
+    }
+
+    /** A GPS fix every ten seconds for [hours], the timers firing as they fall due. */
+    private fun sail(hours: Int) = repeat(hours * 360) {
+        advance(10_000L)
+        engine.setSpot(atSea)
     }
 
     @After
@@ -184,16 +226,306 @@ class WeatherEngineTest {
     }
 
     @Test
-    fun aNewerForecastRunIsDownloaded() {
+    fun aNewerForecastRunIsDownloadedOnceWhatIsSavedIsAFewHoursOld() {
         engine.setSpot(atSea)
         advance(hour)
         net.run = now
+        engine.checkRun(force = true)
+        // Not every run of every model is chased: an hour-old forecast is still fine.
+        assertEquals(1, net.forecasts)
+        advance(4 * hour)
+        engine.setSpot(atSea)
+        assertEquals(2, net.forecasts)
+        // That run is in hand now: it isn't downloaded again.
+        sail(6)
+        assertEquals(2, net.forecasts)
+    }
+
+    @Test
+    fun whenOnlyTheWindHasANewRunOnlyTheWindIsDownloaded() {
+        // As the service gives it: the days wanted and twelve hours more.
+        net.hoursAhead = 2 * 24 + 13
+        val seaRun = now - hour
+        net.run = seaRun
+        engine.checkRun(force = true)
+        engine.setSpot(atSea)
+        assertEquals(1, net.forecasts)
+        assertEquals(0, net.windOnly)
+        val first = engine.spotArea!!
+        // Six hours on the wind model has a new run; the wave and current models have not.
+        advance(6 * hour)
+        net.run = now
+        net.seaRun = seaRun
+        engine.checkRun(force = true)
+        engine.setSpot(atSea)
+        assertEquals(2, net.forecasts)
+        assertEquals(1, net.windOnly)
+        val second = engine.spotArea!!
+        // The same block, waves and all, to the same last hour, and still the days wanted.
+        assertTrue(second.sameBoundsAs(first.south, first.west, first.north, first.east))
+        assertTrue(second.forecast!!.has(ForecastField.WAVE_HEIGHT) && second.forecast!!.has(ForecastField.WIND_U))
+        assertEquals(first.forecast!!.endMillis, second.forecast!!.endMillis)
+        assertTrue(second.forecast!!.endMillis - now >= 2 * 24 * hour)
+        assertEquals(now, second.fetchedMillis)
+        // That wind run is in hand: nothing more is downloaded for it.
+        sail(3)
+        assertEquals(2, net.forecasts)
+        // Twelve hours after the first, the wave model's run: everything is downloaded.
+        advance(3 * hour)
+        net.run = now
+        net.seaRun = now
+        engine.checkRun(force = true)
+        engine.setSpot(atSea)
+        assertEquals(3, net.forecasts)
+        assertEquals(1, net.windOnly)
+        assertTrue(engine.spotArea!!.forecast!!.endMillis > first.forecast!!.endMillis)
+    }
+
+    @Test
+    fun whenTheWindAloneCantBeHadTheWholeForecastIsAskedFor() {
+        net.hoursAhead = 2 * 24 + 13
+        val seaRun = now - hour
+        net.run = seaRun
+        engine.checkRun(force = true)
+        engine.setSpot(atSea)
+        advance(6 * hour)
+        net.run = now
+        net.seaRun = seaRun
+        net.windOnlyFail = { IOException("the wind service is down") }
+        engine.checkRun(force = true)
+        engine.setSpot(atSea)
+        // One try of the wind alone, then everything: saved, and nothing left waiting on a retry.
+        assertEquals(3, net.forecasts)
+        assertEquals(0, net.windOnly)
+        assertEquals(now, engine.spotArea!!.fetchedMillis)
+        assertTrue(engine.state is WeatherState.Idle)
+        // The sea values came down afresh: the next new wind run is the wind alone again.
+        net.windOnlyFail = null
+        advance(6 * hour)
+        net.run = now
+        engine.checkRun(force = true)
+        engine.setSpot(atSea)
+        assertEquals(4, net.forecasts)
+        assertEquals(1, net.windOnly)
+    }
+
+    @Test
+    fun theSeaValuesAreNotKeptPastTheDaysWanted() {
+        net.hoursAhead = 2 * 24 + 13
+        val seaRun = now - hour
+        net.run = seaRun
+        engine.checkRun(force = true)
+        engine.setSpot(atSea)
+        // The wave model's run is late: a day on there is still nothing newer of it, but there is of the wind.
+        advance(24 * hour)
+        net.run = now
+        net.seaRun = seaRun
+        engine.checkRun(force = true)
+        engine.setSpot(atSea)
+        // What's saved no longer reaches two days ahead: all of it is downloaded.
+        assertEquals(2, net.forecasts)
+        assertEquals(0, net.windOnly)
+        assertTrue(engine.spotArea!!.forecast!!.endMillis - now >= 2 * 24 * hour)
+    }
+
+    @Test
+    fun aBoatSomewhereNewGetsItsWholeForecastThere() {
+        net.hoursAhead = 2 * 24 + 13
+        val seaRun = now - hour
+        net.run = seaRun
+        engine.checkRun(force = true)
+        engine.setSpot(atSea)
+        // 300 km on, with nothing newer out for the sea: the new place still gets everything.
+        advance(hour)
+        val far = atSea.first - 2.7 to atSea.second
+        engine.setSpot(far)
+        assertEquals(2, net.forecasts)
+        assertEquals(0, net.windOnly)
+        assertTrue(engine.spotArea!!.middleContains(far.first, far.second))
+    }
+
+    @Test
+    fun withTheSeaModelsStatusUnknownEverythingIsDownloaded() {
+        net.hoursAhead = 2 * 24 + 13
+        engine.setSpot(atSea)
+        // No status was read before the first download: what the sea values' run was isn't known.
+        advance(6 * hour)
+        net.run = now
+        net.seaRun = now - 12 * hour
+        engine.checkRun(force = true)
+        engine.setSpot(atSea)
+        assertEquals(2, net.forecasts)
+        assertEquals(0, net.windOnly)
+    }
+
+    @Test
+    fun withNoNewerRunOutNothingIsDownloadedAllDay() {
+        net.run = now - hour
+        engine.checkRun(force = true)
+        engine.setSpot(atSea)
+        // The service is asked (free) and has nothing newer: no downloads on the off-chance.
+        repeat(20) {
+            advance(hour)
+            engine.checkRun(force = true)
+            engine.setSpot(atSea)
+        }
+        assertEquals(1, net.forecasts)
+    }
+
+    @Test
+    fun oneDayOfForecastIsDownloadedOnce() {
+        settings = settings.copy(days = 1)
+        engine.setSpot(atSea)
+        sail(5)
+        assertEquals(1, net.forecasts)
+    }
+
+    @Test
+    fun aForecastThatStaysShortIsAskedForNoMoreThanHourly() {
+        // A service that only ever has ten hours ahead: this went round six times an hour before.
+        net.hoursAhead = 10
+        engine.setSpot(atSea)
+        sail(5)
+        assertTrue("${net.forecasts} downloads in five hours", net.forecasts <= 6)
+    }
+
+    @Test
+    fun aPhoneClockSetBehindDoesNotLoop() {
+        // The service's newest run reads as six hours in the future by this phone's clock.
+        net.run = now + 6 * hour
+        engine.checkRun(force = true)
+        engine.setSpot(atSea)
+        sail(12)
+        assertEquals(1, net.forecasts)
+        // A run that really is newer is still fetched.
+        net.run = net.run!! + hour
         engine.checkRun(force = true)
         assertEquals(2, net.forecasts)
     }
 
     @Test
-    fun neverMoreThanSixAutomaticDownloadsAnHour() {
+    fun askedForWithNothingNewerOutKeepsWhatIsSaved() {
+        net.run = now - hour
+        engine.checkRun(force = true)
+        engine.setSpot(atSea)
+        advance(10 * 60_000L)
+        assertNull(engine.evaluate(userAsked = true))
+        // No download spent on the same forecast, and the user is told so.
+        assertEquals(1, net.forecasts)
+        assertTrue(latestFlags.last())
+        assertNotNull(finished.last())
+        // A newer run comes out: asked again, it downloads.
+        advance(20 * 60_000L)
+        net.run = now
+        assertNull(engine.evaluate(userAsked = true))
+        assertEquals(2, net.forecasts)
+        assertFalse(latestFlags.last())
+    }
+
+    @Test
+    fun askedForAfterTheSpotMovedDownloads() {
+        net.run = now - hour
+        engine.checkRun(force = true)
+        engine.setSpot(atSea)
+        engine.setSpot(atSea.first - 1.35 to atSea.second)
+        assertEquals(2, net.forecasts)
+    }
+
+    @Test
+    fun theBackupTakesOverWhenTheMainServiceIsDown() {
+        net.backupFail = null
+        net.fail = { IOException("down") }
+        engine.setSpot(atSea)
+        assertEquals(1, net.backups)
+        assertTrue(engine.spotArea!!.isBackup)
+        assertTrue(engine.state is WeatherState.Waiting)
+        // Still down an hour on: the main one is tried now and then, the backup not fetched again.
+        sail(1)
+        assertEquals(1, net.backups)
+        assertTrue("${net.forecasts} tries of the main service", net.forecasts <= 1 + WeatherEngine.MAX_AUTO_PER_HOUR)
+        // Back: the main forecast replaces the backup.
+        net.fail = null
+        sail(1)
+        assertFalse(engine.spotArea!!.isBackup)
+        assertEquals(WeatherState.Idle, engine.state)
+    }
+
+    @Test
+    fun aGoodSavedForecastIsKeptRatherThanTheBackup() {
+        net.backupFail = null
+        engine.setSpot(atSea)
+        advance(5 * hour)
+        net.run = now
+        net.fail = { IOException("down") }
+        engine.checkRun(force = true)
+        // Five hours old with two days still to run: better than the coarse backup.
+        assertEquals(2, net.forecasts)
+        assertEquals(0, net.backups)
+        assertFalse(engine.spotArea!!.isBackup)
+    }
+
+    @Test
+    fun aReachedLimitIsWaitedOutNotHammered() {
+        val until = now + 2 * hour
+        net.fail = { LimitReachedException(until, "the free forecast service's hourly limit is reached") }
+        engine.setSpot(atSea)
+        assertEquals(1, net.forecasts)
+        assertTrue((engine.state as WeatherState.Waiting).untilMillis >= until)
+        sail(1)
+        assertEquals(1, net.forecasts)
+        net.fail = null
+        sail(2)
+        assertEquals(2, net.forecasts)
+        assertNotNull(engine.spotArea)
+    }
+
+    @Test
+    fun movingFarWhileALimitIsWaitedOutStillGetsTheNewPlaceItsBackup() {
+        net.backupFail = null
+        val until = now + 2 * hour
+        net.fail = { LimitReachedException(until, "the free forecast service's daily limit is reached") }
+        engine.setSpot(atSea)
+        assertEquals(1, net.backups)
+        // 300 km on, an hour later, the limit still in force.
+        advance(hour)
+        val far = atSea.first - 2.7 to atSea.second
+        engine.setSpot(far)
+        assertEquals(2, net.backups)
+        assertTrue(engine.spotArea!!.middleContains(far.first, far.second))
+        // And it doesn't go round: the same place, fix after fix, asks for nothing more.
+        repeat(600) {
+            now += 1_000
+            engine.setSpot(far)
+        }
+        assertEquals(2, net.backups)
+        assertTrue("${net.forecasts} tries of the main service", net.forecasts <= 3)
+    }
+
+    @Test
+    fun aPictureWhoseServerFailedIsFetchedAgainByItself() {
+        var down = true
+        net.satelliteFail = { kind -> if (kind == SatelliteKind.SEA_LEVEL && down) IOException("503") else null }
+        engine.setSpot(atSea)
+        assertFalse(SatelliteKind.SEA_LEVEL in engine.spotArea!!.satellites)
+        down = false
+        sail(2)
+        assertTrue(SatelliteKind.SEA_LEVEL in engine.spotArea!!.satellites)
+        // Just the picture: the forecast wasn't downloaded again for it.
+        assertEquals(1, net.forecasts)
+        assertEquals(SatelliteKind.entries.size + 1, net.satellites)
+    }
+
+    @Test
+    fun aPictureWithNothingHereTodayWaitsForTomorrow() {
+        net.satelliteFail = { kind -> if (kind == SatelliteKind.SALINITY) ConditionsClient.NoDataException("nothing here today") else null }
+        engine.setSpot(atSea)
+        val asked = net.satellites
+        sail(3)
+        assertEquals(asked, net.satellites)
+    }
+
+    @Test
+    fun automaticDownloadsAreCappedEachHour() {
         net.fail = { IOException("down") }
         engine.setSpot(atSea)
         // An hour of retries.
@@ -225,6 +557,65 @@ class WeatherEngineTest {
         val a = engine.spotArea!!
         assertTrue("middle ${(a.west + a.east) / 2}", (a.west + a.east) / 2 > 151.0)
         assertNotNull(engine.nearestSeaFor(inland))
+    }
+
+    @Test
+    fun farInlandWithNoSeaInReachNothingIsDownloaded() {
+        // The coast 1,000 km to the east: no sea within the rings' 260 km.
+        net.coastLng = 160.0
+        val inland = -20.0 to 150.0
+        engine.setSpot(inland)
+        assertEquals(0, net.forecasts)
+        assertNull(engine.spotArea)
+        assertTrue(engine.noSeaInReach)
+        // Fix after fix, for hours: nothing more is asked of the service.
+        val looks = net.seaQueries
+        repeat(600) {
+            now += 1_000
+            engine.setSpot(inland)
+        }
+        advance(5 * hour)
+        engine.setSpot(inland)
+        assertEquals(looks, net.seaQueries)
+        assertEquals(0, net.forecasts + net.backups)
+        // After six it looks once more (the service may only have been missing its data), and no oftener.
+        advance(2 * hour)
+        engine.setSpot(inland)
+        assertEquals(looks + 2, net.seaQueries)
+        repeat(600) {
+            now += 1_000
+            engine.setSpot(inland)
+        }
+        assertEquals(looks + 2, net.seaQueries)
+        assertEquals(0, net.forecasts + net.backups)
+        // Asked for by hand: it says why not, and still downloads nothing.
+        engine.evaluate(userAsked = true)
+        assertEquals(0, net.forecasts)
+        assertTrue(said.last().toString(), said.last().any { "No sea within 260 km" in it })
+        // Towed to within reach of the coast: the sea is found and the area comes.
+        val nearer = -20.0 to 159.5
+        engine.setSpot(nearer)
+        assertEquals(1, net.forecasts)
+        assertFalse(engine.noSeaInReach)
+        assertNotNull(engine.nearestSeaFor(nearer))
+    }
+
+    @Test
+    fun aFirstDownloadIsMarkedWithTheRunsItCameFrom() {
+        net.hoursAhead = 2 * 24 + 13
+        // Nothing asked of the service yet when the first fix comes: the status is read first.
+        val seaRun = now - hour
+        net.run = seaRun
+        engine.setSpot(atSea)
+        assertEquals(1, net.forecasts)
+        assertEquals(seaRun, engine.runSeen(ConditionsFeature.SPOT_ID))
+        // So the next new wind run is the wind alone, from the first day.
+        advance(6 * hour)
+        net.run = now
+        net.seaRun = seaRun
+        engine.checkRun(force = true)
+        engine.setSpot(atSea)
+        assertEquals(1, net.windOnly)
     }
 
     @Test

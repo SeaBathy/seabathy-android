@@ -29,6 +29,11 @@ class GeoGrid(val lats: DoubleArray, val lngs: DoubleArray) {
     val west: Double get() = lngs.first()
     val east: Double get() = lngs.last()
 
+    /** The same points as [other]. */
+    fun sameAs(other: GeoGrid): Boolean =
+        rows == other.rows && cols == other.cols &&
+            lats.indices.all { kotlin.math.abs(lats[it] - other.lats[it]) < 1e-9 } && lngs.indices.all { kotlin.math.abs(lngs[it] - other.lngs[it]) < 1e-9 }
+
     fun index(row: Int, col: Int): Int = row * cols + col
 
     fun contains(lat: Double, lng: Double): Boolean {
@@ -101,6 +106,39 @@ class GeoGrid(val lats: DoubleArray, val lngs: DoubleArray) {
             return lo + if (span > 0) (value - axis[lo]) / span else 0.0
         }
 
+        /**
+         * Carries values up to [passes] cells into the blanks beside them: each blank cell takes the
+         * mean of its neighbours that have a value. For coarse data that stops short of the shore.
+         */
+        fun fillOutward(grid: GeoGrid, values: FloatArray, passes: Int, offset: Int = 0) {
+            val rows = grid.rows
+            val cols = grid.cols
+            repeat(passes) {
+                val before = values.copyOfRange(offset, offset + rows * cols)
+                var changed = false
+                for (r in 0 until rows) for (c in 0 until cols) {
+                    if (!before[r * cols + c].isNaN()) continue
+                    var sum = 0f
+                    var count = 0
+                    for (dr in -1..1) for (dc in -1..1) {
+                        val rr = r + dr
+                        val cc = c + dc
+                        if (rr < 0 || cc < 0 || rr >= rows || cc >= cols) continue
+                        val v = before[rr * cols + cc]
+                        if (!v.isNaN()) {
+                            sum += v
+                            count++
+                        }
+                    }
+                    if (count > 0) {
+                        values[offset + r * cols + c] = sum / count
+                        changed = true
+                    }
+                }
+                if (!changed) return
+            }
+        }
+
         /** Points every [step] degrees covering [south]..[north], [west]..[east], at most [maxPerSide] a side. */
         fun covering(south: Double, west: Double, north: Double, east: Double, step: Double, maxPerSide: Int): GeoGrid {
             fun axis(from: Double, to: Double): DoubleArray {
@@ -143,6 +181,32 @@ class ForecastGrid(
     val endMillis: Long get() = times.last()
 
     fun has(field: ForecastField): Boolean = fields.containsKey(field)
+
+    /**
+     * This forecast's hours and wind, with [kept]'s sea values (everything but the wind) laid in
+     * hour for hour, ending at [kept]'s last hour: a forecast whose wind was downloaded afresh
+     * and whose waves, swell, currents and sea temperature were kept. Both on the same points.
+     */
+    fun withSeaFrom(kept: ForecastGrid): ForecastGrid {
+        require(grid.sameAs(kept.grid)) { "the kept forecast is on other points" }
+        val hours = times.count { it <= kept.endMillis }
+        require(hours > 0) { "the kept forecast ends before this one starts" }
+        val t = times.copyOf(hours)
+        val at = HashMap<Long, Int>(kept.times.size * 2)
+        kept.times.forEachIndexed { i, time -> at[time] = i }
+        val out = HashMap<ForecastField, FloatArray>()
+        for ((field, values) in fields) if (field in WIND_FIELDS) out[field] = values.copyOf(hours * grid.size)
+        for ((field, values) in kept.fields) {
+            if (field in WIND_FIELDS) continue
+            val copy = FloatArray(hours * grid.size) { Float.NaN }
+            for (h in 0 until hours) {
+                val k = at[t[h]] ?: continue
+                System.arraycopy(values, k * grid.size, copy, h * grid.size, grid.size)
+            }
+            out[field] = copy
+        }
+        return ForecastGrid(grid, t, out)
+    }
 
     /**
      * The value at a place and time, blended between the hours either side;
@@ -190,6 +254,8 @@ class ForecastGrid(
 
     companion object {
         const val HOUR_MS = 3_600_000L
+        /** What comes from the wind service; the rest is the sea forecast's. */
+        val WIND_FIELDS = setOf(ForecastField.WIND_U, ForecastField.WIND_V, ForecastField.GUST)
     }
 }
 
@@ -282,10 +348,39 @@ class ConditionsArea(
     val forecast: ForecastGrid?,
     val satellites: Map<SatelliteKind, SatelliteGrid>,
     /** The depth, in metres, [SatelliteKind.TEMP_BELOW] was downloaded for. */
-    val belowDepthM: Int = DEFAULT_BELOW_DEPTH_M
+    val belowDepthM: Int = DEFAULT_BELOW_DEPTH_M,
+    /** Where the forecast came from: [SOURCE_MAIN], or [SOURCE_BACKUP] when the main service couldn't be had. */
+    val source: Int = SOURCE_MAIN
 ) {
+    /** The forecast on show is the backup's: coarser, with no gusts, currents or sea temperature. */
+    val isBackup: Boolean get() = source == SOURCE_BACKUP && forecast != null
+
+    /** A copy with some parts replaced. */
+    fun copyWith(
+        name: String = this.name, forecast: ForecastGrid? = this.forecast,
+        satellites: Map<SatelliteKind, SatelliteGrid> = this.satellites, belowDepthM: Int = this.belowDepthM
+    ) = ConditionsArea(id, name, south, west, north, east, fetchedMillis, forecast, satellites, belowDepthM, source)
+
     /** The temperature breaks, worked out once from the saved temperature. */
     val breaks: SatelliteGrid? by lazy { satellites[SatelliteKind.SEA_TEMP]?.let(::temperatureBreaks) }
+
+    private val shoreward = java.util.concurrent.ConcurrentHashMap<String, SatelliteGrid>()
+
+    /**
+     * [kind]'s picture for drawing right up to a finer coastline: its values carried a cell or two
+     * into the blanks beside them. The satellites leave out the cells along the shore, which left
+     * the colours stopping short of it in steps; bigger gaps (cloud) stay empty. Worked out once.
+     */
+    fun toShore(kind: SatelliteKind): SatelliteGrid? = satellites[kind]?.let { shoreward.getOrPut(kind.name) { filled(it, if (kind == SatelliteKind.CHLOROPHYLL) 1 else SHORE_FILL_CELLS) } }
+
+    /** [breaks], carried to the shore the same way. */
+    val breaksToShore: SatelliteGrid? get() = breaks?.let { shoreward.getOrPut("breaks") { filled(it, SHORE_FILL_CELLS) } }
+
+    private fun filled(grid: SatelliteGrid, cells: Int): SatelliteGrid {
+        val values = grid.values.copyOf()
+        GeoGrid.fillOutward(grid.grid, values, cells)
+        return SatelliteGrid(grid.kind, grid.grid, grid.dateMillis, values)
+    }
 
 
     fun contains(lat: Double, lng: Double): Boolean = lat in south..north && lng in west..east
@@ -320,6 +415,10 @@ class ConditionsArea(
 
     companion object {
         const val DEFAULT_BELOW_DEPTH_M = 10
+        const val SOURCE_MAIN = 0
+        const val SOURCE_BACKUP = 1
+        /** How far a satellite picture's values are carried towards the shore, in its own cells. */
+        const val SHORE_FILL_CELLS = 2
         /** Sea conditions stop here: the forecast models don't go nearer the poles. */
         const val MAX_LAT = 80.0
         const val MAX_LNG = 180.0

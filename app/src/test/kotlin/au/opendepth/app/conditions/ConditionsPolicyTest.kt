@@ -23,7 +23,16 @@ class ConditionsPolicyTest {
         // Saved an hour ago; the newest run came out 3 hours ago: nothing new.
         assertFalse(ConditionsPolicy.needsUpdate(now - hour, now - 3 * hour, now))
         // A run came out after it was saved.
-        assertTrue(ConditionsPolicy.needsUpdate(now - 3 * hour, now - hour, now))
+        assertTrue(ConditionsPolicy.needsUpdate(now - 5 * hour, now - hour, now))
+        // A newer run isn't chased while the copy is only a few hours old.
+        assertFalse(ConditionsPolicy.needsUpdate(now - 3 * hour, now - hour, now))
+        // The run the copy was made from is known: only a newer one counts, by the service's own
+        // times, whatever the phone's clock says.
+        assertFalse(ConditionsPolicy.needsUpdate(now - 5 * hour, now + 6 * hour, now, runSeenMillis = now + 6 * hour))
+        assertTrue(ConditionsPolicy.needsUpdate(now - 5 * hour, now + 7 * hour, now, runSeenMillis = now + 6 * hour))
+        // With the service saying "nothing newer", it still isn't left for more than a day.
+        assertFalse(ConditionsPolicy.needsUpdate(now - 23 * hour, now - 30 * hour, now))
+        assertTrue(ConditionsPolicy.needsUpdate(now - 25 * hour, now - 30 * hour, now))
         // Run unknown (status couldn't be read): only by age.
         assertFalse(ConditionsPolicy.needsUpdate(now - 11 * hour, null, now))
         assertTrue(ConditionsPolicy.needsUpdate(now - 13 * hour, null, now))

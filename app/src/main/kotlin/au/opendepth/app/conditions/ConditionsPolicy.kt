@@ -7,8 +7,18 @@ package au.opendepth.app.conditions
  */
 object ConditionsPolicy {
 
-    /** Updated at least this often when online, even with no word of a new forecast (the satellites are daily). */
+    /** Updated this often when the forecast service's "is there a newer run?" can't be read. */
     const val MAX_AGE_MS = 12 * 3_600_000L
+
+    /**
+     * A newer forecast run is only fetched once the saved copy is this old. Several models bring
+     * out runs through the day; chasing each one would spend the free service's daily allowance
+     * for changes too small to matter on the water.
+     */
+    const val NEW_RUN_MIN_AGE_MS = 4 * 3_600_000L
+
+    /** Updated this often whatever the service says. */
+    const val OLD_AGE_MS = 24 * 3_600_000L
 
     /** A saved area whose forecast ran out this long ago is no use, and is removed. */
     const val EXPIRED_KEEP_MS = 2 * 24 * 3_600_000L
@@ -17,12 +27,18 @@ object ConditionsPolicy {
     const val SATELLITE_ONLY_KEEP_MS = 7 * 24 * 3_600_000L
 
     /**
-     * True when there's newer data to get than a copy downloaded at
-     * [fetchedMillis]: a forecast run came out after it ([latestRunMillis],
-     * when known), or it's older than [MAX_AGE_MS].
+     * True when there's newer data worth getting than a copy downloaded at [fetchedMillis]. The
+     * service is asked first (a small file, free): a newer run than the one the copy was made
+     * from ([runSeenMillis]: the newest run there was when it was downloaded) counts once the
+     * copy is [NEW_RUN_MIN_AGE_MS] old. With no word from the service, [MAX_AGE_MS]; and
+     * [OLD_AGE_MS] whatever it says.
      */
-    fun needsUpdate(fetchedMillis: Long, latestRunMillis: Long?, nowMillis: Long): Boolean =
-        (latestRunMillis != null && latestRunMillis > fetchedMillis) || nowMillis - fetchedMillis > MAX_AGE_MS
+    fun needsUpdate(fetchedMillis: Long, latestRunMillis: Long?, nowMillis: Long, runSeenMillis: Long? = null): Boolean {
+        val age = nowMillis - fetchedMillis
+        // The run times are the service's own, so the phone's clock being wrong doesn't matter.
+        val newer = latestRunMillis != null && latestRunMillis > (runSeenMillis ?: fetchedMillis)
+        return (newer && age > NEW_RUN_MIN_AGE_MS) || (latestRunMillis == null && age > MAX_AGE_MS) || age > OLD_AGE_MS
+    }
 
     /** How up to date the sea conditions on show are: the dot on the box. */
     enum class Freshness { CURRENT, UPDATING, OUT_OF_DATE }
@@ -35,9 +51,12 @@ object ConditionsPolicy {
      * forecast run is out, it's older than [MAX_AGE_MS], or its forecast is running out;
      * otherwise [Freshness.CURRENT]. Pure, unit-tested.
      */
-    fun freshness(fetchedMillis: Long, forecastEndMillis: Long?, latestRunMillis: Long?, nowMillis: Long, downloading: Boolean): Freshness = when {
+    fun freshness(
+        fetchedMillis: Long, forecastEndMillis: Long?, latestRunMillis: Long?, nowMillis: Long, downloading: Boolean,
+        runSeenMillis: Long? = null
+    ): Freshness = when {
         downloading -> Freshness.UPDATING
-        needsUpdate(fetchedMillis, latestRunMillis, nowMillis) -> Freshness.OUT_OF_DATE
+        needsUpdate(fetchedMillis, latestRunMillis, nowMillis, runSeenMillis) -> Freshness.OUT_OF_DATE
         forecastEndMillis != null && forecastEndMillis - nowMillis < RUNNING_OUT_MS -> Freshness.OUT_OF_DATE
         else -> Freshness.CURRENT
     }

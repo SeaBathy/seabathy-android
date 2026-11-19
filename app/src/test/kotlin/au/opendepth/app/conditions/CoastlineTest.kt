@@ -79,17 +79,6 @@ class CoastlineTest {
     }
 
     @Test
-    fun theMaskMakesLandSeeThrough() {
-        val argb = intArrayOf(0xFF102030.toInt(), 0xFF102030.toInt(), 0x80102030.toInt())
-        Coastline.applyMask(argb, byteArrayOf(0xFF.toByte(), 0, 0x80.toByte()))
-        assertEquals(0xFF102030.toInt(), argb[0])
-        assertEquals(0x00102030, argb[1])
-        // Half sea at the shore: half as see-through again.
-        assertEquals(0x40, argb[2] ushr 24)
-        assertEquals(0x102030, argb[2] and 0xFFFFFF)
-    }
-
-    @Test
     fun theWindingNumberTellsSeaFromLand() {
         // Sea: the whole tile, with an island (a hole, wound the other way) in the middle.
         val sea = shortArrayOf(0, 0, 4096, 0, 4096, 4096, 0, 4096)

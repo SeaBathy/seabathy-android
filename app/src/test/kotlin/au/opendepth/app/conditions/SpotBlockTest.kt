@@ -38,7 +38,9 @@ class SpotBlockTest {
         val now = 100 * h
         fun f(fetched: Long, end: Long?, run: Long?, busy: Boolean = false) = ConditionsPolicy.freshness(fetched, end, run, now, busy)
         assertEquals(ConditionsPolicy.Freshness.CURRENT, f(now - h, now + 48 * h, now - 2 * h))
-        assertEquals(ConditionsPolicy.Freshness.OUT_OF_DATE, f(now - 3 * h, now + 48 * h, now - h))
+        assertEquals(ConditionsPolicy.Freshness.OUT_OF_DATE, f(now - 5 * h, now + 48 * h, now - h))
+        // A newer run is out, but what's saved is only three hours old: still fine.
+        assertEquals(ConditionsPolicy.Freshness.CURRENT, f(now - 3 * h, now + 48 * h, now - h))
         assertEquals(ConditionsPolicy.Freshness.OUT_OF_DATE, f(now - 13 * h, now + 48 * h, null))
         assertEquals(ConditionsPolicy.Freshness.OUT_OF_DATE, f(now - h, now + 2 * h, null))
         assertEquals(ConditionsPolicy.Freshness.UPDATING, f(now - 13 * h, now + 48 * h, null, busy = true))

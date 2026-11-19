@@ -431,9 +431,16 @@ class TideStore(context: Context) {
 
     private fun get(url: String, what: String): String =
         try {
+            // The tides come from the sea forecast's service: counted with its calls (a call a
+            // point), so its downloads are paced by what the app as a whole has asked.
+            val budget = au.opendepth.app.conditions.CallBudget
+            val seaService = "//marine-api." in url
+            if (seaService) budget.shared.count(url.substringAfter("latitude=", "").substringBefore('&').count { it == ',' } + 1, budget.MARINE)
             client.newCall(
                 Request.Builder().url(url).header("User-Agent", "SeaBathy/${BuildConfig.VERSION_NAME} (Android tides)").build()
             ).execute().use { response ->
+                // "Too many requests": the forecast's downloads leave the service alone as well until that passes.
+                if (response.code == 429 && seaService) budget.shared.limited(budget.kindOf(response.body?.string()), budget.MARINE)
                 if (!response.isSuccessful) throw IOException("$what returned an error (HTTP ${response.code})")
                 response.body?.string() ?: throw IOException("$what sent an empty reply")
             }

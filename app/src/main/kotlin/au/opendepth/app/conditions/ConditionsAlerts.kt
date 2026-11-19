@@ -295,7 +295,7 @@ object ConditionsAlerts {
         val rules = load(prefs)
         val places = placesToCheck(rules, prefs)
         if (places.isEmpty()) return null
-        val client = ConditionsClient()
+        val client = ConditionsClient.forApp(prefs)
         var failure: Throwable? = null
         val results = places.mapNotNull { place ->
             runCatching { place to checkPlace(client, place, rules, now) }
@@ -308,7 +308,11 @@ object ConditionsAlerts {
 
     private fun checkPlace(client: ConditionsClient, place: AlertPlace, rules: AlertRules, now: Long): List<GoodWindow> {
         val grid = placeGrid(place)
-        val forecast = client.forecast(grid, (rules.daysAhead + 1).coerceIn(1, ConditionsClient.MAX_DAYS))
+        val days = (rules.daysAhead + 1).coerceIn(1, ConditionsClient.MAX_DAYS)
+        // The main service out of reach or at its limit: the backup still has the wind and the waves.
+        val forecast = runCatching { client.forecast(grid, days) }.getOrElse { main ->
+            runCatching { client.backupForecast(grid, days) }.getOrElse { throw main }
+        }
         val points = grid.lats.flatMap { lat -> grid.lngs.map { lng -> lat to lng } }
         fun each(value: (Double, Double) -> Double) = DoubleArray(points.size) { i -> value(points[i].first, points[i].second) }
         fun windAt(lat: Double, lng: Double, t: Long): Double {
@@ -393,7 +397,7 @@ object ConditionsAlerts {
         }
         val store = ConditionsStore(conditionsDir(context))
         val days = prefs.getInt(ConditionsFeature.KEY_DAYS, ConditionsFeature.DEFAULT_DAYS).coerceIn(1, ConditionsClient.MAX_DAYS)
-        val client = ConditionsClient()
+        val client = ConditionsClient.forApp(prefs)
         for ((place, good) in results) {
             if (good.isEmpty()) continue
             val lastGood = good.maxOf { it.to }

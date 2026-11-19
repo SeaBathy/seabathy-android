@@ -106,29 +106,36 @@ class ConditionsFeature(
      */
     private val work = conditionsThread("sea-conditions", android.os.Process.THREAD_PRIORITY_DEFAULT)
     private val downloads = conditionsThread("sea-conditions-download", android.os.Process.THREAD_PRIORITY_BACKGROUND)
-    private val client = ConditionsClient()
+    private val client = ConditionsClient.forApp(preferences)
 
     /** What to download and when, one at a time: see [WeatherEngine]. */
     private val engine: WeatherEngine by lazy {
         WeatherEngine(
             store = store,
             net = object : WeatherNet {
-                override fun forecast(south: Double, west: Double, north: Double, east: Double, days: Int, onProgress: (Double) -> Unit): ForecastGrid {
-                    val span = max(north - south, east - west)
-                    val grid = GeoGrid.covering(south, west, north, east, max(MIN_STEP_DEG, span / (MAX_POINTS_PER_SIDE - 1)), MAX_POINTS_PER_SIDE)
-                    val windGrid = GeoGrid.covering(south, west, north, east, max(MIN_STEP_DEG, span / (MAX_WIND_POINTS_PER_SIDE - 1)), MAX_WIND_POINTS_PER_SIDE)
-                    return client.forecast(grid, days, windGrid, onProgress)
-                }
+                private fun grid(south: Double, west: Double, north: Double, east: Double, perSide: Int): GeoGrid =
+                    GeoGrid.covering(south, west, north, east, max(MIN_STEP_DEG, max(north - south, east - west) / (perSide - 1)), perSide)
+
+                override fun forecast(south: Double, west: Double, north: Double, east: Double, days: Int, userAsked: Boolean, keepSea: ForecastGrid?, onProgress: (Double) -> Unit): ForecastGrid =
+                    client.forecast(
+                        grid(south, west, north, east, MAX_POINTS_PER_SIDE), days,
+                        grid(south, west, north, east, MAX_WIND_POINTS_PER_SIDE), userAsked, keepSea, onProgress
+                    )
+
+                override fun backupForecast(south: Double, west: Double, north: Double, east: Double, days: Int): ForecastGrid =
+                    client.backupForecast(grid(south, west, north, east, MAX_POINTS_PER_SIDE), days, grid(south, west, north, east, MAX_WIND_POINTS_PER_SIDE))
                 override fun satellite(kind: SatelliteKind, south: Double, west: Double, north: Double, east: Double, depthM: Int) =
                     client.satellite(kind, south, west, north, east, depthM)
                 override fun seaAt(points: List<Pair<Double, Double>>) = client.seaAt(points)
-                override fun latestRun() = client.latestRunMillis()
+                override fun latestRuns() = client.latestRuns(windModelHere())
                 override fun coastline(south: Double, west: Double, north: Double, east: Double) {
                     if (coastline.fetch(south, west, north, east) > 0) throw java.io.IOException("some coastline tiles didn't come")
                 }
             },
             kv = object : WeatherKeyValues {
-                override fun get(key: String): String? = preferences.all[key]?.toString()
+                // Read directly: asked on every GPS fix. (A value saved as another type by an old version: the slow way.)
+                override fun get(key: String): String? =
+                    runCatching { preferences.getString(key, null) }.getOrElse { preferences.all[key]?.toString() }
                 override fun put(key: String, value: String?) {
                     preferences.edit().apply { if (value == null) remove(key) else putString(key, value) }.apply()
                 }
@@ -150,17 +157,37 @@ class ConditionsFeature(
                     updateBox()
                     refreshDialog()
                 }
-                override fun finished(area: ConditionsArea?, problems: List<String>, userAsked: Boolean, note: String?) =
-                    onFinished(area, problems, userAsked, note)
+                override fun finished(area: ConditionsArea?, problems: List<String>, userAsked: Boolean, note: String?, alreadyLatest: Boolean) =
+                    onFinished(area, problems, userAsked, note, alreadyLatest)
                 override fun coastlineReady() {
                     boatReadingCache = null
                     maskCache = null
+                    areaSea = null
+                    flowGridKey = null
                     lastPictureKey = null
                     if (shown) redraw()
                 }
             }
         )
     }
+    /**
+     * The wind model the service uses where the spot is, asked once for each stretch of water (and
+     * again after a week): so the right model's new runs are watched for. Null when not known.
+     * On the download thread.
+     */
+    private fun windModelHere(): String? {
+        val at = engine.spotArea?.let { (it.south + it.north) / 2 to (it.west + it.east) / 2 } ?: gpsFix ?: return null
+        val place = String.format(Locale.US, "%.0f,%.0f", at.first / 2, at.second / 2)
+        val saved = preferences.getString(KEY_WIND_MODEL, null)?.split('|')
+        if (saved != null && saved.size == 3 && saved[0] == place && System.currentTimeMillis() - (saved[2].toLongOrNull() ?: 0L) in 0 until WIND_MODEL_KEEP_MS) {
+            return saved[1].ifEmpty { null }
+        }
+        val model = runCatching { client.windModelAt(at.first, at.second) }.getOrElse { return saved?.getOrNull(1)?.ifEmpty { null } }
+        preferences.edit().putString(KEY_WIND_MODEL, "$place|${model.orEmpty()}|${System.currentTimeMillis()}").apply()
+        DiagnosticLog.log(TAG, "the wind here comes from ${model ?: "a model that isn't one of the usual three"}: its new runs are watched for")
+        return model
+    }
+
     private val palette = AppTheme.palette
 
     private var shown = preferences.getBoolean(KEY_SHOWN, false)
@@ -242,7 +269,7 @@ class ConditionsFeature(
     /** Where the sea ends, to cut the picture at the shore. */
     private val coastline = Coastline(activity)
     /** The last coastline mask, by region and size: it doesn't change with the time shown. */
-    private var maskCache: Pair<String, ByteArray?>? = null
+    private var maskCache: Pair<String, Bitmap?>? = null
     private var coastFetching = false
     private var coastTriedAt = 0L
     private var lastPictureKey: String? = null
@@ -481,6 +508,12 @@ class ConditionsFeature(
     fun bind(root: ViewGroup, mapView: View, topViews: () -> List<View>, bottomViews: List<View>) {
         this.topViews = topViews
         boundRoot = root
+        // Every change of the camera, however it came about: a mouse wheel moves the map with no
+        // gesture, so nothing says it has come to rest. A moment after the last change counts as that.
+        (mapView as? org.maplibre.android.maps.MapView)?.addOnCameraDidChangeListener {
+            ticker.removeCallbacks(cameraSettled)
+            ticker.postDelayed(cameraSettled, CAMERA_SETTLE_MS)
+        }
         root.addView(flowLines, root.indexOfChild(mapView) + 1, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         flowLines.visibility = View.GONE
         root.addView(card, CoordinatorLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
@@ -627,6 +660,7 @@ class ConditionsFeature(
         downloads.close()
         ticker.removeCallbacks(tick)
         ticker.removeCallbacks(play)
+        ticker.removeCallbacks(cameraSettled)
         drawJob?.cancel()
     }
 
@@ -664,17 +698,23 @@ class ConditionsFeature(
         if (shown) redraw() else clearMap()
     }
 
+    /** The map has stopped moving: the box, the newest data here, and the picture for what's on screen now. */
+    private val cameraSettled = Runnable {
+        updateBox()
+        showNewestHere()
+        // Zoomed in or out, or moved on.
+        val a = area
+        if (shown && a != null && lastRegion?.let { regionKey(it) } != regionKey(pictureRegion(a))) redraw()
+    }
+
     private fun listenToCamera() {
         if (cameraListening) return
         val map = mapHolder.map ?: return
         cameraListening = true
         map.addOnCameraMoveListener { updateBox() }
         map.addOnCameraIdleListener {
-            updateBox()
-            showNewestHere()
-            // Zoomed in or out, or moved on: the picture for what's on screen now.
-            val a = area
-            if (shown && a != null && lastRegion?.let { regionKey(it) } != regionKey(pictureRegion(a))) redraw()
+            ticker.removeCallbacks(cameraSettled)
+            cameraSettled.run()
         }
     }
 
@@ -683,7 +723,11 @@ class ConditionsFeature(
         val a = area ?: return emptyList()
         if (!shown) return emptyList()
         val sources = buildList {
-            if (a.forecast != null) add("Open-Meteo (CC BY 4.0): Copernicus Marine, Météo-France, ECMWF, DWD, NOAA")
+            val f = a.forecast
+            // The main service: all of the forecast, or under the backup its wind alone (the one with gusts).
+            if (f != null && (!a.isBackup || f.has(ForecastField.GUST))) add("Open-Meteo (CC BY 4.0): Copernicus Marine, Météo-France, ECMWF, DWD, NOAA")
+            // The backup forecast, or its wind standing in for the main one's (it has no gusts).
+            if (f != null && (a.isBackup || (f.has(ForecastField.WIND_U) && !f.has(ForecastField.GUST)))) add("NOAA GFS and WaveWatch III (PacIOOS)")
             if (a.satellites.keys.any { it != SatelliteKind.TEMP_BELOW }) add("NOAA CoastWatch")
             if (SatelliteKind.SEA_TEMP in a.satellites) add("NASA JPL MUR")
             if (SatelliteKind.SEA_LEVEL in a.satellites || SatelliteKind.CHLOROPHYLL in a.satellites) add("contains modified Copernicus Sentinel data")
@@ -768,13 +812,13 @@ class ConditionsFeature(
                     val sampler = sampler(a, choice, time, clipped = true) ?: return@withContext null
                     val maxSide = satellite?.let { min(MAX_PICTURE_SIDE, max(it.grid.rows, it.grid.cols) * 2) } ?: FORECAST_PICTURE_SIDE
                     val band = targetBand?.takeIf { choice.isTemperature }?.let { it.first..it.second }
-                    // Zoomed in: just the part on screen, in more detail, so the shore is sharp.
-                    val side = if (isWhole(a, region)) max(64, maxSide) else REGION_PICTURE_SIDE
+                    // The values change gently from place to place, so they're worked out small;
+                    // the shore is then cut at the size of the screen ([sharpen]).
+                    val side = if (isWhole(a, region)) max(64, maxSide) else VALUES_REGION_SIDE
                     val pixels = ConditionsPicture.render(region[0], region[1], region[2], region[3], side, scaleFor(a, choice), sampler, band) { !isActive }
-                    // Cut at the shore: the land see-through, so the layers under it show there as before.
-                    maskFor(a, region, pixels.width, pixels.height)?.let { Coastline.applyMask(pixels.argb, it) }
-                    Bitmap.createBitmap(pixels.argb, pixels.width, pixels.height, Bitmap.Config.ARGB_8888).also {
-                        DiagnosticLog.log(TAG, "picture $choice ${pixels.width}x${pixels.height} in ${(System.nanoTime() - started) / 1_000_000} ms")
+                    if (!isActive) return@withContext null
+                    sharpen(a, region, pixels).also {
+                        DiagnosticLog.log(TAG, "picture $choice ${pixels.width}x${pixels.height}, at the shore ${it.width}x${it.height}, in ${(System.nanoTime() - started) / 1_000_000} ms")
                     }
                 }
             }
@@ -843,8 +887,9 @@ class ConditionsFeature(
     }
 
     /**
-     * What the picture covers: the whole area when most of it is on screen; zoomed in, a square
-     * about twice the screen round it, snapped so small moves keep the same picture.
+     * What the picture covers: the screen and half as much again, inside the area. The picture
+     * in place is kept while the screen is still inside it and it isn't much bigger than the
+     * screen: so a small move draws nothing new, and zooming in gets a sharper one.
      */
     private fun pictureRegion(a: ConditionsArea): DoubleArray {
         val whole = doubleArrayOf(a.south, a.west, a.north, a.east)
@@ -852,38 +897,99 @@ class ConditionsFeature(
         val latSpan = b.latitudeNorth - b.latitudeSouth
         val lngSpan = b.longitudeEast - b.longitudeWest
         if (latSpan <= 0 || lngSpan <= 0 || lngSpan > 180) return whole
-        if (latSpan * lngSpan > WHOLE_AREA_SHARE * (a.north - a.south) * (a.east - a.west)) return whole
-        // A power of two across, at least the screen: so the same picture serves a range of zooms.
-        val size = Math.pow(2.0, kotlin.math.ceil(kotlin.math.log2(max(latSpan, lngSpan))))
-        val step = size / 2
-        val cLat = Math.round((b.latitudeSouth + b.latitudeNorth) / 2 / step) * step
-        val cLng = Math.round((b.longitudeWest + b.longitudeEast) / 2 / step) * step
-        val s = max(a.south, cLat - size)
-        val n = min(a.north, cLat + size)
-        val w = max(a.west, cLng - size)
-        val e = min(a.east, cLng + size)
-        if (s >= n || w >= e) return whole
+        lastRegion?.let { r ->
+            // Inside it, or at the area's own edge where there's nothing further to draw.
+            val inside = (b.latitudeSouth >= r[0] || r[0] <= a.south) && (b.latitudeNorth <= r[2] || r[2] >= a.north) &&
+                (b.longitudeWest >= r[1] || r[1] <= a.west) && (b.longitudeEast <= r[3] || r[3] >= a.east)
+            val sharpEnough = (r[2] - r[0]) <= REGION_KEEP * latSpan && (r[3] - r[1]) <= REGION_KEEP * lngSpan
+            if (inside && sharpEnough && r[0] >= a.south && r[2] <= a.north && r[1] >= a.west && r[3] <= a.east) return r
+        }
+        val cLat = (b.latitudeSouth + b.latitudeNorth) / 2
+        val cLng = (b.longitudeWest + b.longitudeEast) / 2
+        val s = max(a.south, cLat - REGION_REACH * latSpan)
+        val n = min(a.north, cLat + REGION_REACH * latSpan)
+        val w = max(a.west, cLng - REGION_REACH * lngSpan)
+        val e = min(a.east, cLng + REGION_REACH * lngSpan)
+        if (s >= n || w >= e || (s <= a.south && n >= a.north && w <= a.west && e >= a.east)) return whole
         return doubleArrayOf(s, w, n, e)
     }
+
+    /**
+     * [pixels] (the values, worked out small) as the picture for the map: stretched to
+     * [sharpSide] and cut at the shore at that size, so the coast is as sharp as the screen
+     * whatever the data's own spacing: the land see-through, the layers under it showing as
+     * before. On the drawing thread.
+     */
+    private fun sharpen(a: ConditionsArea, region: DoubleArray, pixels: ConditionsPicture.Pixels): Bitmap {
+        val small = Bitmap.createBitmap(pixels.argb, pixels.width, pixels.height, Bitmap.Config.ARGB_8888)
+        val scale = max(1f, sharpSide.toFloat() / max(pixels.width, pixels.height))
+        val width = max(2, (pixels.width * scale).roundToInt())
+        val height = max(2, (pixels.height * scale).roundToInt())
+        val mask = maskFor(a, region, width, height) ?: return small
+        val out = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(out)
+        // The values are the paint, stretched smoothly to this size; the sea (an alpha picture) is
+        // the shape it's laid on through. Nothing lands where the mask is empty: the land.
+        val values = android.graphics.BitmapShader(small, android.graphics.Shader.TileMode.CLAMP, android.graphics.Shader.TileMode.CLAMP)
+        values.setLocalMatrix(android.graphics.Matrix().apply { setScale(width / pixels.width.toFloat(), height / pixels.height.toFloat()) })
+        canvas.drawBitmap(mask, 0f, 0f, android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG).apply { shader = values })
+        small.recycle()
+        return out
+    }
+
+    /** The picture's longer side on the map, in pixels: as sharp as the phone's memory comfortably allows. */
+    private val sharpSide: Int by lazy {
+        val memory = (activity.getSystemService(android.content.Context.ACTIVITY_SERVICE) as android.app.ActivityManager).memoryClass
+        when {
+            memory >= 256 -> 2048
+            memory >= 128 -> 1536
+            else -> 1024
+        }
+    }
+
+    /** The sea at a point, by the same shore the colours are cut at: the picture's own block first, then the whole area's. Null when there's no coastline to tell. */
+    private fun seaAt(a: ConditionsArea, lat: Double, lng: Double): Boolean? =
+        seaMask?.isSea(lat, lng) ?: areaSea?.takeIf { it.first == blockKey(a) }?.second?.isSea(lat, lng) ?: a.isSea(lat, lng)
+
+    /** An area's block: the spot keeps its name when the boat moves on and its block is made afresh. */
+    private fun blockKey(a: ConditionsArea) = "${a.id}:${a.south},${a.west},${a.north},${a.east}"
+
+    /** The whole of [a]'s sea at a few hundred metres, kept until the coastline changes: for flow lines and arrows away from the picture's block. On the drawing thread. */
+    private fun areaSeaFor(a: ConditionsArea): SeaMask? {
+        areaSea?.takeIf { it.first == blockKey(a) }?.let { return it.second }
+        val widthDeg = a.east - a.west
+        val heightDeg = Math.toDegrees(Coastline.mercatorY(a.north) - Coastline.mercatorY(a.south))
+        val width = if (widthDeg >= heightDeg) AREA_SEA_SIDE else max(2, (AREA_SEA_SIDE * widthDeg / heightDeg).roundToInt())
+        val height = if (widthDeg >= heightDeg) max(2, (AREA_SEA_SIDE * heightDeg / widthDeg).roundToInt()) else AREA_SEA_SIDE
+        val mask = runCatching { coastline.mask(a.south, a.west, a.north, a.east, width, height) }.getOrNull()
+            ?.let { SeaMask(it, width, height, a.south, a.west, a.north, a.east) }
+        areaSea = blockKey(a) to mask
+        return mask
+    }
+
+    @Volatile private var seaMask: SeaMask? = null
+    @Volatile private var areaSea: Pair<String, SeaMask?>? = null
 
     private fun isWhole(a: ConditionsArea, r: DoubleArray) = r[0] == a.south && r[1] == a.west && r[2] == a.north && r[3] == a.east
 
     private fun regionKey(r: DoubleArray) = String.format(Locale.US, "%.4f,%.4f,%.4f,%.4f", r[0], r[1], r[2], r[3])
 
     /**
-     * The shore mask for a [width]x[height] picture of [region]: OpenStreetMap's coastline when
-     * it's saved for the area (fetched now if not, then the picture is drawn again), the built-in
-     * outline meanwhile. On the drawing thread.
+     * The shore cut-out for a [width]x[height] picture of [region]: OpenStreetMap's coastline in
+     * the tiles that are saved (the rest fetched now, then the picture is drawn again), the
+     * built-in outline in the others meanwhile. On the drawing thread.
      */
-    private fun maskFor(a: ConditionsArea, region: DoubleArray, width: Int, height: Int): ByteArray? {
-        val sharp = coastline.covers(region[0], region[1], region[2], region[3])
-        val key = "${regionKey(region)}:${width}x$height:$sharp"
+    private fun maskFor(a: ConditionsArea, region: DoubleArray, width: Int, height: Int): Bitmap? {
+        val (saved, needed) = coastline.saved(region[0], region[1], region[2], region[3])
+        val key = "${regionKey(region)}:${width}x$height:$saved"
         maskCache?.takeIf { it.first == key }?.let { return it.second }
         if (!coastline.covers(a.south, a.west, a.north, a.east)) scope.launch { fetchCoastline(a) }
         val started = System.nanoTime()
-        val mask = runCatching { coastline.mask(region[0], region[1], region[2], region[3], width, height) }
+        val mask = runCatching { coastline.maskBitmap(region[0], region[1], region[2], region[3], width, height) }
             .onFailure { DiagnosticLog.logError(TAG, "coastline mask FAILED", it) }.getOrNull()
-        DiagnosticLog.log(TAG, "coastline mask ${width}x$height (${if (sharp) "OpenStreetMap" else "built-in"}) in ${(System.nanoTime() - started) / 1_000_000} ms")
+        // The same shore, for the flow lines and arrows.
+        seaMask = mask?.let { SeaMask(Coastline.bytesOf(it), width, height, region[0], region[1], region[2], region[3]) }
+        DiagnosticLog.log(TAG, "coastline mask ${width}x$height (OpenStreetMap in $saved of $needed tiles) in ${(System.nanoTime() - started) / 1_000_000} ms")
         maskCache = key to mask
         return mask
     }
@@ -905,6 +1011,8 @@ class ConditionsFeature(
         }
         if (failed == 0) {
             maskCache = null
+            areaSea = null
+            flowGridKey = null
             lastPictureKey = null
             if (shown) redraw()
         }
@@ -966,17 +1074,18 @@ class ConditionsFeature(
         val f = a.forecast
         return when (choice) {
             ColourChoice.NONE -> null
+            // With a finer coastline to cut at, the satellite's values are carried the last cell or two to the shore.
             ColourChoice.SEA_TEMP_SATELLITE -> {
-                val sat = a.satellites[SatelliteKind.SEA_TEMP] ?: return null
-                ConditionsPicture.Sampler { lat, lng -> sat.sample(lat, lng) }
+                val sat = (if (coastal) a.toShore(SatelliteKind.SEA_TEMP) else a.satellites[SatelliteKind.SEA_TEMP]) ?: return null
+                ConditionsPicture.Sampler { lat, lng -> if (coastal) sat.sampleToShore(lat, lng) else sat.sample(lat, lng) }
             }
             ColourChoice.SEA_TEMP_BREAKS -> {
-                val breaks = a.breaks ?: return null
-                ConditionsPicture.Sampler { lat, lng -> breaks.sample(lat, lng) }
+                val breaks = (if (coastal) a.breaksToShore else a.breaks) ?: return null
+                ConditionsPicture.Sampler { lat, lng -> if (coastal) breaks.sampleToShore(lat, lng) else breaks.sample(lat, lng) }
             }
             ColourChoice.CHLOROPHYLL -> {
-                val sat = a.satellites[SatelliteKind.CHLOROPHYLL] ?: return null
-                ConditionsPicture.Sampler { lat, lng -> sat.sample(lat, lng) }
+                val sat = (if (coastal) a.toShore(SatelliteKind.CHLOROPHYLL) else a.satellites[SatelliteKind.CHLOROPHYLL]) ?: return null
+                ConditionsPicture.Sampler { lat, lng -> if (coastal) sat.sampleToShore(lat, lng) else sat.sample(lat, lng) }
             }
             // Coarse: with a finer coastline to hide the land, they reach the shore.
             ColourChoice.TEMP_BELOW, ColourChoice.SEA_LEVEL, ColourChoice.SALINITY -> {
@@ -1027,7 +1136,6 @@ class ConditionsFeature(
             return
         }
         val (u, v) = fields
-        val masked = a.satellites.containsKey(SatelliteKind.SEA_TEMP)
         val heightField = when (choice) {
             ArrowChoice.WAVES -> ForecastField.WAVE_HEIGHT
             ArrowChoice.SWELL -> ForecastField.SWELL_HEIGHT
@@ -1041,8 +1149,11 @@ class ConditionsFeature(
         // grid every frame instead of the forecast, which keeps the map and panels smooth.
         flowGridJob = scope.launch {
             val grid = withContext(work) {
+                // The shore the colours are cut at: the lines stop at it too.
+                val sea = areaSeaFor(a)
+                val masked = sea != null || a.satellites.containsKey(SatelliteKind.SEA_TEMP)
                 FlowGrid.build(a.south, a.west, a.north, a.east, FLOW_GRID_SIDE) { lat, lng, out ->
-                    if (masked && a.isSea(lat, lng) == false) return@build false
+                    if ((sea?.isSea(lat, lng) ?: a.isSea(lat, lng)) == false) return@build false
                     val east = f.sample(u, lat, lng, time, coastal = masked)
                     val north = f.sample(v, lat, lng, time, coastal = masked)
                     if (east.isNaN() || north.isNaN()) return@build false
@@ -1057,7 +1168,9 @@ class ConditionsFeature(
                     true
                 }
             }
-            flowLines.show(grid, choice.reference, a.south, a.west, a.north, a.east)
+            // Each speck is tested against the sharp shore as it moves: none runs over an island or a headland.
+            val field = FlowLinesView.Field { lat, lng, out -> seaAt(a, lat, lng) != false && grid.at(lat, lng, out) }
+            flowLines.show(field, choice.reference, a.south, a.west, a.north, a.east)
         }
     }
 
@@ -1081,7 +1194,7 @@ class ConditionsFeature(
         for (r in 0 until f.grid.rows step stride) for (c in 0 until f.grid.cols step stride) {
             val lat = f.grid.lats[r]
             val lng = f.grid.lngs[c]
-            if (a.isSea(lat, lng) == false) continue
+            if (seaAt(a, lat, lng) == false) continue
             val flow = f.vector(u, v, lat, lng, time) ?: continue
             val strength = when (choice) {
                 ArrowChoice.WAVES -> f.sample(ForecastField.WAVE_HEIGHT, lat, lng, time).toDouble()
@@ -1196,6 +1309,31 @@ class ConditionsFeature(
     // Values box --------------------------------------------------------------------
 
     private fun updateBox() {
+        fillBox()
+        // What the box says changed. When that happens while the screen is being laid out (a camera
+        // move does it), Android keeps the box at its old size and the new words are cut off: so
+        // it's measured afresh straight after.
+        val says = buildString {
+            append(box.visibility).append('|').append(boxTitle.text).append('|').append(boxWarning.visibility).append(boxWarning.text)
+            for (row in boxRows) append('|').append(row.view.visibility).append(row.text.text)
+        }
+        if (says == boxSaid) return
+        boxSaid = says
+        box.removeCallbacks(remeasureBox)
+        box.post(remeasureBox)
+    }
+
+    private var boxSaid = ""
+    private val remeasureBox = Runnable {
+        fun fresh(view: View) {
+            view.forceLayout()
+            if (view is ViewGroup) for (i in 0 until view.childCount) fresh(view.getChildAt(i))
+        }
+        fresh(box)
+        box.requestLayout()
+    }
+
+    private fun fillBox() {
         val map = mapHolder.map
         val target = map?.cameraPosition?.target
         // While navigating, the navigation display already fills the top of the chart.
@@ -1210,7 +1348,8 @@ class ConditionsFeature(
         // Sea, by OpenStreetMap's coastline where it's saved (else the satellite's, else the forecast's),
         // with values to show.
         val hasSea = { a: ConditionsArea, lat: Double, lng: Double ->
-            coastline.isSea(lat, lng) != false && values(a, lat, lng, time, format).isNotEmpty()
+            val sea = coastline.isSea(lat, lng)
+            sea != false && values(a, lat, lng, time, format, sea).isNotEmpty()
         }
         val boat = spot()
         // The map layer on, the crosshair over sea with data: everything there. Otherwise the boat (or
@@ -1227,6 +1366,7 @@ class ConditionsFeature(
                 else -> when {
                     boat == null && followGps -> "Sea conditions · waiting for the GPS"
                     keepUpdated && !online() -> "Sea conditions · none saved here (offline)"
+                    engine.noSeaInReach -> "Sea conditions · no sea within ${SpotBlock.RINGS_KM.last().toInt()} km"
                     else -> "Sea conditions · tap to set up"
                 }
             }
@@ -1245,7 +1385,7 @@ class ConditionsFeature(
         } else {
             wanted = if (boxOpen) null else setOfNotNull("Wind", rowNameOf(colour).takeIf { shown })
             boxTitle.text = (
-                if (reading.distanceKm >= 0.5) String.format(Locale.US, "Nearest sea, %.0f km", reading.distanceKm)
+                if (reading.distanceKm >= 0.5) String.format(Locale.US, if (reading.distanceKm < 10) "Nearest sea, %.1f km" else "Nearest sea, %.0f km", reading.distanceKm)
                 else if (followGps) "At the boat" else "At your spot"
                 ) + " · " + if (live) "now" else clock(time)
         }
@@ -1253,7 +1393,7 @@ class ConditionsFeature(
         // The card already says when the layer's area is old.
         if (shown && a === area) boxWarning.visibility = View.GONE else showWarning(boxWarning, a)
         // Wind first (it's what the box shows closed), then the rest in a fixed order.
-        val values = values(a, lat, lng, time, format)
+        val values = values(a, lat, lng, time, format, coastline.isSea(lat, lng))
             .filter { wanted == null || it.row in wanted }
             .sortedBy { ROW_ORDER.indexOf(it.row).let { i -> if (i < 0) ROW_ORDER.size else i } }
         val bearing = map.cameraPosition.bearing
@@ -1294,7 +1434,15 @@ class ConditionsFeature(
         val key = loaded.joinToString { "${it.id}:${it.fetchedMillis}:${it.satellites.size}" } +
             String.format(Locale.US, "|%.4f,%.4f|%d|%b", b.first, b.second, time / (15 * 60_000L), coastline.isSea(b.first, b.second))
         boatReadingCache?.takeIf { it.first == key }?.let { return it.second }
-        val r = WeatherReadings.best(loaded, b.first, b.second, time, hasSea = hasSea)
+        val r = WeatherReadings.best(loaded, b.first, b.second, time, nearest = false, hasSea = hasSea)
+            // On land (at the ramp, on an island): the nearest water by the coastline, read there.
+            ?: nearestSeaByCoast(loaded, b)?.let { sea ->
+                WeatherReadings.best(loaded, sea.first, sea.second, time, nearest = false, hasSea = hasSea)?.let { r ->
+                    r.copy(distanceKm = au.opendepth.app.nav.NavGeo.distanceM(b.first, b.second, r.lat, r.lng) / 1000)
+                }
+            }
+            // Without a coastline to tell: the nearest forecast point at sea.
+            ?: WeatherReadings.best(loaded, b.first, b.second, time, hasSea = hasSea)
             ?: engine.nearestSeaFor(b)?.let { sea ->
                 WeatherReadings.best(loaded, sea.first, sea.second, time, hasSea = hasSea)?.let { r ->
                     r.copy(distanceKm = au.opendepth.app.nav.NavGeo.distanceM(b.first, b.second, r.lat, r.lng) / 1000)
@@ -1303,6 +1451,35 @@ class ConditionsFeature(
         boatReadingCache = key to r
         return r
     }
+
+    /**
+     * The nearest sea to a point on land, by the coastline. (The nearest forecast point at sea can
+     * be 30 km off: a boat at the ramp read "nearest sea, 32 km".) From the area's sea mask, which
+     * is worked out in the background the first time it's wanted; null until then.
+     */
+    private fun nearestSeaByCoast(loaded: List<ConditionsArea>, b: Pair<Double, Double>): Pair<Double, Double>? {
+        val a = loaded.firstOrNull { it.contains(b.first, b.second) } ?: return null
+        val sea = areaSea?.takeIf { it.first == blockKey(a) }
+        if (sea == null) {
+            if (!areaSeaWanted) {
+                areaSeaWanted = true
+                scope.launch {
+                    try {
+                        withContext(work) { areaSeaFor(a) }
+                    } finally {
+                        areaSeaWanted = false
+                    }
+                    boatReadingCache = null
+                    updateBox()
+                }
+            }
+            return null
+        }
+        // Water by the exact coastline too, or the box would have nothing to read there.
+        return sea.second?.nearestSea(b.first, b.second, WeatherReadings.SHORE_KM) { lat, lng -> coastline.isSea(lat, lng) != false }
+    }
+
+    private var areaSeaWanted = false
 
     /**
      * Where the spot's area is kept: the spot (the boat, or the set spot), or while there's no
@@ -1340,7 +1517,7 @@ class ConditionsFeature(
     }
 
     /** A download finished: messages for one the user asked for; the first ever shows on the map. */
-    private fun onFinished(result: ConditionsArea?, problems: List<String>, userAsked: Boolean, note: String?) {
+    private fun onFinished(result: ConditionsArea?, problems: List<String>, userAsked: Boolean, note: String?, alreadyLatest: Boolean) {
         if (result == null) {
             if (userAsked) callbacks.toast("Couldn't get the sea conditions. " + problems.joinToString(" "))
             updateBox()
@@ -1348,7 +1525,13 @@ class ConditionsFeature(
             return
         }
         if (userAsked) {
-            val saved = if (problems.isEmpty()) "Sea conditions saved for ${if (result.id == SPOT_ID) SPOT_NAME else result.name}." else "Saved ${result.name}, but: " + problems.joinToString(" ")
+            val where = if (result.id == SPOT_ID) SPOT_NAME else result.name
+            val saved = when {
+                // Nothing newer was out: no download was spent on the same forecast.
+                alreadyLatest && problems.isEmpty() -> "$where already has the latest forecast. Nothing newer is out yet."
+                problems.isEmpty() -> "Sea conditions saved for $where."
+                else -> "Saved ${result.name}, but: " + problems.joinToString(" ")
+            }
             callbacks.toast(listOfNotNull(saved, note).joinToString(" "))
             if (result.id != SPOT_ID) live = true
         }
@@ -1377,7 +1560,15 @@ class ConditionsFeature(
 
     /** [view] shows a note when [a] is old saved data (offline, or not updated for a while); hidden otherwise. */
     private fun showWarning(view: TextView, a: ConditionsArea) {
-        val note = staleNote(a.fetchedMillis, System.currentTimeMillis(), online())
+        val note = listOfNotNull(
+            when {
+                !a.isBackup -> null
+                // The wind is the usual one; the waves are the backup's.
+                a.forecast?.has(ForecastField.GUST) == true -> "Backup waves and swell: coarser, and no currents"
+                else -> "Backup forecast: coarser, with no gusts or currents"
+            },
+            staleNote(a.fetchedMillis, System.currentTimeMillis(), online())
+        ).joinToString("\n").ifEmpty { null }
         view.text = note.orEmpty()
         view.visibility = if (note == null) View.GONE else View.VISIBLE
     }
@@ -1441,7 +1632,7 @@ class ConditionsFeature(
      * it's older than the update interval, or the spot has moved out of its middle.
      */
     private fun freshnessOf(a: ConditionsArea): ConditionsPolicy.Freshness = ConditionsPolicy.freshness(
-        a.fetchedMillis, a.forecast?.endMillis, engine.latestRun, System.currentTimeMillis(), engine.busy
+        a.fetchedMillis, a.forecast?.endMillis, engine.latestRun, System.currentTimeMillis(), engine.busy, engine.runSeen(a.id)
     )
 
     /** The box's dot for [a]: green, amber or red; hidden with nothing on show. */
@@ -1677,6 +1868,51 @@ class ConditionsFeature(
 
     /** Notifications this app may post: off, the alert can't say anything. */
     private fun notificationsAllowed() = androidx.core.app.NotificationManagerCompat.from(activity).areNotificationsEnabled()
+
+    /** A plain account of the forecast for whoever wonders why it's "only" every six hours. */
+    private fun showHowItWorks() {
+        val body = panels.body()
+        fun part(title: String, text: String) {
+            body.addView(panels.sectionHeader(title))
+            body.addView(TextView(activity).apply {
+                this.text = text
+                textSize = 14f
+                setTextColor(palette.primaryText)
+                setLineSpacing(activity.dp(3).toFloat(), 1f)
+                setPadding(activity.dp(2), 0, activity.dp(2), activity.dp(4))
+            })
+        }
+        part(
+            "WHERE IT COMES FROM",
+            "Weather centres run computer models of the wind and the sea. SeaBathy shows their forecasts, free, through " +
+                "Open-Meteo: wind from ECMWF (Europe), NOAA (USA) or DWD (Germany), whichever covers your waters best; " +
+                "waves, swell and currents from Météo-France and Copernicus Marine."
+        )
+        part(
+            "HOW OFTEN IT CHANGES",
+            "The centres bring out a new wind forecast every 6 hours, waves every 12 and currents once a day. That " +
+                "schedule is theirs, not the app's. Each forecast runs hour by hour for days ahead, so what you see stays " +
+                "current in between; a new one only refines it."
+        )
+        part(
+            "WHAT THE APP DOWNLOADS",
+            "Online, it checks every ${RUN_CHECK_MS / 60_000} minutes whether anything newer is out, and downloads only what has " +
+                "changed, for ${SPOT_RADIUS_KM.roundToInt()} km round your spot. Nothing newer, nothing downloaded. It's all saved on " +
+                "the phone, so it works offline."
+        )
+        part(
+            "THE FREE LIMIT",
+            "The free service allows each internet connection a set number of requests a day. Normal use takes a small " +
+                "part of it. If it's ever reached, a backup forecast from NOAA (coarser, and without currents) fills in " +
+                "until the main one is back."
+        )
+        part(
+            "HOW FAR TO TRUST IT",
+            "A forecast is a model's best estimate, not a measurement. The next day or two are the most reliable, and " +
+                "close to shore the real wind can differ. Check the official marine forecast and warnings before you go."
+        )
+        panels.showPanel("How the forecast works", body)
+    }
 
     /** The alert's settings: places, limits, hours, days, and saving the forecast. */
     private fun showAlerts() {
@@ -1973,6 +2209,7 @@ class ConditionsFeature(
             engine.setSpot(spotTarget())
             engine.evaluate(userAsked = true)?.let { callbacks.toast(it) }
         })
+        panels.addRow(body, panels.row("How the forecast works", "Where it comes from and how often it changes") { showHowItWorks() })
 
         body.addView(panels.sectionHeader("ALERTS"))
         panels.addRow(body, panels.row("Good-weather alert", alertLabel(ConditionsAlerts.load(preferences))) { showAlerts() })
@@ -2516,6 +2753,8 @@ class ConditionsFeature(
         private const val TAG = "SeaBathyConditions"
 
         private const val KEY_SHOWN = "conditions_shown"
+        private const val KEY_WIND_MODEL = "conditions_wind_model"
+        private const val WIND_MODEL_KEEP_MS = 7 * 24 * 3_600_000L
         private const val KEY_AREA = "conditions_area"
         private const val KEY_COLOUR = "conditions_colour"
         private const val KEY_OPACITY = "conditions_opacity"
@@ -2614,12 +2853,16 @@ class ConditionsFeature(
         /** The current model is about 0.08° apart; closer points add nothing. */
         const val MIN_STEP_DEG = 0.08
         /**
-         * Sea points: 16 a side is 256, and the wind's 10 a side 100, so one
-         * download is about 360 of Open-Meteo's 600 requests a minute, which
-         * leaves room for the tides (the same service).
+         * Sea points: 16 a side is 256 of the sea forecast's 600 calls a minute, which leaves
+         * room for the tides (the same service).
          */
         const val MAX_POINTS_PER_SIDE = 16
-        const val MAX_WIND_POINTS_PER_SIDE = 10
+        /**
+         * The wind is asked on the same points: 256 calls of its own service, which counts apart
+         * from the sea forecast's. It was 10 a side, on the thought that wind is smooth; it isn't
+         * by the shore, and blended from points 44 km apart it read 3 knots light there.
+         */
+        const val MAX_WIND_POINTS_PER_SIDE = MAX_POINTS_PER_SIDE
         private const val MAX_ARROWS_PER_SIDE = 12
         private const val BOX_ROWS = 9
         private val SATELLITE_ROWS = setOf("Sea", "Depth", "Water")
@@ -2629,10 +2872,17 @@ class ConditionsFeature(
         private const val PLAY = "Play"
         private const val PAUSE = "Pause"
         private const val FORECAST_PICTURE_SIDE = 320
-        /** Zoomed in: the picture of the part on screen, sharp enough for the shore. */
-        private const val REGION_PICTURE_SIDE = 768
-        /** More of the area than this on screen: the picture is of the whole area. */
-        private const val WHOLE_AREA_SHARE = 0.25
+        /** Zoomed in: the values for the part on screen are worked out at this size, then stretched and cut at the shore ([sharpen]). */
+        private const val VALUES_REGION_SIDE = 384
+        /** The map counts as at rest this long after its last move. */
+        private const val CAMERA_SETTLE_MS = 350L
+        /** The picture reaches this much of the screen's span each way from its middle (0.5 is the screen itself). */
+        private const val REGION_REACH = 0.75
+        /** A picture this many times the screen's span or more is too coarse to keep: a new one is drawn. */
+        private const val REGION_KEEP = 2.2
+        /** The whole area's sea, for the flow lines and the nearest water: this many pixels on its longer side. */
+        private const val AREA_SEA_SIDE = 1024
+        /** Coastline tiles that didn't come are asked for again no sooner than this. */
         private const val COAST_RETRY_MS = 5 * 60_000L
         private const val MAX_PICTURE_SIDE = 512
         /** The forecast picture is redrawn as the time moves on by this much. */
@@ -2740,10 +2990,15 @@ class ConditionsFeature(
          * temperature saved, its coastline says where the sea is, so the
          * forecast reaches the shore the way the colours do.
          */
-        fun values(a: ConditionsArea, lat: Double, lng: Double, time: Long, format: NavFormat): List<Value> {
+        fun values(
+            a: ConditionsArea, lat: Double, lng: Double, time: Long, format: NavFormat,
+            /** Whether the point is sea by the coastline the colours are cut at; null when that can't tell (then the satellite temperature's cells say). */
+            sea: Boolean? = null
+        ): List<Value> {
             val out = mutableListOf<Value>()
-            val masked = a.satellites.containsKey(SatelliteKind.SEA_TEMP)
-            val f = a.forecast?.takeIf { !masked || a.isSea(lat, lng) != false }
+            val isSea = sea ?: a.isSea(lat, lng)
+            val masked = sea != null || a.satellites.containsKey(SatelliteKind.SEA_TEMP)
+            val f = a.forecast?.takeIf { !masked || isSea != false }
             if (f != null) {
                 f.vector(ForecastField.CURRENT_U, ForecastField.CURRENT_V, lat, lng, time, masked)?.let {
                     out += Value(it.towardsDegrees, "Current ${format.current(it.speed * KNOTS_PER_MS)} to ${compass(it.towardsDegrees)}")
@@ -2760,19 +3015,20 @@ class ConditionsFeature(
                 wave(f, "Swell", ForecastField.SWELL_HEIGHT, ForecastField.SWELL_PERIOD, ForecastField.SWELL_U, ForecastField.SWELL_V, lat, lng, time, format, masked)?.let { out += it }
             }
             val water = mutableListOf<String>()
-            val satTemp = a.satellites[SatelliteKind.SEA_TEMP]?.sample(lat, lng)
+            val satTemp = (if (sea == true) a.toShore(SatelliteKind.SEA_TEMP)?.sampleToShore(lat, lng) else null)?.takeIf { it.isFinite() }
+                ?: a.satellites[SatelliteKind.SEA_TEMP]?.sample(lat, lng)
             val modelTemp = f?.sample(ForecastField.SEA_TEMP, lat, lng, time, masked)
             when {
                 satTemp != null && satTemp.isFinite() -> water += "Surface temp ${format.temperature(satTemp.toDouble())}"
                 modelTemp != null && modelTemp.isFinite() -> water += "Surface temp ${format.temperature(modelTemp.toDouble())}"
             }
-            a.satellites[SatelliteKind.CHLOROPHYLL]?.sample(lat, lng)?.takeIf { it.isFinite() && a.isSea(lat, lng) != false }?.let {
+            a.satellites[SatelliteKind.CHLOROPHYLL]?.sample(lat, lng)?.takeIf { it.isFinite() && isSea != false }?.let {
                 water += String.format(Locale.US, if (it < 1) "chlorophyll %.2f mg/m³" else "chlorophyll %.1f mg/m³", it)
             }
             if (water.isNotEmpty()) out += Value(null, water.joinToString(" · "), "Sea")
 
             // The coarser layers, which change slowly: the temperature at depth, then salinity and sea level.
-            if (a.isSea(lat, lng) != false) {
+            if (isSea != false) {
                 fun coarse(kind: SatelliteKind) = a.satellites[kind]?.let { if (masked) it.sampleToShore(lat, lng) else it.sample(lat, lng) }?.takeIf { it.isFinite() }
                 coarse(SatelliteKind.TEMP_BELOW)?.let {
                     out += Value(null, "Sea temp ${format.depth(a.belowDepthM.toDouble())} down ${format.temperature(it.toDouble())}", "Depth")

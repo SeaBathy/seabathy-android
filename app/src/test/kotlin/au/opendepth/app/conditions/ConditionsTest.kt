@@ -3,6 +3,7 @@ package au.opendepth.app.conditions
 import au.opendepth.app.nav.NavFormat
 import au.opendepth.app.nav.NavUnits
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -395,9 +396,64 @@ UTC,m,degrees_north,degrees_east,mg m^-3
         )
         val sst = client.satellite(SatelliteKind.SEA_TEMP, -20.0, 149.0, -19.9, 149.1)
         assertEquals(27.5f, sst.values[0], 0.001f)
-        // Each MUR server asked once (no waiting to ask again), then the blended data.
-        assertEquals(3, asked.size)
-        assertTrue("noaacwBLENDEDsstDNDaily" in asked.last())
+        // The MUR server asked once (no waiting to ask again), then the 5 km data on another server.
+        assertEquals(2, asked.size)
+        assertTrue("oceanwatch.pifsc.noaa.gov" in asked.last() && "CRW_sst_v3_1" in asked.last())
+    }
+
+    @Test
+    fun `every sea temperature source is on a server of its own`() {
+        val hosts = ConditionsClient.satelliteUrls(SatelliteKind.SEA_TEMP, -20.0, 149.0, -19.9, 149.1).map { it.substringAfter("://").substringBefore('/') }
+        assertEquals(3, hosts.size)
+        assertEquals(hosts.size, hosts.toSet().size)
+        // The two addresses that only passed requests on to the main servers are gone.
+        ConditionsClient.satelliteUrls(SatelliteKind.CHLOROPHYLL, -20.0, 149.0, -19.9, 149.1).forEach {
+            assertFalse(it, "upwell" in it || "nesdisVHNnoaa20chlaDaily" in it)
+        }
+    }
+
+    @Test
+    fun `a server that counts longitude to 360 is asked its way and read back in degrees east`() {
+        val west = ConditionsClient.satelliteUrls(SatelliteKind.SEA_TEMP, 30.0, -75.0, 31.0, -74.0).single { "oceanwatch" in it }
+        assertTrue(west, "(284.950)" in west && "(286.050)" in west)
+        // Across Greenwich it would take two requests there: left to the other sources.
+        assertTrue(ConditionsClient.satelliteUrls(SatelliteKind.SEA_TEMP, 50.0, -1.0, 51.0, 1.0).none { "oceanwatch" in it })
+        val grid = ConditionsClient.parseErddapCsv(
+            "time,latitude,longitude,analysed_sst\nUTC,degrees_north,degrees_east,degree_C\n" +
+                "2026-11-17T12:00:00Z,30.0,285.0,24.0\n2026-11-17T12:00:00Z,30.0,285.05,24.5\n", SatelliteKind.SEA_TEMP
+        )
+        assertEquals(-75.0, grid.grid.lngs.first(), 1e-9)
+        assertEquals(-74.95, grid.grid.lngs.last(), 1e-9)
+    }
+
+    @Test
+    fun `a server that was only slow is asked once more with more time`() {
+        val quick = mutableListOf<String>()
+        val patient = mutableListOf<String>()
+        val csv = "time,latitude,longitude,sla\nUTC,degrees_north,degrees_east,m\n" +
+            "2026-11-17T00:00:00Z,-19.0,179.0,0.1\n2026-11-17T00:00:00Z,-19.0,179.25,0.2\n"
+        val client = ConditionsClient(
+            satelliteHttp = { url -> quick += url; throw java.net.SocketTimeoutException("slow today") },
+            patientHttp = { url -> patient += url; csv }
+        )
+        val level = client.satellite(SatelliteKind.SEA_LEVEL, -19.0, 179.0, -18.5, 179.5)
+        // Metres come back as centimetres.
+        assertEquals(10f, level.values[0], 0.001f)
+        assertEquals(2, quick.size)
+        assertEquals(listOf(quick.first()), patient)
+        // It answered: its other pictures aren't kept waiting for half an hour.
+        runCatching { client.satellite(SatelliteKind.SALINITY, -19.0, 179.0, -18.5, 179.5) }
+        assertTrue(quick.drop(2).any { "coastwatch.noaa.gov" in it })
+    }
+
+    @Test
+    fun `nothing here today is told apart from a server that failed`() {
+        val empty = "time,altitude,latitude,longitude,sss\nUTC,m,degrees_north,degrees_east,PSU\n" +
+            "2026-11-01T12:00:00Z,0.0,-19.0,179.0,NaN\n2026-11-01T12:00:00Z,0.0,-19.0,179.25,NaN\n"
+        val none = ConditionsClient(satelliteHttp = { empty })
+        assertTrue(runCatching { none.satellite(SatelliteKind.SALINITY, -19.0, 179.0, -18.5, 179.5) }.exceptionOrNull() is ConditionsClient.NoDataException)
+        val down = ConditionsClient(satelliteHttp = { throw ConditionsClient.ServiceBusyException("503") })
+        assertFalse(runCatching { down.satellite(SatelliteKind.SALINITY, -19.0, 179.0, -18.5, 179.5) }.exceptionOrNull() is ConditionsClient.NoDataException)
     }
 
     @Test
@@ -407,22 +463,22 @@ UTC,m,degrees_north,degrees_east,mg m^-3
         val client = ConditionsClient(
             satelliteHttp = { url ->
                 asked += url
-                if ("coastwatch.noaa.gov" in url) throw java.net.SocketTimeoutException("no answer")
+                if ("noaa.gov" in url) throw java.net.SocketTimeoutException("no answer")
                 "time,altitude,latitude,longitude,sss\nUTC,m,degrees_north,degrees_east,PSU\n" +
                     "2026-11-01T12:00:00Z,0.0,-19.0,179.0,35.5\n2026-11-01T12:00:00Z,0.0,-19.0,179.25,35.5\n"
             },
             clock = { now }
         )
-        // Sea level is only on the NOAA server: asked once, it doesn't answer.
+        // Sea level is on two NOAA servers: each asked once, neither answers.
         runCatching { client.satellite(SatelliteKind.SEA_LEVEL, -19.0, 179.0, -18.5, 179.5) }
-        assertEquals(1, asked.size)
-        // Salinity is on the same server: not asked again while it's down.
+        assertEquals(2, asked.size)
+        // Salinity is on the same two: not asked again while they're down.
         assertTrue(runCatching { client.satellite(SatelliteKind.SALINITY, -19.0, 179.0, -18.5, 179.5) }.isFailure)
-        assertEquals(1, asked.size)
-        // Half an hour on, it's tried again.
+        assertEquals(2, asked.size)
+        // Half an hour on, they're tried again.
         now += ConditionsClient.HOST_DOWN_MS + 1
         runCatching { client.satellite(SatelliteKind.SALINITY, -19.0, 179.0, -18.5, 179.5) }
-        assertEquals(2, asked.size)
+        assertEquals(4, asked.size)
     }
 
     @Test

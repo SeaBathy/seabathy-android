@@ -29,7 +29,7 @@ object PastConditions {
         val loc = String.format(Locale.US, "latitude=%.4f&longitude=%.4f", lat, lng)
         val windHost = if (recent) "https://api.open-meteo.com/v1/forecast" else "https://historical-forecast-api.open-meteo.com/v1/forecast"
         runCatching {
-            val j = get("$windHost?$loc&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m&wind_speed_unit=kn&timeformat=unixtime&start_date=$day&end_date=$day")
+            val j = get("$windHost?$loc&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m&wind_speed_unit=kn&timeformat=unixtime&cell_selection=sea&start_date=$day&end_date=$day")
             val h = j.getJSONObject("hourly")
             val i = index(h, hour) ?: return@runCatching
             val speed = h.getJSONArray("wind_speed_10m").optDouble(i)

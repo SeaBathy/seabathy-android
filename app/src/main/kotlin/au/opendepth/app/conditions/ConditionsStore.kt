@@ -94,8 +94,7 @@ class ConditionsStore(private val dir: File) {
     /** Off the main thread. */
     fun rename(id: String, name: String): ConditionsArea? {
         val area = load(id) ?: return null
-        return ConditionsArea(area.id, name, area.south, area.west, area.north, area.east, area.fetchedMillis, area.forecast, area.satellites, area.belowDepthM)
-            .also { save(it) }
+        return area.copyWith(name = name).also { save(it) }
     }
 
     /** Off the main thread. */
@@ -179,8 +178,9 @@ class ConditionsStore(private val dir: File) {
                     out.writeLong(sat.dateMillis)
                     writeFloats(out, sat.values)
                 }
-                // After everything, so files from before this was kept still read.
+                // After everything, so files from before these were kept still read.
                 out.writeInt(area.belowDepthM)
+                out.writeInt(area.source)
             }
         }
 
@@ -221,7 +221,8 @@ class ConditionsStore(private val dir: File) {
                     satellites[kind] = SatelliteGrid(kind, grid, date, readFloats(input))
                 }
                 val belowDepth = runCatching { input.readInt() }.getOrDefault(ConditionsArea.DEFAULT_BELOW_DEPTH_M)
-                ConditionsArea(id, name, south, west, north, east, fetched, forecast, satellites, belowDepth)
+                val source = runCatching { input.readInt() }.getOrDefault(ConditionsArea.SOURCE_MAIN)
+                ConditionsArea(id, name, south, west, north, east, fetched, forecast, satellites, belowDepth, source)
             }
 
         private fun writeGrid(out: DataOutputStream, grid: GeoGrid) {
