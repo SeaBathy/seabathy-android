@@ -1,0 +1,1 @@
+Sea conditions: wind near the coast reads true (it was 3 to 4 knots light), a sharp shore at every zoom with harbours and bays coloured, a backup forecast when the free service is down or busy, fewer downloads (only what has changed), and a short "How the forecast works" note.

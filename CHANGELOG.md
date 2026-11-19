@@ -1,5 +1,38 @@
 # Changelog
 
+## 1.3.8 — 2026-11-19
+
+Sea conditions, all of it:
+
+- **Wind near the coast reads true.** Within 20 km of shore it read 3 to 4 knots light: the
+  forecast service answers a point near the coast from the land unless asked for the sea, and
+  the wind was blended from points 44 km apart. It's now asked for over the water, on the same
+  points as the waves.
+- **New wind forecasts arrive on time.** The app watched another copy of the wind model for
+  new runs, and got each one about six hours late.
+- **Only what has changed is downloaded.** The weather centres bring out a new wind forecast
+  every 6 hours, waves every 12 and currents once a day. The app asks first (free) whether
+  anything newer is out; when only the wind is, only the wind is fetched. "Update now" with
+  nothing newer out keeps what's saved and says so.
+- **It can't use up the free forecast service by itself.** Every request is counted and paced
+  against the service's limits, tides included. Fixed: a download that repeated every few
+  minutes with a 1-day forecast, or with the phone's clock set back.
+- **A backup forecast** (NOAA GFS wind and WaveWatch III waves) fills in when the main service
+  is down or at its limit, and the box says it's the backup. When only the sea forecast is out,
+  the usual wind, gusts and all, is kept.
+- **A sharp shore at every zoom.** The colours, flow lines and arrows stop at OpenStreetMap's
+  coastline. Harbours, bays and estuaries are coloured; lakes and dams aren't. A picture now
+  takes about a tenth of a second to draw.
+- **The box on land reads the nearest water by the coastline:** "At the boat" at a ramp or a
+  jetty, and the right distance from a town on a river mouth (it could say 18 or 32 km).
+- **Far inland,** with no sea within 260 km, nothing is downloaded and the box says so.
+- **"How the forecast works":** a short plain explanation in the Sea conditions sheet, under
+  "Update now".
+- Satellite pictures: more sources are tried when a server is down or slow, and their values
+  reach the shore.
+- The forecast runs up to 12 hours beyond the days set.
+- Fixed: the box's line could be cut off after the map jumped to a new GPS position.
+
 ## 1.3.7 — 2026-11-19
 
 - **Google Play version: offline maps download again.** That version can't be given "All files
