@@ -4,7 +4,7 @@
 Your depth maps in 3D, offline charts, tides and sea conditions. Works anywhere in the world.</p>
 
 <p align="center">
-  <img alt="Version 1.3.8" src="https://img.shields.io/badge/version-1.3.8-0f766e">
+  <img alt="Version 1.3.9" src="https://img.shields.io/badge/version-1.3.9-0f766e">
   <img alt="Android 8.0+" src="https://img.shields.io/badge/Android-8.0%2B-3ddc84?logo=android&logoColor=white">
   <img alt="GPL-3.0 licence" src="https://img.shields.io/badge/licence-GPL--3.0-blue">
   <img alt="No ads, no tracking" src="https://img.shields.io/badge/ads%20%26%20tracking-none-success">
@@ -44,8 +44,8 @@ once it's on the phone. Free and open source, with no account, ads or tracking.
 
 | | |
 |---|---|
-| 🗺️ **Your surveys, sharp** | GeoTIFF depth surveys, even multi-gigabyte BigTIFFs, coloured by depth with relief shading. The depth under the crosshair as you pan. |
-| 🌊 **Free depths anywhere** | Download seabed depths for the area on screen, anywhere in the world (GMRT), or in high detail for Australian waters (IMAS composite with AusSeabed and state multibeam surveys, built on the phone). |
+| 🗺️ **Your surveys, sharp** | GeoTIFF depth surveys, even multi-gigabyte BigTIFFs, coloured by depth or slope with relief shading and contour lines, shallow water in red. The depth under the crosshair as you pan. |
+| 🌊 **Free depths anywhere** | Download seabed depths for an area you draw on the chart, anywhere in the world (GMRT), or in high detail for Australian waters (IMAS composite with AusSeabed and state multibeam surveys, built on the phone). |
 | 🏝️ **3D seabed** | Rotate and fly over any depth layer. Exaggerate the height up to 100× so every reef wall stands out, drape satellite or offline maps over it, tap for depth and slope. |
 | 📶 **Works offline** | Save satellite maps, tides and sea conditions for the area you fish, then use them with no signal. |
 | 🌡️ **Tides and sea conditions** | Tide charts, wind, waves, swell, currents with moving flow lines, sea temperature and its breaks, chlorophyll, sea level and salinity. |
@@ -70,12 +70,12 @@ reef wall, channel and bommie stand out, with depth colours or satellite on top.
 
 ## Install
 
-1. Download **[`SeaBathy-1.3.8.apk`](download/SeaBathy-1.3.8.apk)** onto your phone (or
+1. Download **[`SeaBathy-1.3.9.apk`](download/SeaBathy-1.3.9.apk)** onto your phone (or
    from the Releases page).
 2. Open it. If Android asks, allow your browser or file manager to *install unknown apps*.
 3. Open SeaBathy. The first start shows the whole world; zoom in to where you go.
 
-Needs Android 8.0 or newer. Big GeoTIFFs (over about 300 MB) and BigTIFFs use the app's built-in GDAL,
+Needs Android 8.0 or newer on an ARM phone or tablet (almost all are). Big GeoTIFFs (over about 300 MB) and BigTIFFs use the app's built-in GDAL,
 which runs on 64-bit phones (almost every phone from the last several years).
 
 ## How to
@@ -108,7 +108,7 @@ have surveyed and coarser elsewhere, and they're saved on the phone for offline 
 
 1. In the **Layers** drawer, tap **3D view** on a depth layer.
 2. One finger rotates, two fingers pan and zoom, double-tap flies in. Tap anywhere for the
-   depth and slope there.
+   depth and slope there; a small ball marks the spot until you tap **Clear**.
 3. **View**: height (1:1 to 100×), camera presets, detail. **Map**: depth colours, satellite,
    your offline packs or your own map link, with a blend slider. **Depth**: show just one
    depth band at full detail. **Contours** and **Light** do what they say.
@@ -117,8 +117,9 @@ have surveyed and coarser elsewhere, and they're saved on the phone for offline 
 <details>
 <summary><b>Save maps for use with no signal</b></summary>
 
-Move the map to the area, then **Settings** → **Offline maps** → **Download the area on
-screen**. You see the size first. The download runs in the background, survives patchy
+**Settings** → **Online and offline maps** → **Offline maps** → **Download** on a map, then
+draw the area on the chart and set the detail with − and +. It says how many tiles that is,
+and you see the size before anything is downloaded. The download runs in the background, survives patchy
 signal, and the finished pack appears under your layers. The built-in source is
 Sentinel-2 cloudless satellite imagery.
 </details>
@@ -131,7 +132,7 @@ sand and channels, but soft up close. For more detail you can add any online sat
 that gives an XYZ tile link (a web address with `{z}`, `{x}` and `{y}` in it) under
 **Settings → Online and offline maps → Online map layers → Your own tile link**. Some providers have sub-metre imagery of most
 coastlines. Those services are run by their owners under their own terms, which usually limit
-how they may be used and whether they may be saved offline, so check before you save one. SeaBathy shows the provider's credit with any map you add and can save any
+how they may be used and whether they may be saved offline, so check before you save one. SeaBathy shows the credit you type with any map you add and can save any
 of them offline: what you add and download, and keeping to each provider's terms, is up to you.
 If a server refuses downloads, SeaBathy stops rather than keep asking, and suggests a service
 that gives you your own key.
@@ -180,13 +181,13 @@ arrival, off-course and shallow-water alarms. Set your draft and margin in **Boa
 <summary><b>Waypoints</b></summary>
 
 Tap the waypoint button, move the map so the crosshair is on the spot, and tap the map. Give it a
-name, icon, colour and notes. Tap a waypoint on the chart to see or edit it, and search them all
+name, icon, colour and notes, and change any of them later. Tap a waypoint on the chart to see or edit it, and search them all
 from the Layers drawer.
 
 **Photos:** open a waypoint and tap **Take a photo**: it's saved with the time, tide, wind, waves,
 swell, current, sea temperature, sun and moon there. Forgot to drop a mark? **Waypoint from a
-photo** (Layers drawer or Settings) makes one where a gallery photo was taken, from its GPS tags,
-with the tide, sun and moon then, and the wind and sea that hour from Open-Meteo's archive.
+photo** (Layers drawer or Settings) makes one where a gallery photo was taken, from its GPS tags (or where you are, or at
+the crosshair, if it has none), with the tide, sun and moon then, and the wind and sea that hour from Open-Meteo's archive.
 </details>
 
 <details>
@@ -265,7 +266,7 @@ height, wind (including Beaufort), waves and swell, current and sea temperature.
 - Offline MBTiles, raster and vector, and GeoTIFF depth rasters and imagery
 - Public online map layers to add in a tap, plus your own XYZ tile link
 - Satellite imagery, blendable over the depths to show reef, rock and coral
-- One layer stack with visibility, opacity, order and delete; tap a layer to go to it
+- One layer stack with visibility, opacity, order and delete; tap a layer to go to it; a hidden layer gives its memory back
 - Basemaps: dark, street map, your own, or none
 </details>
 
@@ -273,6 +274,9 @@ height, wind (including Beaufort), waves and swell, current and sea temperature.
 <summary><b>Depth</b></summary>
 
 - Seven palettes, your own depth range, reverse direction and relief-shading strength, all live
+- Colour by slope instead of depth, so ledges and drop-offs stand out
+- Contour lines with depth labels, spaced to suit the depths on screen or as you choose
+- Shallow water striped red below a depth you pick, on every depth layer and in 3D
 - Depth under the crosshair, exact from a GeoTIFF or bounded from contour charts
 - A quality setting (battery saver to maximum) so 1 GB+ surveys stay sharp on capable phones and light on older ones
 </details>
@@ -284,7 +288,7 @@ height, wind (including Beaufort), waves and swell, current and sea temperature.
 - Height from true scale (1:1) to 100×; show one depth band at the survey's full detail
 - Depth or slope colours, contours with depth labels, sun, shadows, sea surface, depth profiles
 - Satellite, offline packs or your own map on the terrain, sharper as you zoom in
-- Waypoints in 3D and a live boat marker with follow mode
+- Waypoints in 3D, a marker where you tap, and a live boat marker with a line to the seabed and follow mode
 - Detail adapts to the phone's memory, and steps down by itself if a phone struggles
 </details>
 
@@ -313,8 +317,9 @@ height, wind (including Beaufort), waves and swell, current and sea temperature.
 <summary><b>Also</b></summary>
 
 - Free seabed depths anywhere (GMRT), and high-detail Australian depths built on the phone (IMAS, AusSeabed); NASA's daily true colour picture; a latitude and longitude grid
-- Offline map downloads with a size estimate, background progress and retries
-- Waypoints with icons, colours, notes and search; measurement tool; DD, DDM and DMS coordinates
+- Offline map downloads of an area you draw, with a tile count, a size estimate, background progress and retries
+- Waypoints with icons, colours, notes and search; measurement tool; positions written as DDM, DMS or DD, your choice
+- A scale bar, a course arrow on the boat, and a storage screen showing what the app keeps
 - Licences and credits screen in Settings
 </details>
 

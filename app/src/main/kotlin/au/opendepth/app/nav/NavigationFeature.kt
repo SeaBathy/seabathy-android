@@ -79,7 +79,10 @@ class NavigationFeature(
         fun requestNotifications()
         /** Units or the tide changed: redo the crosshair depth readout. */
         fun depthReadoutChanged()
-        /** Boat & navigation settings were saved: anything showing units shows them again. */
+        /**
+         * Boat & navigation settings were saved: anything showing units shows them again, and the
+         * depth layers take the shallow-water mark.
+         */
         fun unitsChanged()
     }
 

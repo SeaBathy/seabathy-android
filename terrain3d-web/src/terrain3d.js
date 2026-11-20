@@ -18,6 +18,8 @@ import { sampleGrid } from './grid.js';
 import { planChunks, chunkIndex, strideFor, lodPixelsFor, STRIDES } from './chunks.js';
 
 const BG = 0x07111c;
+/** One unit of the boat's marker on the screen, in CSS pixels: its ring comes out about 29 across. */
+const BOAT_PX = 8;
 /** Minimum time between frames: caps drawing at 60 fps on high-refresh screens. */
 const MIN_FRAME_MS = 1000 / 60 - 2;
 /** How long the camera must be still before a sharper map is fetched for the view. */
@@ -51,6 +53,7 @@ export class Terrain3D {
     this.exaggeration = 3;
     this.active = false;
     this.waypointObjects = [];
+    this.tapMark = null;
     this.pendingHover = null;
 
     // A phone's screen at full resolution with anti-aliasing takes over 100 MB
@@ -118,7 +121,10 @@ export class Terrain3D {
       uValidHi: { value: new Uint32Array(3) },
       // 0 = colour by depth, 1 = colour by slope (degrees, up to uSlopeMax).
       uColorMode: { value: 0 },
-      uSlopeMax: { value: 20 }
+      uSlopeMax: { value: 20 },
+      // Water shallower than this many metres gets red stripes, uStripe screen dots apart; 0 = none.
+      uShallow: { value: 0 },
+      uStripe: { value: 8 }
     };
     this.ref = 0;
     this.contourLabels = [];
@@ -166,6 +172,8 @@ export class Terrain3D {
 
   setModel(model) {
     this.#disposeTerrain();
+    // A new grid: the place last tapped is counted in the old one's cells.
+    this.setTapMark(null);
     this.model = model;
     const { cols, rows, values, cellX, cellY, min, max } = model;
     const halfX = ((cols - 1) * cellX) / 2;
@@ -205,6 +213,8 @@ uniform float uClipMin;
 uniform float uClipMax;
 uniform float uColorMode;
 uniform float uSlopeMax;
+uniform float uShallow;
+uniform float uStripe;
 varying float vElev;
 varying vec2 vDrapeUv;
 varying vec3 vObjNormal;
@@ -284,6 +294,23 @@ if (uContour > 0.0) {
   float wm = max(fwidth(cm), 1e-5);
   float major = 1.0 - min(abs(fract(cm - 0.5) - 0.5) / (wm * 1.6), 1.0);
   diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.02, 0.05, 0.09), max(minor * 0.35, major * 0.75));
+}
+if (uShallow > 0.0 && vElev <= 0.0 && vElev > -uShallow) {
+  // Shallow water, as on the chart: red stripes with a white edge, on the slant, the same
+  // width on the screen at any zoom.
+  float across = fract((gl_FragCoord.x + gl_FragCoord.y) / uStripe);
+  if (across < 0.375) diffuseColor.rgb = vec3(0.90, 0.08, 0.12);
+  else if (across < 0.5) diffuseColor.rgb = vec3(1.0);
+}
+if (uShallow > 0.0) {
+  // A solid red line where the seabed crosses either limit of the marked water (the depth
+  // picked, and the surface), so a shoal too small to catch a stripe still has a red ring.
+  // About two screen points wide however sharply the view is drawn: uStripe / 8 is the drawn
+  // pixels to a screen point. Nothing on a level seabed lying right at a limit, where there
+  // is no crossing to draw.
+  float perPixel = fwidth(vElev);
+  float fromLimit = min(abs(vElev), abs(vElev + uShallow));
+  if (perPixel > 1e-6 && fromLimit < perPixel * uStripe / 8.0) diffuseColor.rgb = vec3(0.90, 0.08, 0.12);
 }`);
     };
 
@@ -611,6 +638,11 @@ if (uContour > 0.0) {
     this.uniforms.uContour.value = metres;
   }
 
+  /** Marks water shallower than [metres] with red stripes; 0 for none. */
+  setShallow(metres) {
+    this.uniforms.uShallow.value = metres > 0 ? metres : 0;
+  }
+
   setExaggeration(value) {
     const ratio = value / this.exaggeration;
     this.exaggeration = value;
@@ -623,6 +655,7 @@ if (uContour > 0.0) {
     this.#updateSun();
     this.#invalidateShadowsSoon();
     this.#placeWaypoints();
+    this.#placeTapMark();
     this.#placeContourLabels();
     this.#placeBoat();
     if (this.profile) this.#drawProfileLine();
@@ -1140,11 +1173,41 @@ if (uContour > 0.0) {
     }
   }
 
+  // ---------------------------------------------------------------- the place tapped
+
+  /**
+   * Shows where the seabed was last tapped: a small ball with a ring round it. Like the
+   * waypoint pins it is drawn on the screen at that point, so it is the same size at any
+   * zoom. point: { col, row } in grid space, or null to take it away.
+   */
+  setTapMark(point) {
+    if (this.tapMark) {
+      this.scene.remove(this.tapMark.label);
+      this.tapMark.label.element.remove();
+      this.tapMark = null;
+    }
+    if (!point || !this.mesh || sampleGrid(this.model, point.col, point.row) === null) return;
+    const mark = document.createElement('div');
+    mark.className = 'tap-mark';
+    mark.innerHTML = '<span class="tap-ring"></span><span class="tap-ball"></span>';
+    const label = new CSS2DObject(mark);
+    this.scene.add(label);
+    this.tapMark = { col: point.col, row: point.row, label };
+    this.#placeTapMark();
+  }
+
+  #placeTapMark() {
+    if (!this.tapMark) return;
+    const base = this.#gridToWorld(this.tapMark.col, this.tapMark.row);
+    if (base) this.tapMark.label.position.copy(base);
+  }
+
   // ---------------------------------------------------------------- boat
 
   /**
-   * Live position marker at sea level (0 m): an arrow along the course, a
-   * ring so it can be found from far out, and a line down to the seabed.
+   * Live position marker at sea level (0 m): an arrow along the course (a ball
+   * at rest), a ring round it, and a line down to the seabed. It is the same
+   * size on the screen at any zoom.
    * fix: { col, row, heading (degrees true or null), label } or null to hide.
    */
   setBoat(fix) {
@@ -1162,7 +1225,7 @@ if (uContour > 0.0) {
       shape.lineTo(-0.55, -0.7);
       shape.closePath();
       const hull = new THREE.Mesh(
-        new THREE.ExtrudeGeometry(shape, { depth: 0.25, bevelEnabled: false }),
+        new THREE.ExtrudeGeometry(shape, { depth: 0.5, bevelEnabled: false }),
         new THREE.MeshBasicMaterial({ color: 0xff8a00 })
       );
       // Lie flat on the water, pointing north (-z) before the heading turn.
@@ -1173,18 +1236,22 @@ if (uContour > 0.0) {
       );
       ring.rotation.x = -Math.PI / 2;
       ring.renderOrder = 5;
+      // At rest there is no course to point along: a ball then, which shows from any side.
+      const ball = new THREE.Mesh(new THREE.SphereGeometry(0.6, 20, 12), new THREE.MeshBasicMaterial({ color: 0xff8a00 }));
       const marker = new THREE.Group();
-      marker.add(hull, ring);
-      const drop = new THREE.Line(
-        new THREE.BufferGeometry(),
-        new THREE.LineDashedMaterial({ color: 0xffd23f, dashSize: 1, gapSize: 1 })
+      marker.add(hull, ring, ball);
+      // The line down to the seabed is a thin rod: a drawn line is one screen dot wide, a third
+      // of a pixel on a phone, and could not be seen.
+      const drop = new THREE.Mesh(
+        new THREE.CylinderGeometry(1, 1, 1, 8, 1, true),
+        new THREE.MeshBasicMaterial({ color: 0xffd23f })
       );
       const div = document.createElement('div');
       div.className = 'label-3d boat-label';
       const label = new CSS2DObject(div);
       group.add(marker, drop, label);
       this.scene.add(group);
-      this.boat = { group, marker, drop, label, div, fix: null };
+      this.boat = { group, marker, hull, ball, drop, label, div, fix: null };
     }
     this.boat.fix = fix;
     this.boat.group.visible = true;
@@ -1205,17 +1272,53 @@ if (uContour > 0.0) {
     const x = col * this.model.cellX - this.halfX;
     const z = row * this.model.cellY - this.halfZ;
     const seaY = this.#boatY();
-    const scale = this.size * 0.012;
     boat.marker.position.set(x, seaY, z);
+    // One size on the screen at any zoom, like the waypoint pins. Sized to the seabed, as it
+    // was, it shrank to a speck with a wide area in view and only its label could be seen.
+    const scale = this.#pixelSize(boat.marker.position) * BOAT_PX;
     boat.marker.scale.setScalar(scale);
-    boat.marker.children[0].visible = heading !== null && heading !== undefined;
-    boat.marker.rotation.y = heading === null || heading === undefined ? 0 : -THREE.MathUtils.degToRad(heading);
+    const moving = heading !== null && heading !== undefined;
+    boat.hull.visible = moving;
+    boat.ball.visible = !moving;
+    boat.marker.rotation.y = moving ? -THREE.MathUtils.degToRad(heading) : 0;
     const floor = sampleGrid(this.model, col, row);
     const bottom = floor === null ? seaY : this.#y(floor);
-    boat.drop.geometry.setFromPoints([new THREE.Vector3(x, seaY, z), new THREE.Vector3(x, bottom, z)]);
-    boat.drop.computeLineDistances();
-    boat.drop.material.dashSize = boat.drop.material.gapSize = Math.max(1, Math.abs(seaY - bottom) / 40);
-    boat.label.position.set(x, seaY + scale * 2.5, z);
+    const length = Math.abs(seaY - bottom);
+    boat.drop.visible = length > 0;
+    boat.drop.position.set(x, (seaY + bottom) / 2, z);
+    boat.drop.scale.set(scale * 0.15, Math.max(length, 1e-6), scale * 0.15);
+    // The label's own style lifts it clear of the marker, whichever way the view is turned.
+    boat.label.position.copy(boat.marker.position);
+  }
+
+  /** The length in the scene that one CSS pixel covers at [point], as the camera sees it now. */
+  #pixelSize(point) {
+    this.viewDirection ??= new THREE.Vector3();
+    this.toPoint ??= new THREE.Vector3();
+    const ahead = this.toPoint.copy(point).sub(this.camera.position).dot(this.camera.getWorldDirection(this.viewDirection));
+    const height = this.renderer.domElement.clientHeight || 1;
+    return (2 * Math.max(ahead, this.camera.near) * Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2))) / height;
+  }
+
+  /**
+   * For the tests: where the boat's marker is on the screen, how far its ring reaches from
+   * its middle (CSS pixels), how far the camera is, and how long the line to the seabed is.
+   * Null when no boat is shown.
+   */
+  boatOnScreen() {
+    const boat = this.boat;
+    if (!boat?.group.visible || !boat.fix) return null;
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    this.camera.updateMatrixWorld();
+    const onScreen = (v) => {
+      const p = v.clone().project(this.camera);
+      return { x: rect.left + ((p.x + 1) / 2) * rect.width, y: rect.top + ((1 - p.y) / 2) * rect.height };
+    };
+    const middle = boat.marker.position;
+    const edge = new THREE.Vector3().setFromMatrixColumn(this.camera.matrixWorld, 0).multiplyScalar(1.8 * boat.marker.scale.x).add(middle);
+    const a = onScreen(middle);
+    const b = onScreen(edge);
+    return { x: a.x, y: a.y, radius: Math.hypot(b.x - a.x, b.y - a.y), distance: this.camera.position.distanceTo(middle), line: boat.drop.visible ? boat.drop.scale.y : 0 };
   }
 
   /**
@@ -1301,6 +1404,8 @@ if (uContour > 0.0) {
         this.lastRenderAt = now;
         this.renderCount++;
         this.#chooseDetail();
+        if (this.boat?.group.visible) this.#placeBoat();
+        this.uniforms.uStripe.value = 8 * this.renderer.getPixelRatio();
         const shadows = this.renderer.shadowMap.needsUpdate && this.sun.castShadow;
         if (this.caster) this.caster.visible = shadows;
         this.renderer.render(this.scene, this.camera);
@@ -1460,7 +1565,7 @@ if (uContour > 0.0) {
     const shadowChanging = new Set(['setModel', 'setSun', 'setShadows', 'setClip']);
     const redrawing = ['setModel', 'setPalette', 'setContourInterval', 'setExaggeration', 'setSun', 'setShadows',
       'setSeaSurface', 'setAutoRotate', 'setClip', 'setImagery', 'setDrapeMix', 'setContourLabels', 'refreshContourLabelVisibility',
-      'setColorMode', 'setWaypoints', 'setBoat', 'setFollowBoat', 'cameraPreset', 'face', 'focusOn', 'focusGrid',
+      'setColorMode', 'setShallow', 'setWaypoints', 'setTapMark', 'setBoat', 'setFollowBoat', 'cameraPreset', 'face', 'focusOn', 'focusGrid',
       'setProfile', 'clearProfile'];
     for (const name of redrawing) {
       const original = this[name];

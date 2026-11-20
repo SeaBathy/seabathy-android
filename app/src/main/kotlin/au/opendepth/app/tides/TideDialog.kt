@@ -440,7 +440,7 @@ class TideDialog(
                     else -> {
                         status.text = "Tap one to save it."
                         found.forEach { r ->
-                            panels.addRow(results, option(R.drawable.ic_place_pin, r.name, r.detail.ifBlank { String.format(Locale.US, "%.3f, %.3f", r.lat, r.lng) }, false) {
+                            panels.addRow(results, option(R.drawable.ic_place_pin, r.name, r.detail.ifBlank { au.opendepth.app.util.CoordinateFormatter.format(r.lat, r.lng) }, false) {
                                 dialog.dismiss(); onChosen(r)
                             })
                         }

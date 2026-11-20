@@ -2,6 +2,7 @@ package au.opendepth.app.data
 
 import android.content.SharedPreferences
 import au.opendepth.app.model.DataSource
+import au.opendepth.app.model.MapCredits
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 
@@ -24,7 +25,17 @@ class DataSourceRepository(
         }.getOrElse { error ->
             preferences.preserveUnreadable(KEY_SOURCES, raw, error)
             emptyList()
-        }
+        }.map(::withCurrentCredit)
+    }
+
+    /**
+     * The built-in source as an older version saved it carries its old
+     * credit: new downloads from it take the credit as it is worded now.
+     */
+    private fun withCurrentCredit(source: DataSource): DataSource {
+        // Read from saved text, where a missing entry comes back null whatever the type says.
+        val saved: String? = source.attribution
+        return if (saved != null && MapCredits.current(saved) != saved) source.copy(attribution = MapCredits.current(saved)) else source
     }
 
     fun save(sources: List<DataSource>) {

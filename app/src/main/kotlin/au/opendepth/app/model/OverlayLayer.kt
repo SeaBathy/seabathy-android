@@ -13,10 +13,33 @@ enum class LayerKind {
 }
 
 /**
+ * Contour lines over a depth layer: lines of equal depth, with the depth
+ * written on them. Off, and Auto, are also what a layer saved before this
+ * existed reads back as.
+ */
+data class ContourSettings(
+    val on: Boolean = false,
+    /**
+     * How far apart the lines are; [AUTO] picks a spacing to suit the depths
+     * on screen. Kept in metres whatever the depth unit, as the shallow-water
+     * mark is: it is picked as a round number of the unit chosen in Boat &
+     * navigation (5 ft is kept as 1.524) and drawn as the nearest round
+     * number of the unit chosen now (see `DepthContours.pickedIn`). Layers
+     * saved when it was whole metres read back as the same metres.
+     */
+    val everyMetres: Double = AUTO
+) {
+    companion object {
+        const val AUTO = 0.0
+    }
+}
+
+/**
  * One layer in the stack.
  *
  * [source] is a file path, or a tile link for [LayerKind.XYZ]. [ramp] is for
- * GeoTIFF depth layers only. [maxZoom] is the most detail there is: the
+ * GeoTIFF depth layers only, as is [contours] (null, as in layers saved
+ * before it existed, is off). [maxZoom] is the most detail there is: the
  * provider's for XYZ, the file's for a GDAL layer. [gdalOnDemand] marks a
  * big GeoTIFF served through GDAL; [gdalCachePath] is its tile cache, kept
  * so tiles drawn before are reused after a restart.
@@ -32,10 +55,15 @@ data class OverlayLayer(
     val ramp: DepthRampSettings? = null,
     val maxZoom: Int = DEFAULT_MAX_ZOOM,
     val gdalOnDemand: Boolean = false,
-    val gdalCachePath: String? = null
+    val gdalCachePath: String? = null,
+    val contours: ContourSettings? = null
 ) {
     val sanitisedOpacity: Float
         get() = opacity.coerceIn(0f, 1f)
+
+    /** [contours], or off where none were saved. */
+    val contourSettings: ContourSettings
+        get() = contours ?: ContourSettings()
 
     /**
      * Clamped to the range MapLibre accepts. Stopping at the provider's real

@@ -34,6 +34,51 @@ object CoordinateFormatter {
         else -> formatDdm(lat, lng)
     }
 
+    /**
+     * How positions are written wherever the app shows one: one of [MODES],
+     * chosen under Settings, Map display, Position format. This is the one
+     * place that holds the choice; [format] reads it. Set when the app
+     * starts and when the choice changes. Anything else reads back as the
+     * default, degrees and decimal minutes.
+     *
+     * Files the app writes (GPX, KML, backups) do not go through here.
+     */
+    @Volatile
+    var mode: String = MODE_DDM
+        set(value) {
+            field = if (value in MODES) value else MODE_DDM
+        }
+
+    /** The name of a format, as listed where it is chosen; the default's for anything that is not one. */
+    fun labelFor(mode: String): String = MODE_LABELS[MODES.indexOf(mode).coerceAtLeast(0)]
+
+    /**
+     * The formats as offered under Position format, in the order of [MODES]:
+     * each one's name, with the position [lat], [lng] written in it underneath
+     * when one is given.
+     */
+    fun choiceLabels(lat: Double?, lng: Double?): List<String> = MODES.mapIndexed { index, mode ->
+        if (lat == null || lng == null || !lat.isFinite() || !lng.isFinite()) MODE_LABELS[index]
+        else "${MODE_LABELS[index]}\n${formatPair(lat, lng, mode)}"
+    }
+
+    /** A position, written the way the user has chosen ([mode]). */
+    fun format(lat: Double, lng: Double): String = formatPair(lat, lng, mode)
+
+    /** A latitude on its own, such as an edge of an area, written the way the user has chosen. */
+    fun formatLatitude(lat: Double): String = when (mode) {
+        MODE_DD -> "%.6f".format(Locale.US, lat)
+        MODE_DMS -> dmsPart(lat, "N", "S")
+        else -> ddmPart(lat, "N", "S")
+    }
+
+    /** A longitude on its own, written the way the user has chosen. */
+    fun formatLongitude(lng: Double): String = when (mode) {
+        MODE_DD -> "%.6f".format(Locale.US, lng)
+        MODE_DMS -> dmsPart(lng, "E", "W")
+        else -> ddmPart(lng, "E", "W")
+    }
+
     fun parseSingle(raw: String, isLat: Boolean): Double? {
         val text = raw.trim().uppercase()
         val hemisphere = text.firstOrNull { it in "NSEW" }

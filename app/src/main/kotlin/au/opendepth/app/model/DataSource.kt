@@ -18,14 +18,13 @@ data class DataSource(
          * EOX's Sentinel-2 cloudless (Copernicus Sentinel-2 imagery). Only
          * the 2016 edition is CC BY 4.0; later editions, including this
          * 2024 layer, are CC BY-NC-SA 4.0 (non-commercial use). Attribution
-         * wording per EOX's terms: https://s2maps.eu.
+         * wording per EOX's terms: https://cloudless.eox.at.
          */
         val DEFAULT_PRESET = DataSource(
             id = "eox-s2cloudless",
             name = "Sentinel-2 cloudless (EOX)",
             urlTemplate = "https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2024_3857/default/g/{z}/{y}/{x}.jpg",
-            attribution = "Sentinel-2 cloudless - https://s2maps.eu by EOX IT Services GmbH " +
-                "(Contains modified Copernicus Sentinel data 2024)",
+            attribution = MapCredits.EOX_CLOUDLESS,
             builtIn = true
         )
     }

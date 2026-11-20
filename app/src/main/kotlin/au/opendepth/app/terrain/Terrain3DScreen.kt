@@ -49,6 +49,9 @@ import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.min
 
+/** The 3D view's saved map tiles, in the app's cache folder. */
+internal const val TERRAIN_TILE_CACHE_DIR = "terrain-tiles"
+
 /**
  * Full-screen 3D view of one GeoTIFF depth layer, drawn over the chart.
  *
@@ -65,6 +68,8 @@ class Terrain3DScreen(
     private val scope: CoroutineScope,
     /** Depth and speed units for the 3D readouts, as chosen in Boat & navigation. */
     private val units: () -> au.opendepth.app.nav.NavUnits = { au.opendepth.app.nav.NavUnits() },
+    /** Water shallower than this many metres is marked in red, as on the chart; 0 for none. */
+    private val shallowMetres: () -> Double = { 0.0 },
     /** Saves a waypoint picked in 3D (lat, lng, depth in metres) and returns it, or null if it could not be added. */
     private val onAddWaypoint: (Double, Double, Double) -> Waypoint?,
     /** Turns GPS on (asking for permission if needed), for the boat marker. */
@@ -122,10 +127,19 @@ class Terrain3DScreen(
         OkHttpClient.Builder()
             .connectTimeout(6, TimeUnit.SECONDS)
             .readTimeout(10, TimeUnit.SECONDS)
-            .cache(Cache(File(activity.cacheDir, "terrain-tiles"), TILE_CACHE_BYTES))
+            .cache(Cache(File(activity.cacheDir, TERRAIN_TILE_CACHE_DIR), TILE_CACHE_BYTES))
             .build()
     }
     private val customPrefs by lazy { activity.getSharedPreferences(CUSTOM_PREFS, Activity.MODE_PRIVATE) }
+
+    /**
+     * Empties the saved map tiles (Settings → Storage): an ordinary cache, so they are fetched
+     * again when next wanted, and safe to empty with 3D open. Touches the disk: call it off
+     * the main thread.
+     */
+    fun clearSavedTiles() {
+        tileClient.cache?.evictAll()
+    }
 
     /** Whether the grid covers the whole layer (not the on-screen area or an isolated range). */
     @Volatile private var wholeLayer = true
@@ -133,9 +147,20 @@ class Terrain3DScreen(
     val isOpen: Boolean get() = webView != null
 
     /**
+     * The `onDone` given to [open], called once that opening of 3D is over:
+     * the view closed, or never shown (no depths to show, an error, the app
+     * going away). The layer it was opened for is let go of then (a hidden
+     * layer's file is closed again). Set from [open] until then, so only
+     * one opening is under way at a time.
+     */
+    private var opening: (() -> Unit)? = null
+
+    /**
      * [region] limits the first view to part of the layer (the area on the
      * chart); Show all in the viewer goes back to the whole layer. [detail]
-     * is the starting grid size from the quality setting.
+     * is the starting grid size from the quality setting. [onDone] runs once
+     * the view is closed or could not be shown, and at once when 3D is
+     * already building or open (this request is then let go of).
      */
     fun open(
         name: String,
@@ -143,9 +168,16 @@ class Terrain3DScreen(
         marks: List<Waypoint>,
         region: GeoBounds? = null,
         detail: Int = DEFAULT_DETAIL,
-        ramp: DepthRampSettings? = null
+        ramp: DepthRampSettings? = null,
+        onDone: () -> Unit = {}
     ) {
-        if (isOpen) return
+        if (isOpen || opening != null) {
+            onDone()
+            return
+        }
+        // Its own object, so a build can tell whether its opening is still the one under way.
+        val mine = { onDone() }
+        opening = mine
         source = depthSource
         chartRamp = ramp?.normalised()
         layerName = name
@@ -171,13 +203,38 @@ class Terrain3DScreen(
         customPrefs.edit().putBoolean(OPEN_KEY, true).putInt(SAFETY_KEY, safety).apply()
         toast(if (region != null) "Building 3D of the area on screen…" else "Building 3D view…")
         scope.launch {
-            val built = buildGrid(region ?: depthSource.bounds, null)
-            if (built == null) {
-                toast("This layer has no depth data to show in 3D")
-                return@launch
+            var shown = false
+            try {
+                val built = buildGrid(region ?: depthSource.bounds, null)
+                // Closed while it was building: nothing to show.
+                if (opening !== mine) return@launch
+                if (built == null) {
+                    toast("This layer has no depth data to show in 3D")
+                    return@launch
+                }
+                show()
+                shown = isOpen
+            } finally {
+                // However it ended without the view up (no depths, an error, the app going away).
+                if (!shown && opening === mine) giveUp()
             }
-            show()
         }
+    }
+
+    /** An opening that never got the view up: left as if closed, and its layer let go of. */
+    private fun giveUp() {
+        customPrefs.edit().putBoolean(OPEN_KEY, false).apply()
+        grid = null
+        payload = null
+        source = null
+        releaseLayer()
+    }
+
+    /** The opening under way is over: its layer is let go of (see [opening]). */
+    private fun releaseLayer() {
+        val done = opening ?: return
+        opening = null
+        done()
     }
 
     /** Shows the app's current waypoints, e.g. after one was renamed or deleted. */
@@ -230,6 +287,7 @@ class Terrain3DScreen(
         grid = null
         payload = null
         source = null
+        releaseLayer()
     }
 
     private suspend fun buildGrid(bounds: GeoBounds, range: ClosedFloatingPointRange<Double>?): TerrainGrid? {
@@ -562,7 +620,7 @@ class Terrain3DScreen(
 
     /** Called from the page on a WebView binder thread; every action hops back to the main thread. */
     private inner class Bridge {
-        /** The depth and speed units, for the page's readouts. */
+        /** The depth and speed units, for the page's readouts, and the shallow-water mark (metres; 0 for none). */
         @JavascriptInterface
         fun units(): String {
             val u = this@Terrain3DScreen.units()
@@ -571,10 +629,15 @@ class Terrain3DScreen(
                     "depthPerM" to u.depth.perMetre,
                     "depthLabel" to u.depth.label,
                     "speedPerKnot" to u.speed.perKnot,
-                    "speedLabel" to u.speed.label
+                    "speedLabel" to u.speed.label,
+                    "shallowMetres" to this@Terrain3DScreen.shallowMetres()
                 )
             )
         }
+
+        /** A position written as the chart writes them (Settings, Map display, Position format), for a tapped depth. */
+        @JavascriptInterface
+        fun position(lat: Double, lng: Double): String = au.opendepth.app.util.CoordinateFormatter.format(lat, lng)
 
         @JavascriptInterface
         fun close() {
@@ -766,7 +829,7 @@ class Terrain3DScreen(
         /** Saving an area offline suggests no deeper than this (about 1 m per pixel). */
         const val MAX_SAVE_ZOOM = 17
         /** Sentinel-2 cloudless is 10 m imagery: zoom 14 is its full detail. */
-        const val SENTINEL2_MAX_ZOOM = 14
+        const val SENTINEL2_MAX_ZOOM = au.opendepth.app.download.OfflineDetail.SENTINEL2_TOP_ZOOM
         const val MAX_NAME_LENGTH = 60
         const val CUSTOM_PREFS = "terrain3d"
         const val CUSTOM_KEY = "custom_drapes"

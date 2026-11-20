@@ -1,5 +1,39 @@
 # Changelog
 
+## 1.3.9 — 2026-11-21
+
+More to see on the chart and in 3D, and a download about half the size.
+
+- **Slope colours.** A depth layer can be coloured by how steep the seabed is instead of by
+  depth: ledges, walls and drop-offs stand out whatever their depth. **Colours** → **Colour by**.
+- **Contour lines.** Lines of equal depth on any depth layer, with the depth written on them.
+  **Contours** on the layer's row: Auto picks a spacing to suit the depths on screen, or choose
+  one.
+- **Shallow water in red.** Pick a depth under **Boat & navigation** and water shallower than
+  that is striped red, with a solid red edge so even a small bommie shows, on every depth
+  layer, in 2D and in 3D. A guide only: it takes no account
+  of the tide.
+- **3D: a marker where you tap.** A tap on the seabed leaves a small ball there, and the depth
+  and position stay up while you turn the view. **Clear** removes it.
+- **3D: a clearer boat.** The boat's marker keeps one size on the screen, with a line down to
+  the seabed under it.
+- **Scale bar** on the chart, in your distance unit (it can be turned off under Map display).
+- **Course arrow** on the boat's dot while the boat is moving.
+- **Position format:** degrees and minutes, degrees minutes and seconds, or decimal degrees,
+  wherever the app writes a position. **Settings** → **Map display**.
+- **Waypoints:** change a waypoint's colour or symbol after it's made. A photo with no location
+  in it can go where the phone is now, as well as at the crosshair.
+- **Offline maps by a drawn box.** Draw the area on the chart and set the detail with − and +;
+  the app says how many tiles that is before anything is downloaded.
+- **Storage:** what the app keeps on the phone and how big each part is. **Settings** → **Waypoints
+  and backup**.
+- **A hidden layer gives its memory back,** and a layer left hidden isn't loaded at start.
+- **Tap the credit line** at the bottom of the chart to read every map and data credit in full.
+- **Map credits:** a map link you add shows the credit you type and nothing more. The built-in
+  satellite picture carries its owner's current credit.
+- **A smaller download:** the APK is about 49 MB, down from 89 MB. It no longer carries the
+  parts only Intel devices and emulators use; phones and tablets (ARM) are unaffected.
+
 ## 1.3.8 — 2026-11-19
 
 Sea conditions, all of it:

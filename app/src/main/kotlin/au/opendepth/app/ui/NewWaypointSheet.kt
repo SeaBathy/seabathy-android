@@ -4,7 +4,6 @@ import android.content.Context
 import android.view.View
 import android.view.inputmethod.InputMethodManager
 import android.widget.ImageView
-import android.widget.LinearLayout
 import au.opendepth.app.model.Waypoint
 import au.opendepth.app.model.WaypointIcon
 import au.opendepth.app.util.CoordinateFormatter
@@ -44,6 +43,7 @@ class NewWaypointSheet(
 
     /** Registers the listeners once, during activity setup. */
     fun bind() {
+        WaypointSwatches.nameColours(views.colorSwatches)
         views.colorSwatches.forEachIndexed { index, swatch ->
             swatch.setOnClickListener {
                 selectedColor = Waypoint.PALETTE[index]
@@ -51,7 +51,7 @@ class NewWaypointSheet(
             }
         }
 
-        iconSwatches = buildIconSwatches()
+        iconSwatches = WaypointSwatches.addIcons(views.iconPicker)
         iconSwatches.forEachIndexed { index, swatch ->
             swatch.setOnClickListener {
                 selectedIcon = WaypointIcon.ALL[index].id
@@ -76,7 +76,7 @@ class NewWaypointSheet(
                 pendingLat = latitude
                 pendingLng = longitude
                 views.waypointCoordinates.text =
-                    CoordinateFormatter.formatDdm(latitude, longitude)
+                    CoordinateFormatter.format(latitude, longitude)
             }
         }
     }
@@ -90,7 +90,7 @@ class NewWaypointSheet(
         views.waypointName.text.clear()
         views.waypointName.error = null
         views.waypointDescription.text.clear()
-        views.waypointCoordinates.text = CoordinateFormatter.formatDdm(lat, lng)
+        views.waypointCoordinates.text = CoordinateFormatter.format(lat, lng)
         views.waypointCoordinates.visibility = View.VISIBLE
 
         refreshColorSelection()
@@ -129,47 +129,10 @@ class NewWaypointSheet(
         hide()
     }
 
-    private fun refreshColorSelection() {
-        views.colorSwatches.forEachIndexed { index, swatch ->
-            val selected = Waypoint.PALETTE[index] == selectedColor
-            val scale = if (selected) SELECTED_SCALE else 1f
-            swatch.scaleX = scale
-            swatch.scaleY = scale
-        }
-    }
+    // The choices are drawn by [WaypointSwatches], shared with the waypoint editor.
+    private fun refreshColorSelection() = WaypointSwatches.showColour(views.colorSwatches, selectedColor)
 
-    /** The icon choices, built from [WaypointIcon.ALL] so the list lives in one place. */
-    private fun buildIconSwatches(): List<ImageView> = WaypointIcon.ALL.map { icon ->
-        ImageView(context).apply {
-            setImageResource(icon.drawableRes)
-            contentDescription = icon.label
-            background = context.roundedBackground(
-                AppTheme.palette.surface,
-                AppTheme.palette.border,
-                UiRadius.CONTROL
-            )
-            val inset = context.dp(8)
-            setPadding(inset, inset, inset, inset)
-            views.iconPicker.addView(
-                this,
-                LinearLayout.LayoutParams(context.dp(40), context.dp(40)).apply {
-                    marginStart = context.dp(4)
-                    marginEnd = context.dp(4)
-                }
-            )
-        }
-    }
-
-    private fun refreshIconSelection() {
-        iconSwatches.forEachIndexed { index, swatch ->
-            val selected = WaypointIcon.ALL[index].id == selectedIcon
-            swatch.background = context.roundedBackground(
-                if (selected) AppTheme.palette.accent else AppTheme.palette.surface,
-                AppTheme.palette.border,
-                UiRadius.CONTROL
-            )
-        }
-    }
+    private fun refreshIconSelection() = WaypointSwatches.showIcon(iconSwatches, selectedIcon)
 
     private fun hideKeyboard() {
         val manager = context.getSystemService(Context.INPUT_METHOD_SERVICE)
@@ -177,9 +140,5 @@ class NewWaypointSheet(
         val focused = views.waypointSheet.findFocus() ?: views.waypointSheet
         manager?.hideSoftInputFromWindow(focused.windowToken, 0)
         focused.clearFocus()
-    }
-
-    private companion object {
-        const val SELECTED_SCALE = 1.25f
     }
 }

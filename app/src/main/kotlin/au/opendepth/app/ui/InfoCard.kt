@@ -27,7 +27,14 @@ class InfoCard(private val context: Context) {
     /** A labelled line: "Type" → "Marine park, QLD". [swatch] draws a colour square before the label. */
     data class Row(val label: String, val value: String, val swatch: Int? = null)
 
-    class Action(val label: String, val primary: Boolean = false, val destructive: Boolean = false, val onClick: () -> Unit = {})
+    /** [closes] false leaves the card open when the button is tapped: its [onClick] closes it (the dialog [show] returns) once it can. */
+    class Action(
+        val label: String,
+        val primary: Boolean = false,
+        val destructive: Boolean = false,
+        val closes: Boolean = true,
+        val onClick: () -> Unit = {}
+    )
 
     var badge: String? = null
     var badgeColour: Int = palette.accent
@@ -52,7 +59,7 @@ class InfoCard(private val context: Context) {
         val card = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             background = context.roundedBackground(palette.panel, palette.border, UiRadius.CARD)
-            setPadding(context.dp(20), context.dp(18), context.dp(20), context.dp(14))
+            setPadding(context.dp(CARD_PADDING_DP), context.dp(18), context.dp(CARD_PADDING_DP), context.dp(14))
         }
         badge?.let { text ->
             card.addView(TextView(context).apply {
@@ -150,7 +157,7 @@ class InfoCard(private val context: Context) {
                 if (a.primary) applyPrimaryStyle(palette) else applySecondaryStyle(palette)
                 if (a.destructive) setTextColor(palette.destructive)
                 setOnClickListener {
-                    dialog.dismiss()
+                    if (a.closes) dialog.dismiss()
                     a.onClick()
                 }
             }
@@ -160,6 +167,7 @@ class InfoCard(private val context: Context) {
             })
         }
         card.addView(buttonRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        fitButtons(buttonRow, list, cardWidth() - 2 * context.dp(CARD_PADDING_DP))
 
         val scroll = ScrollView(context).apply {
             isFillViewport = false
@@ -176,15 +184,49 @@ class InfoCard(private val context: Context) {
             }
         }
         dialog.setOnShowListener {
-            dialog.window?.setLayout(
-                minOf((context.resources.displayMetrics.widthPixels * 0.92f).toInt(), context.dp(460)),
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            )
+            dialog.window?.setLayout(cardWidth(), ViewGroup.LayoutParams.WRAP_CONTENT)
         }
         dialog.show()
         return dialog
     }
 
+    private fun cardWidth(): Int = minOf((context.resources.displayMetrics.widthPixels * 0.92f).toInt(), context.dp(460))
+
+    /**
+     * Three buttons can be wider than a narrow phone. When the row doesn't fit in [available]
+     * the buttons are drawn closer together, and if that isn't enough, one under another: the
+     * main one on top and the first (Cancel, usually) at the bottom. Cards whose buttons fit are
+     * left exactly as they were.
+     */
+    private fun fitButtons(row: LinearLayout, shown: List<Action>, available: Int) {
+        fun tooWide(): Boolean {
+            val free = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+            row.measure(free, free)
+            return row.measuredWidth > available
+        }
+        if (buttons.size < 2 || !tooWide()) return
+        for (button in buttons) {
+            button.minWidth = 0
+            button.minimumWidth = 0
+            button.setPadding(context.dp(TIGHT_PADDING_DP), 0, context.dp(TIGHT_PADDING_DP), 0)
+        }
+        if (!tooWide()) return
+        row.removeAllViews()
+        row.orientation = LinearLayout.VERTICAL
+        // sortedByDescending keeps the order of equals: the rest stay last-to-first.
+        for (index in shown.indices.reversed().sortedByDescending { shown[it].primary }) {
+            row.addView(buttons[index], LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = context.dp(8)
+            })
+        }
+    }
+
     private fun luminance(c: Int): Double =
         (0.299 * Color.red(c) + 0.587 * Color.green(c) + 0.114 * Color.blue(c)) / 255.0
+
+    private companion object {
+        const val CARD_PADDING_DP = 20
+        /** Either side of a button's label when the usual spacing doesn't fit. */
+        const val TIGHT_PADDING_DP = 12
+    }
 }

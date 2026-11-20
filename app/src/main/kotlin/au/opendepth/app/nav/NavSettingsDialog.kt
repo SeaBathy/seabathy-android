@@ -52,6 +52,21 @@ class NavSettingsDialog(
             units = units.copy(bearing = BearingReference.entries[it])
         }
 
+        // Shallow water ---------------------------------------------------------
+        body.addView(panels.sectionHeader("SHALLOW WATER"))
+        var shallowMark = initial.shallowMarkM
+        lateinit var shallowRow: TextView
+        shallowRow = panels.row(ShallowMarks.TITLE, ShallowMarks.label(shallowMark, units.depth)) {
+            // Offered in the depth unit chosen above, as it stands now.
+            val unit = units.depth
+            panels.showChoicePanel(ShallowMarks.TITLE, ShallowMarks.choiceLabels(unit), ShallowMarks.choiceIndex(shallowMark, unit)) { index ->
+                shallowMark = ShallowMarks.metresFor(index, unit)
+                shallowRow.text = "${ShallowMarks.TITLE}\n${ShallowMarks.label(shallowMark, unit)}"
+            }
+        }
+        panels.addRow(body, shallowRow)
+        body.addView(panels.caption(ShallowMarks.NOTE, topPaddingDp = 0))
+
         // Tides and sea conditions --------------------------------------------
         body.addView(panels.sectionHeader("TIDES AND SEA CONDITIONS"))
         val heightLabels = listOf("Metres (m)", "Feet (ft)")
@@ -148,7 +163,8 @@ class NavSettingsDialog(
             shallowAlarm = shallowAlarm.isChecked,
             keepScreenOn = screenOn.isChecked,
             courseUp = courseUp.isChecked,
-            nightFilter = night.isChecked
+            nightFilter = night.isChecked,
+            shallowMarkM = shallowMark
         )
 
         // Fields hold numbers in the units shown; switching units converts them.
@@ -184,6 +200,7 @@ class NavSettingsDialog(
             arrival.set(before.arrivalRadiusM * smallFactor(units))
             xte.set(before.xteLimitM * smallFactor(units))
             listOf(cruise, burn, tank, onBoard, draft, safety, arrival, xte).forEach { it.relabel() }
+            shallowRow.text = "${ShallowMarks.TITLE}\n${ShallowMarks.label(shallowMark, units.depth)}"
             updateEconomy()
         }
         listOf(cruise, burn, tank, onBoard, reserve).forEach { it.onChange { updateEconomy() } }

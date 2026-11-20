@@ -1,14 +1,16 @@
 package au.opendepth.app.settings
 
+import au.opendepth.app.model.MapCredits
+
 /**
  * A well-known XYZ raster tile endpoint offered as a quick-add overlay.
  *
  * Every entry here is a public endpoint whose provider permits use in a free
  * app with attribution. The attribution string is applied to the layer
  * automatically so the on-map credit is never left blank. Services whose
- * terms need an account or licence for app use (Esri's basemaps, for one)
- * are not built in; people can still add any of them themselves as a
- * custom XYZ link, under their own terms.
+ * terms need an account or licence for app use are not built in; people can
+ * still add a map link of their own, if its terms allow it, with the credit
+ * they type.
  */
 data class XyzTilePreset(
     val id: String,
@@ -36,8 +38,7 @@ object XyzTilePresets {
             label = "Sentinel-2 satellite",
             description = "Cloud-free satellite picture of the world, 10 m detail (EOX, 2024). Can be saved offline",
             urlTemplate = "https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2024_3857/default/g/{z}/{y}/{x}.jpg",
-            attribution = "Sentinel-2 cloudless - https://s2maps.eu by EOX IT Services GmbH " +
-                "(Contains modified Copernicus Sentinel data 2024)",
+            attribution = MapCredits.EOX_CLOUDLESS,
             category = XyzTilePreset.Category.SATELLITE,
             maxZoom = 15
         ),

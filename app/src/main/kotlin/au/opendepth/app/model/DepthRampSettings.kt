@@ -22,7 +22,20 @@ data class DepthRampSettings(
      * Valid from [MIN_HILLSHADE_EXAGGERATION] to [MAX_HILLSHADE_EXAGGERATION]; out-of-range values
      * aren't rejected here, only by [coerceHillshadeExaggeration].
      */
-    val hillshadeExaggeration: Double = DEFAULT_HILLSHADE_EXAGGERATION
+    val hillshadeExaggeration: Double = DEFAULT_HILLSHADE_EXAGGERATION,
+    /**
+     * Colours the seabed by how steep it is (flat blue, through yellow, to red
+     * at [steepestDegrees]) instead of by its depth, so ledges and drop-offs
+     * stand out whatever their depth. The depth range still decides which
+     * depths are shown. False, by depth, is also what ramps saved before this
+     * existed read back as.
+     */
+    val colourBySlope: Boolean = false,
+    /**
+     * The slope drawn fully red, in degrees. A ramp saved before this existed
+     * can read back as 0, so read [steepestDegrees] rather than this.
+     */
+    val slopeMaxDegrees: Double = DEFAULT_SLOPE_MAX_DEGREES
 ) {
     /** Normalises the pair so shallow is always the surface-most value. */
     fun normalised(): DepthRampSettings {
@@ -33,7 +46,22 @@ data class DepthRampSettings(
     val spanMetres: Double
         get() = shallowMetres - deepMetres
 
+    /** [slopeMaxDegrees], or the default where none was saved. */
+    val steepestDegrees: Double
+        get() = if (slopeMaxDegrees.isFinite() && slopeMaxDegrees > 0.0) slopeMaxDegrees else DEFAULT_SLOPE_MAX_DEGREES
+
     companion object {
+        const val DEFAULT_SLOPE_MAX_DEGREES = 20.0
+
+        /** The slopes offered for "Red from", as the 3D view offers them. */
+        val SLOPE_MAX_CHOICES: List<Pair<Double, String>> = listOf(
+            5.0 to "5° (gentle seabeds)",
+            10.0 to "10°",
+            20.0 to "20°",
+            35.0 to "35°",
+            60.0 to "60° (cliffs only)"
+        )
+
         const val DEFAULT_PALETTE_ID = "rainbow"
         const val DEFAULT_SHALLOW_METRES = -6.0
         const val DEFAULT_DEEP_METRES = -100.0

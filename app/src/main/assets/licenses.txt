@@ -15,7 +15,7 @@ Each map's credit shows on screen while it's shown. The services behind the app,
 - Seabed depths: GMRT (Ryan et al. 2009, doi:10.1029/2008GC002332), CC BY 4.0.
 - High-detail depths for Australia: Flukes, E. (2026), Multi-resolution bathymetry composite surface for Australian waters (EEZ), Institute for Marine and Antarctic Studies, doi:10.25959/Y9VF-V723; AusSeabed bathymetry, © Commonwealth of Australia (Geoscience Australia); and state surveys. All CC BY 4.0. Each build saves a _sources.txt listing every survey in it.
 - The high-detail engine (from BathyPicker, GPL-3.0) follows parts of GDAL 3.13.3 (gdalproximity.cpp, gdalwarpkernel.cpp, gdalwarpoperation.cpp), MIT licence, © Frank Warmerdam, Even Rouault.
-- Offline imagery: Sentinel-2 cloudless by EOX IT Services GmbH (contains modified Copernicus Sentinel data), CC BY-NC-SA 4.0.
+- Offline imagery: EOxCloudless https://cloudless.eox.at by EOX IT Services GmbH (Contains modified Copernicus Sentinel data 2024), CC BY-NC-SA 4.0.
 
 Not for navigation. SeaBathy is not an official nautical chart. 
 ============================

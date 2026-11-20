@@ -11,13 +11,14 @@ import android.widget.TextView
 import androidx.appcompat.widget.AppCompatButton
 import au.opendepth.app.model.GeoBounds
 import au.opendepth.app.tiles.WebMercatorTiles
-import java.util.Locale
+import au.opendepth.app.util.CoordinateFormatter
 
 /**
- * The download screen for the area on screen: pick zooms, then "Assess"
- * (nothing is fetched before that), then "Download". Changing the zooms
- * after assessing turns Download off until assessed again, so the download
- * always matches the estimate.
+ * The download screen for an area already chosen (the box drawn on the
+ * chart, or the area shown in 3D): pick zooms, then "Assess" (nothing is
+ * fetched before that), then "Download". Changing the zooms after assessing
+ * turns Download off until assessed again, so the download always matches
+ * the estimate.
  */
 class DownloadZoneDialog(
     private val context: Context,
@@ -30,7 +31,8 @@ class DownloadZoneDialog(
         bounds: GeoBounds,
         defaultMinZoom: Int,
         defaultMaxZoom: Int,
-        areaNote: String = "The area on screen. To change it, close this, move the map and open it again.",
+        /** What the area is and how to change it, shown above its corners. */
+        areaNote: String,
         onAssess: (zoomRange: IntRange, onSuccess: (String) -> Unit, onFailure: (String) -> Unit) -> Unit,
         onConfirm: (zoomRange: IntRange) -> Unit
     ) {
@@ -40,10 +42,10 @@ class DownloadZoneDialog(
         body.addView(panels.sectionHeader("AREA"))
         body.addView(
             panels.caption(
-                "The area on screen. To change it, close this, move the map and open it again.\n\n" +
+                "$areaNote\n\n" +
                     "$sourceName\n" +
-                    "West ${formatCoord(bounds.west)}   East ${formatCoord(bounds.east)}\n" +
-                    "South ${formatCoord(bounds.south)}   North ${formatCoord(bounds.north)}",
+                    "West ${CoordinateFormatter.formatLongitude(bounds.west)}   East ${CoordinateFormatter.formatLongitude(bounds.east)}\n" +
+                    "South ${CoordinateFormatter.formatLatitude(bounds.south)}   North ${CoordinateFormatter.formatLatitude(bounds.north)}",
                 topPaddingDp = 0
             )
         )
@@ -191,8 +193,6 @@ class DownloadZoneDialog(
         if (min < 0 || max > WebMercatorTiles.MAX_SANE_ZOOM || min > max) return null
         return min..max
     }
-
-    private fun formatCoord(value: Double): String = String.format(Locale.US, "%.4f", value)
 }
 
 /** How a disabled Download button is shown. */

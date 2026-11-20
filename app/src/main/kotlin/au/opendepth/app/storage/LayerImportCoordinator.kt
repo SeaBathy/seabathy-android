@@ -5,8 +5,10 @@ import android.content.Context
 import android.util.Log
 import au.opendepth.app.diagnostics.DiagnosticLog
 import au.opendepth.app.geotiff.GeoTiffReader
+import au.opendepth.app.map.LayerUse
 import au.opendepth.app.map.OverlayLayerController
 import au.opendepth.app.model.GeoBounds
+import au.opendepth.app.model.OverlayLayer
 import au.opendepth.app.ui.ImportProgressDialog
 import au.opendepth.app.util.UserFacingErrors
 import android.net.Uri
@@ -69,9 +71,7 @@ class LayerImportCoordinator(
     fun importGeoTiff(uri: Uri) {
         // A file that is already loaded is shown again, not added a second time.
         overlays.layerWithSource(uri.toString())?.let { existing ->
-            if (!existing.visible) overlays.setVisible(existing.id, true)
-            overlays.boundsOf(existing.id)?.let(onShowArea)
-            onResult("${existing.name} is already loaded")
+            showAgain(existing)
             return
         }
         scope.launch {
@@ -145,9 +145,7 @@ class LayerImportCoordinator(
             }
             result.onSuccess { (existing, imported, _) ->
                 if (existing != null) {
-                    if (!existing.visible) overlays.setVisible(existing.id, true)
-                    overlays.boundsOf(existing.id)?.let(onShowArea)
-                    onResult("${existing.name} is already loaded")
+                    showAgain(existing)
                 } else if (imported != null) {
                     // No camera move: the box was drawn where the user is looking.
                     overlays.addGeoTiff(imported, HighDetailDepths.CREDIT)
@@ -197,9 +195,7 @@ class LayerImportCoordinator(
             }
             result.onSuccess { (existing, imported) ->
                 if (existing != null) {
-                    if (!existing.visible) overlays.setVisible(existing.id, true)
-                    overlays.boundsOf(existing.id)?.let(onShowArea)
-                    onResult("${existing.name} is already loaded")
+                    showAgain(existing)
                 } else if (imported != null) {
                     val id = overlays.addGeoTiff(imported, SeabedDownload.CREDIT)
                     overlays.boundsOf(id)?.let(onShowArea)
@@ -256,6 +252,21 @@ class LayerImportCoordinator(
                 onError(error.readableMessage("Could not import the downloaded file"))
             }
         }
+    }
+
+    /**
+     * A file picked (or built) again that is already a layer: shown, if it
+     * was hidden, and the map moved to it. A layer hidden since before the
+     * app started has no known area until its file is open again, so the map
+     * moves once it is.
+     */
+    private fun showAgain(existing: OverlayLayer) {
+        if (!existing.visible) overlays.setVisible(existing.id, true)
+        overlays.whenAwake(existing.id, LayerUse.GO_TO) { layer, done ->
+            overlays.boundsOf(layer.id)?.let(onShowArea)
+            done()
+        }
+        onResult("${existing.name} is already loaded")
     }
 
     private fun describe(imported: GeoTiffImporter.ImportedGeoTiff): String = when (imported) {

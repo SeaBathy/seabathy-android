@@ -149,6 +149,26 @@ class AppSettingsRepository(private val preferences: SharedPreferences) {
         preferences.edit().putBoolean(KEY_SHOW_GRID, value).apply()
     }
 
+    /** The scale bar on the chart. On by default. */
+    fun loadShowScaleBar(): Boolean = preferences.getBoolean(KEY_SHOW_SCALE_BAR, true)
+
+    fun saveShowScaleBar(value: Boolean) {
+        preferences.edit().putBoolean(KEY_SHOW_SCALE_BAR, value).apply()
+    }
+
+    /**
+     * How positions are written: one of [au.opendepth.app.util.CoordinateFormatter.MODES].
+     * Degrees and decimal minutes until another is chosen.
+     */
+    fun loadPositionFormat(): String =
+        preferences.getString(KEY_POSITION_FORMAT, null)
+            ?.takeIf { it in au.opendepth.app.util.CoordinateFormatter.MODES }
+            ?: au.opendepth.app.util.CoordinateFormatter.MODE_DDM
+
+    fun savePositionFormat(mode: String) {
+        preferences.edit().putString(KEY_POSITION_FORMAT, mode).apply()
+    }
+
     fun loadCameraPosition(): CameraPosition = CameraPosition.Builder()
         .target(
             LatLng(
@@ -191,6 +211,8 @@ class AppSettingsRepository(private val preferences: SharedPreferences) {
         const val KEY_SHOW_WAYPOINT_NAMES = "show_waypoint_names"
         const val KEY_RASTER_QUALITY = "raster_quality"
         const val KEY_SHOW_GRID = "show_grid"
+        const val KEY_SHOW_SCALE_BAR = "show_scale_bar"
+        const val KEY_POSITION_FORMAT = "position_format"
 
         // A first start shows the world: nobody's home water is special.
         const val DEFAULT_LAT = 15f

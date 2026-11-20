@@ -148,7 +148,7 @@ class WaypointPanelBinder(
                         TextView(context).apply {
                             val description = waypoint.desc.orEmpty().trim()
                             text = description.ifBlank {
-                                CoordinateFormatter.formatDdm(waypoint.lat, waypoint.lng)
+                                CoordinateFormatter.format(waypoint.lat, waypoint.lng)
                             }
                             textSize = 10f
                             maxLines = 1

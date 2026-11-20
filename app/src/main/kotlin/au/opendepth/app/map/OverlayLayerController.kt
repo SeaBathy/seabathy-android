@@ -18,17 +18,23 @@ import au.opendepth.app.diagnostics.DiagnosticLog
 import au.opendepth.app.diagnostics.ResourceTracker
 import au.opendepth.app.download.redactUrl
 import au.opendepth.app.gdal.GdalSupport
+import au.opendepth.app.gdal.GdalTileCache
 import au.opendepth.app.gdal.GdalTileSource
 import au.opendepth.app.geotiff.DepthGrid
 import au.opendepth.app.geotiff.DepthGridRenderer
 import au.opendepth.app.geotiff.DepthSource
 import au.opendepth.app.geotiff.GeoTiffReader
 import au.opendepth.app.geotiff.InMemoryDepthGrid
+import au.opendepth.app.geotiff.ShallowWater
 import au.opendepth.app.geotiff.TiledDepthPyramid
+import au.opendepth.app.model.ContourSettings
 import au.opendepth.app.model.DepthRampSettings
 import au.opendepth.app.model.GeoBounds
 import au.opendepth.app.model.LayerKind
+import au.opendepth.app.model.MapCredit
+import au.opendepth.app.model.MapCredits
 import au.opendepth.app.model.OverlayLayer
+import au.opendepth.app.nav.DepthUnit
 import au.opendepth.app.settings.XyzTilePreset
 import au.opendepth.app.storage.AppOwnedArtifacts
 import au.opendepth.app.storage.DescriptorPaths
@@ -70,6 +76,11 @@ import kotlin.math.floor
  * [MapLayerIds.OVERLAY_ANCHOR], so appending puts a new layer on top of the
  * existing overlays while still leaving waypoints, routes and measurements
  * above everything.
+ *
+ * A hidden layer is not on the map at all, and holds nothing for drawing:
+ * hiding one takes its sources and layers off the style and gives back its
+ * memory ([rest]); showing it puts it back in its place in the stack. One
+ * hidden when the app starts is not opened until it is shown ([asleep]).
  */
 class OverlayLayerController(
     private val context: Context,
@@ -79,7 +90,9 @@ class OverlayLayerController(
     private val onStackChanged: () -> Unit,
     private val onMessage: (String) -> Unit,
     /** A layer was shown or hidden (its credit and the depth readout change; the list itself doesn't). */
-    private val onVisibilityChanged: () -> Unit = {}
+    private val onVisibilityChanged: () -> Unit = {},
+    /** The unit depths are written in on contour lines, as chosen in Boat & navigation. */
+    depthUnit: () -> DepthUnit = { DepthUnit.METRES }
 ) {
     private val layers = mutableListOf<OverlayLayer>()
     private val databases = mutableMapOf<String, SQLiteDatabase>()
@@ -93,6 +106,9 @@ class OverlayLayerController(
     // bitmaps — rendering, handing one to MapLibre, recycling — holds this.
     private val renderLock = Any()
     private val recolourJobs = mutableMapOf<String, Job>()
+
+    /** The contour lines of the depth layers that have them on. */
+    private val contours = DepthContourLayers(mapHolder, scope, depthUnit)
 
     /** Serves MBTiles and GDAL tiles to MapLibre; started with the first such layer, stopped after the last. */
     private var tileServer: LocalTileServer? = null
@@ -124,6 +140,49 @@ class OverlayLayerController(
      */
     private val unloaded = mutableListOf<OverlayLayer>()
 
+    /**
+     * Hidden layers whose file is closed, so nothing of theirs is in memory:
+     * those hidden when the app started (never opened), and those hidden
+     * since ([rest]). Showing one, or using one of its tools, opens it again
+     * ([wake]). Only layers [LayerStack.closesWhenHidden] says so are ever
+     * here, and every id here is in [layers].
+     */
+    private val asleep = mutableSetOf<String>()
+
+    /** Layers whose file is being opened again, and what waits for each. */
+    private val wakeJobs = mutableMapOf<String, Job>()
+    private val wakeWaiters = mutableMapOf<String, MutableList<Waiter>>()
+
+    /**
+     * Waiters whose layer finished opening while a new style was loading
+     * (the basemap changed): they run once the stack is back on the map.
+     */
+    private val deferredWaiters = mutableMapOf<String, MutableList<Waiter>>()
+
+    /** What each layer's tools are using it for: a hidden layer in use is not closed (see [endUse]). */
+    private val uses = LayerUses()
+
+    /** A tool waiting for a layer's file to open: [run] once it is, or only [done] if it never is. */
+    private class Waiter(val run: (OverlayLayer) -> Unit, val done: () -> Unit)
+
+    /**
+     * The visible depth layers' sources, topmost first, for reading off the
+     * main thread (the depth readout, navigation's shallow-water look-ahead).
+     * A new list is put here on the main thread each time a layer is shown,
+     * hidden, opened, closed, moved, added or removed; a list once put here
+     * is never changed.
+     */
+    @Volatile
+    private var visibleDepthSnapshot: List<DepthSource> = emptyList()
+
+    /** Counts what [say] has told the user, so a load that already explained its failure is not explained twice. */
+    private var messagesSaid = 0
+
+    private fun say(message: String) {
+        messagesSaid++
+        onMessage.invoke(message)
+    }
+
     /** Top-to-bottom order, as listed in the layers panel. */
     val stackTopFirst: List<OverlayLayer> get() = layers.asReversed().toList()
 
@@ -133,8 +192,80 @@ class OverlayLayerController(
     /** Layers the local tile server currently serves — for the debug resource snapshot. */
     val serverLayerCount: Int get() = tileServer?.activeLayerCount ?: 0
 
-    /** The depth data backing a GeoTIFF layer, or null for other kinds. */
+    /**
+     * The depth data backing a GeoTIFF layer, or null for other kinds, and
+     * for a hidden layer whose file is closed (see [whenAwake]).
+     */
     fun depthSourceFor(id: String): DepthSource? = depthSources[id]
+
+    /** Whether [layer] holds depths (so has colours, contour lines and a 3D view), known even while its file is closed. */
+    fun isDepthLayer(layer: OverlayLayer): Boolean =
+        depthSources.containsKey(layer.id) || (layer.id in asleep && LayerStack.holdsDepths(layer))
+
+    /** True for a hidden layer whose file is closed. */
+    fun isAsleep(id: String): Boolean = id in asleep
+
+    /**
+     * Runs [then] with the layer once its file is open: straight away for
+     * most, and for a hidden layer whose file is closed after opening it
+     * (without showing it). Nothing runs when the file cannot be opened; the
+     * user is told. Used by a layer's own tools: its colours, 3D view and
+     * "go to".
+     *
+     * The layer is in [use] from now until [then] calls the `done` it is
+     * given, once it has finished with the layer (the sheet or the view
+     * closed); a hidden layer is closed again when its last use is done.
+     * Returns false, doing nothing, while that use of the layer is already
+     * waiting or under way: a second tap on the same tool is ignored.
+     */
+    fun whenAwake(id: String, use: LayerUse, then: (layer: OverlayLayer, done: () -> Unit) -> Unit): Boolean {
+        val layer = layers.firstOrNull { it.id == id } ?: return false
+        if (!uses.begin(id, use)) return false
+        var ended = false
+        val done = {
+            if (!ended) {
+                ended = true
+                endUse(id, use)
+            }
+        }
+        if (id in asleep) wake(id, Waiter({ opened -> then(opened, done) }, done)) else then(layer, done)
+        return true
+    }
+
+    /**
+     * Closes again every hidden layer that was opened for one of its tools
+     * and that no tool is using any more: hidden layers hold nothing between uses.
+     */
+    fun restHidden() {
+        layers.toList().forEach { layer ->
+            if (!layer.visible && layer.id !in asleep && LayerStack.closesWhenHidden(layer) && !uses.inUse(layer.id)) {
+                rest(layer)
+            }
+        }
+    }
+
+    /** One use of a layer is done ([whenAwake]): a hidden layer no tool is using any more is closed again. */
+    private fun endUse(id: String, use: LayerUse) {
+        if (!uses.end(id, use)) return
+        val layer = layers.firstOrNull { it.id == id } ?: return
+        if (!layer.visible && id !in asleep && LayerStack.closesWhenHidden(layer)) rest(layer)
+    }
+
+    /** Runs the tools that waited for a layer to open while a new style loaded, once the stack is back on the map. */
+    private fun runDeferredWaiters() {
+        if (deferredWaiters.isEmpty() || mapHolder.style == null) return
+        val due = deferredWaiters.toList()
+        deferredWaiters.clear()
+        due.forEach { (id, waiters) ->
+            val layer = layers.firstOrNull { it.id == id }
+            waiters.forEach { waiter -> if (layer != null && id !in asleep) waiter.run(layer) else waiter.done() }
+        }
+    }
+
+    /** Puts a fresh [visibleDepthSnapshot]: a layer was shown, hidden, opened, closed, moved, added or removed. */
+    private fun refreshDepthSnapshot() {
+        visibleDepthSnapshot = layers.asReversed().filter { it.visible }.mapNotNull { depthSources[it.id] }
+    }
 
     // Style lifecycle -------------------------------------------------------
 
@@ -156,6 +287,7 @@ class OverlayLayerController(
         if (restored) {
             DiagnosticLog.log(TAG, "attachOrRestore: already restored, re-attaching ${layers.map { "${it.kind}:${it.name}" }}")
             attachAll(generation)
+            runDeferredWaiters()
             onComplete()
             return
         }
@@ -167,6 +299,7 @@ class OverlayLayerController(
                     "re-attaching ${layers.size} already-loaded layer(s)"
             )
             attachAll(generation)
+            runDeferredWaiters()
             pendingRestoreCompletion = onComplete
             return
         }
@@ -193,6 +326,7 @@ class OverlayLayerController(
                 layers.add(layer)
                 attach(layer, generation)
             }
+            refreshDepthSnapshot()
             restored = true
             if (addedBeforeRestore.isNotEmpty()) {
                 persist()
@@ -206,6 +340,24 @@ class OverlayLayerController(
         restoreJob = scope.launch {
             val missing = mutableListOf<OverlayLayer>()
             for (record in saved) {
+                if (!record.visible && LayerStack.closesWhenHidden(record)) {
+                    // Hidden: listed in its place, but its file is not opened until it is shown.
+                    // A file that is gone drops its layer, as for one on show (only asked whether it is there).
+                    val gone = isConfirmedMissing(record)
+                    if (!isActive) {
+                        DiagnosticLog.log(TAG, "restore CANCELLED at hidden ${record.kind}:${record.name}")
+                        return@launch
+                    }
+                    if (gone) {
+                        DiagnosticLog.log(TAG, "restore ${record.kind}:${record.name} -> hidden, file confirmed missing (dropped)")
+                        missing += record
+                        continue
+                    }
+                    layers.add(record)
+                    asleep += record.id
+                    DiagnosticLog.log(TAG, "restore ${record.kind}:${record.name} -> hidden, left unopened")
+                    continue
+                }
                 val prepared = prepare(record)
                 // Only a file confirmed gone drops its layer; any other failure
                 // keeps the record to retry next launch (see [unloaded]).
@@ -231,6 +383,7 @@ class OverlayLayerController(
                     prepared != null -> {
                         commit(prepared)
                         attach(prepared.layer, mapHolder.generation)
+                        refreshDepthSnapshot()
                     }
                     confirmedMissing -> missing += record
                     else -> unloaded += record
@@ -243,7 +396,7 @@ class OverlayLayerController(
                     "restore PRUNING records whose file is confirmed missing: " +
                         missing.joinToString { "${it.kind}:${it.name}(${loggableSource(it)})" }
                 )
-                onMessage(
+                say(
                     "Removed from your layers because the file is no longer on this device: " +
                         missing.joinToString { it.name }
                 )
@@ -252,6 +405,7 @@ class OverlayLayerController(
                 layers.add(layer)
                 attach(layer, mapHolder.generation)
             }
+            refreshDepthSnapshot()
             restored = true
             restoreSaved = null
             restoreAddedEarly = emptyList()
@@ -264,6 +418,7 @@ class OverlayLayerController(
             onStackChanged()
             ResourceTracker.snapshot(context, "restore complete", serverLayerCount)
             sweepOrphanedArtifacts()
+            runDeferredWaiters()
             val completion = pendingRestoreCompletion
             pendingRestoreCompletion = null
             completion?.invoke()
@@ -347,7 +502,7 @@ class OverlayLayerController(
         when (layer.kind) {
             LayerKind.XYZ -> TerrainDrape(
                 layer.id, layer.name, 0, layer.maxZoom.coerceIn(1, OverlayLayer.DEFAULT_MAX_ZOOM),
-                urlTemplate = layer.source, attribution = layer.attribution
+                urlTemplate = layer.source, attribution = MapCredits.current(layer.attribution)
             )
             LayerKind.MBTILES -> {
                 val database = databases[layer.id] ?: return@mapNotNull null
@@ -355,7 +510,7 @@ class OverlayLayerController(
                 if (metadata.isVector) return@mapNotNull null
                 TerrainDrape(
                     layer.id, layer.name, metadata.minZoom, metadata.maxZoom,
-                    attribution = layer.attribution.ifBlank { metadata.attribution },
+                    attribution = MapCredits.current(layer.attribution.ifBlank { metadata.attribution }),
                     bounds = metadata.bounds ?: layerBounds[layer.id]
                 ) { z, x, y ->
                     // MBTiles rows count from the south (TMS). The layer may be
@@ -462,7 +617,7 @@ class OverlayLayerController(
      * over a survey hid it completely.
      */
     private fun appendLayer(layer: OverlayLayer, belowDepthLayers: Boolean = false) {
-        val lowestDepth = layers.indexOfFirst { depthSources.containsKey(it.id) }
+        val lowestDepth = layers.indexOfFirst(::isDepthLayer)
         if (belowDepthLayers && lowestDepth >= 0) {
             layers.add(lowestDepth, layer)
             reattachStack()
@@ -470,6 +625,7 @@ class OverlayLayerController(
             layers.add(layer)
             attach(layer, mapHolder.generation)
         }
+        refreshDepthSnapshot()
         persist()
         onStackChanged()
         ResourceTracker.snapshot(context, "layer attach ${layer.kind}", serverLayerCount)
@@ -477,18 +633,178 @@ class OverlayLayerController(
 
     // Mutating layers -------------------------------------------------------
 
+    /**
+     * Shows a layer, or hides it. A hidden layer is taken off the map and
+     * gives back what it held for drawing ([rest]); shown again, it goes back
+     * in its place in the stack with its opacity, colours and contour lines
+     * as they were (for a layer whose file was closed, once that is open again).
+     */
     fun setVisible(id: String, visible: Boolean) {
+        val was = layers.firstOrNull { it.id == id }?.visible
         val layer = updateLayer(id) { it.copy(visible = visible) }
-        // The only writer of a persisted visible=false; logged so a layer
-        // that restores hidden can be traced back to when it was hidden.
+        // Logged so a layer that restores hidden can be traced back to when
+        // it was hidden (the other writer of visible=false is a layer that
+        // could not be opened when shown; see [wake]).
         DiagnosticLog.log(
             TAG,
             "setVisible: layer=${layer?.name ?: "unknown"} (id=$id) visible=$visible " +
-                "restored=$restored loaded=${layers.size}"
+                "restored=$restored loaded=${layers.size} asleep=${id in asleep}"
         )
-        layer?.let { applyPaint(it) }
+        if (layer != null && was != visible) {
+            when {
+                !visible -> rest(layer)
+                id in asleep -> wake(id)
+                else -> attach(layer, mapHolder.generation)
+            }
+        }
+        refreshDepthSnapshot()
         persist()
         onVisibilityChanged()
+    }
+
+    /**
+     * Takes a hidden layer off the map and gives back what it held: its map
+     * sources and layers (and with them the map's own copies of its picture
+     * or tiles), its rendered picture and shading, its contour lines, and its
+     * place on the tile server. A GeoTIFF's file is closed as well, with its
+     * decoded depths and tile caches in memory ([asleep]); an MBTiles pack
+     * keeps only its open file (see [LayerStack.closesWhenHidden]).
+     *
+     * What is saved with the layer (opacity, colours, contour lines, order)
+     * is untouched, and where it lies is remembered, so "go to" still works.
+     *
+     * A layer one of its tools is still using (its colours, its 3D view, a
+     * "go to" waiting for it to open; see [whenAwake]) only comes off the
+     * map: its file stays open until the last use is done ([endUse]).
+     */
+    private fun rest(layer: OverlayLayer) {
+        val id = layer.id
+        mapHolder.style?.let { style -> detach(style, id) }
+        // As in release(): off the server before closing what it served from.
+        tileServer?.let { server ->
+            server.removeMbtiles(id)
+            server.removeGdal(id)
+        }
+        contours.forget(id)
+        if (LayerStack.closesWhenHidden(layer) && uses.inUse(id)) {
+            stopTileServerIfIdle()
+            refreshDepthSnapshot()
+            DiagnosticLog.log(TAG, "rest ${layer.kind}:${layer.name}: off the map, kept open while in use")
+            return
+        }
+        wakeJobs.remove(id)?.cancel()
+        wakeWaiters.remove(id)
+        // A colour change still on its way never reached the saved tiles.
+        val recolouring = recolourJobs.remove(id)?.let { job -> job.isActive.also { job.cancel() } } == true
+        synchronized(renderLock) {
+            retireDrawings(id)
+            renderTargets.remove(id)?.recycle()
+            shades.remove(id)
+            slopes.remove(id)
+        }
+        if (LayerStack.closesWhenHidden(layer)) {
+            depthSources.remove(id)?.let(::closeOffMainThread)
+            imageBitmaps.remove(id)
+            asleep += id
+            if (recolouring && layer.gdalOnDemand) emptySavedColourTiles(layer)
+        } else if (layer.kind == LayerKind.MBTILES) {
+            // The pack's file stays open; SQLite lets go of the pages it read for the map.
+            runCatching { SQLiteDatabase.releaseMemory() }
+        }
+        stopTileServerIfIdle()
+        refreshDepthSnapshot()
+        DiagnosticLog.log(TAG, "rest ${layer.kind}:${layer.name}: off the map, asleep=${id in asleep}")
+        // Queued behind this layer's close, so the counts reflect it.
+        val serverLayers = serverLayerCount
+        RELEASE_EXECUTOR.execute { ResourceTracker.snapshot(context, "layer hide ${layer.kind}", serverLayers) }
+    }
+
+    /**
+     * Opens a hidden layer's closed file again, off the main thread, and puts
+     * the layer on the map if it is on show by then; [then] runs once it is
+     * open. One load at a time for a layer. If the file cannot be opened the
+     * layer goes back to hidden and the user is told.
+     */
+    private fun wake(id: String, waiter: Waiter? = null) {
+        waiter?.let { wakeWaiters.getOrPut(id) { mutableListOf() } += it }
+        if (wakeJobs[id]?.isActive == true) return
+        val record = layers.firstOrNull { it.id == id } ?: return
+        DiagnosticLog.log(TAG, "wake ${record.kind}:${record.name}: opening its file again")
+        wakeJobs[id] = scope.launch {
+            // A file closed by hiding the layer a moment ago is let go of first.
+            awaitReleases()
+            val saidBefore = messagesSaid
+            // Anything that goes wrong (too little memory for a big file, say) counts as not opened.
+            val prepared = runCatchingCancellable { prepare(record) }
+                .onFailure { DiagnosticLog.logError(TAG, "wake ${record.kind}:${record.name} FAILED", it) }
+                .getOrNull()
+            val mine = wakeJobs[id] === coroutineContext[Job]
+            val index = layers.indexOfFirst { it.id == id }
+            if (!isActive || !mine || index < 0 || id !in asleep) {
+                // Hidden again, or removed, as the read finished: a later load, if any, is the one that counts.
+                prepared?.discard()
+                return@launch
+            }
+            wakeJobs.remove(id)
+            if (prepared == null) {
+                DiagnosticLog.log(TAG, "wake ${record.kind}:${record.name}: could not be opened, left hidden")
+                if (messagesSaid == saidBefore) say("Could not open ${record.name}: its file may have been moved or deleted")
+                if (layers[index].visible) {
+                    layers[index] = layers[index].copy(visible = false)
+                    refreshDepthSnapshot()
+                    persist()
+                    onStackChanged()
+                }
+                // Nothing to run them with: their uses are over.
+                wakeWaiters.remove(id)?.forEach { it.done() }
+                return@launch
+            }
+            publish(prepared)
+            asleep -= id
+            refreshDepthSnapshot()
+            // What is saved with the layer may have changed while its file was read:
+            // only colours it never had are taken from the read.
+            val current = layers[index]
+            val coloursFitted = current.ramp == null && prepared.layer.ramp != null
+            if (coloursFitted) layers[index] = current.copy(ramp = prepared.layer.ramp)
+            val layer = layers[index]
+            if (layer.visible) attach(layer, mapHolder.generation)
+            if (coloursFitted) {
+                persist()
+                onStackChanged()
+            } else {
+                // Its depths can be read again: the readout under the crosshair may change.
+                onVisibilityChanged()
+            }
+            val waiters = wakeWaiters.remove(id).orEmpty()
+            if (mapHolder.style != null) {
+                waiters.forEach { it.run(layer) }
+            } else if (waiters.isNotEmpty()) {
+                // A new style is loading (the basemap changed): they run once the stack is back on it.
+                deferredWaiters.getOrPut(id) { mutableListOf() } += waiters
+            }
+            ResourceTracker.snapshot(context, "layer show ${layer.kind}", serverLayerCount)
+        }
+    }
+
+    /** Waits, off the main thread, for every close queued so far to have run (they run in order on one thread). */
+    private suspend fun awaitReleases() {
+        withContext(Dispatchers.IO) { runCatching { RELEASE_EXECUTOR.submit(Runnable { }).get() } }
+    }
+
+    /**
+     * Empties the saved colour tiles of a big survey whose file is closed:
+     * they were drawn in colours that have changed since, and would be shown
+     * as they are when the layer is opened again (only a change of tile size
+     * or shallow-water mark empties them on opening).
+     */
+    private fun emptySavedColourTiles(layer: OverlayLayer) {
+        val path = layer.gdalCachePath ?: return
+        // On the thread the layer's own close runs on, so behind it.
+        RELEASE_EXECUTOR.execute {
+            runCatching { GdalTileCache.open(File(path), STALE_COLOURS_KEY).close() }
+                .onFailure { DiagnosticLog.logError(TAG, "emptying the saved colour tiles of ${layer.name} FAILED", it) }
+        }
     }
 
     fun setOpacity(id: String, opacity: Float, persistNow: Boolean) {
@@ -530,7 +846,16 @@ class OverlayLayerController(
     /** Applies a new palette or depth range without re-reading the file. */
     fun setRamp(id: String, ramp: DepthRampSettings) {
         val layer = updateLayer(id) { it.copy(ramp = ramp.normalised()) } ?: return
-        val depthSource = depthSources[id] ?: return
+        val depthSource = depthSources[id]
+        if (depthSource == null) {
+            // A hidden layer whose file is closed: the colours are saved, and drawn when it is shown.
+            if (id in asleep) {
+                if (layer.gdalOnDemand) emptySavedColourTiles(layer)
+                persist()
+                onStackChanged()
+            }
+            return
+        }
 
         if (layer.gdalOnDemand) {
             // Tiles drawn with the old colours are in this cache and in MapLibre's: the
@@ -550,33 +875,84 @@ class OverlayLayerController(
             return
         }
 
-        val mapSource = mapHolder.style?.getSourceAs<ImageSource>(MapLayerIds.sourceFor(id))
-        if (mapSource == null) {
-            attach(layer, mapHolder.generation)
-        } else {
-            val effectiveRamp = layer.ramp ?: ramp
-            recolourJobs.remove(id)?.cancel()
-            recolourJobs[id] = scope.launch {
-                try {
-                    val bitmap = withContext(Dispatchers.Default) {
-                        renderDepth(layer.id, depthSource.previewGrid(), effectiveRamp)
-                    }
-                    // Re-fetched: the style may have been rebuilt while rendering.
-                    synchronized(renderLock) {
-                        mapHolder.style?.getSourceAs<ImageSource>(MapLayerIds.sourceFor(id))?.setImage(bitmap)
-                    }
-                } catch (error: CancellationException) {
-                    throw error
-                } catch (error: Exception) {
-                    Log.e(TAG, "Recolour failed for ${layer.name}", error)
-                    DiagnosticLog.logError(TAG, "recolour FAILED: layer=${layer.name}", error)
-                    onMessage("Could not apply the new colours to ${layer.name}")
-                }
-            }
-        }
+        redrawInMemory(layer, depthSource, layer.ramp ?: ramp)
         persist()
         onStackChanged()
     }
+
+    /**
+     * Draws a whole-grid depth layer again, off the main thread, and hands
+     * the new picture to the map: its colours changed, or the shallow-water mark.
+     */
+    private fun redrawInMemory(layer: OverlayLayer, depthSource: DepthSource, ramp: DepthRampSettings) {
+        val id = layer.id
+        // None while a new style loads: the layer goes back on with these colours when it is in.
+        val mapSource = runCatching { mapHolder.style?.getSourceAs<ImageSource>(MapLayerIds.sourceFor(id)) }.getOrNull()
+        if (mapSource == null) {
+            attach(layer, mapHolder.generation)
+            return
+        }
+        val ticket = drawTicket(id)
+        recolourJobs.remove(id)?.cancel()
+        recolourJobs[id] = scope.launch {
+            try {
+                // Null when the layer was hidden or removed before this got to draw: nothing is drawn or kept.
+                val bitmap = withContext(Dispatchers.Default) {
+                    renderDepth(layer.id, depthSource.previewGrid(), ramp, ticket)
+                } ?: return@launch
+                // Re-fetched: the style may have been rebuilt while rendering.
+                synchronized(renderLock) {
+                    mapHolder.style?.getSourceAs<ImageSource>(MapLayerIds.sourceFor(id))?.setImage(bitmap)
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                // Hidden or removed meanwhile, its depths let go of: not a failure to tell anyone about.
+                if (!isActive) return@launch
+                Log.e(TAG, "Recolour failed for ${layer.name}", error)
+                DiagnosticLog.logError(TAG, "recolour FAILED: layer=${layer.name}", error)
+                say("Could not apply the new colours to ${layer.name}")
+            }
+        }
+    }
+
+    /**
+     * Marks water shallower than [metres] with red stripes on every depth
+     * layer (0 for none), and draws them all again. See [ShallowWater].
+     */
+    fun setShallowMark(metres: Double) {
+        val before = ShallowWater.markMetres
+        ShallowWater.markMetres = metres
+        val mark = ShallowWater.markMetres
+        if (mark == before) return
+        layers.toList().forEach { layer ->
+            val depthSource = depthSources[layer.id] ?: return@forEach
+            val ramp = layer.ramp ?: autoFitRamp(depthSource)
+            if (layer.gdalOnDemand) {
+                // As for a colour change: the tiles drawn before are emptied out, off the
+                // main thread, and the layer goes back on with a new tile address. (A colour
+                // change waiting its turn is overtaken; going back on sets its colours too.)
+                recolourJobs.remove(layer.id)?.cancel()
+                recolourJobs[layer.id] = scope.launch {
+                    withContext(Dispatchers.IO) { (depthSource as? GdalTileSource)?.clearCache(ramp, mark) }
+                    layers.firstOrNull { it.id == layer.id }?.let { attach(it, mapHolder.generation) }
+                }
+            } else {
+                redrawInMemory(layer, depthSource, ramp)
+            }
+        }
+    }
+
+    /** Turns a depth layer's contour lines on or off, or changes how far apart they are. */
+    fun setContours(id: String, settings: ContourSettings) {
+        val layer = updateLayer(id) { it.copy(contours = settings) } ?: return
+        // A hidden layer's lines are saved, and go on the map with it when it is shown.
+        if (layer.visible) mapHolder.style?.let { style -> attachContours(style, layer) }
+        persist()
+    }
+
+    /** The chart came to rest, or the depth unit changed: the contour lines are worked out again. */
+    fun refreshContours() = contours.refresh()
 
     /** Moves a layer up or down the draw order by [delta] positions. */
     fun move(id: String, delta: Int) {
@@ -586,7 +962,9 @@ class OverlayLayerController(
         if (newIndex == currentIndex) return
 
         layers.add(newIndex, layers.removeAt(currentIndex))
+        // While a new style loads this does nothing: the rebuild puts the stack on in its new order.
         reattachStack()
+        refreshDepthSnapshot()
         persist()
         onStackChanged()
     }
@@ -606,6 +984,7 @@ class OverlayLayerController(
 
         mapHolder.style?.let { style -> detach(style, id) }
         releaseResources(id)
+        refreshDepthSnapshot()
         releaseContentUriPermission(layer)
         deleteArtifactsOf(layer)
 
@@ -683,12 +1062,14 @@ class OverlayLayerController(
     // Depth lookups ---------------------------------------------------------
 
     /**
-     * The visible GeoTIFF depth layers' sources, topmost first — read on the
-     * main thread, which owns the layer stack, and then sampled off it by
-     * [DepthQueryController] (a GDAL sample can wait behind a tile render).
+     * The visible GeoTIFF depth layers' sources, topmost first, sampled off
+     * the main thread by [DepthQueryController] (a GDAL sample can wait
+     * behind a tile render) and by navigation's look-ahead. Safe to call from
+     * any thread: a list that is replaced whole, never changed (see
+     * [visibleDepthSnapshot]). A source in it may be closed by a hide or a
+     * removal while it is read; it then has no answer.
      */
-    fun visibleDepthSourcesTopFirst(): List<DepthSource> =
-        layers.asReversed().filter { it.visible }.mapNotNull { depthSources[it.id] }
+    fun visibleDepthSourcesTopFirst(): List<DepthSource> = visibleDepthSnapshot
 
     /** Vector MBTiles layer ids, which is where contour features live. */
     fun contourLayerIds(): Array<String> {
@@ -700,21 +1081,20 @@ class OverlayLayerController(
             .toTypedArray()
     }
 
-    /** Attribution strings for every visible overlay, for the credit line. */
-    fun visibleAttributions(): List<String> = layers
+    /**
+     * The credit of every layer on show that has one, each under its layer's
+     * name, for the credit line and the full list behind it. A credit is
+     * shown as it was saved or typed, with nothing added.
+     */
+    fun visibleCredits(): List<MapCredit> = layers
         .filter { it.visible }
-        // A pack loaded without a credit uses the one written in the file.
-        .map { it to it.attribution.ifBlank { mbtilesMetadata[it.id]?.attribution.orEmpty() } }
+        .map { it to creditOf(it) }
         .filter { (_, text) -> text.isNotBlank() }
-        .map { (layer, text) ->
-            // Esri's terms ask for "Powered by Esri"; layers added by older builds were saved without it.
-            if (layer.source.contains("arcgis", ignoreCase = true) && !text.contains("Powered by Esri")) {
-                "$text · Powered by Esri"
-            } else {
-                text
-            }
-        }
-        .distinct()
+        .map { (layer, text) -> MapCredit(MapCredit.Group.LAYER, layer.name, text) }
+
+    /** A layer's credit: its own, or for a pack loaded without one, the one written in the file. */
+    private fun creditOf(layer: OverlayLayer): String =
+        MapCredits.current(layer.attribution.ifBlank { mbtilesMetadata[layer.id]?.attribution.orEmpty() })
 
     // Teardown --------------------------------------------------------------
 
@@ -723,10 +1103,18 @@ class OverlayLayerController(
         restoreJob?.cancel()
         restoreJob = null
         pendingRestoreCompletion = null
+        wakeJobs.values.forEach { it.cancel() }
+        wakeJobs.clear()
+        wakeWaiters.clear()
+        deferredWaiters.clear()
+        uses.clear()
+        asleep.clear()
+        visibleDepthSnapshot = emptyList()
         // Stop the server first, so no request thread can be handed a database or
         // GDAL source that is about to be closed.
         runCatching { tileServer?.stop() }
         tileServer = null
+        contours.release()
         databases.values.toSet().forEach { database ->
             runCatching { database.close() }
         }
@@ -740,9 +1128,11 @@ class OverlayLayerController(
         recolourJobs.values.forEach { it.cancel() }
         recolourJobs.clear()
         synchronized(renderLock) {
+            drawingReleased = true
             renderTargets.values.forEach { it.recycle() }
             renderTargets.clear()
             shades.clear()
+            slopes.clear()
         }
     }
 
@@ -754,18 +1144,32 @@ class OverlayLayerController(
             server.removeGdal(id)
         }
 
+        wakeJobs.remove(id)?.cancel()
+        wakeWaiters.remove(id)
+        deferredWaiters.remove(id)
+        // A tool still open on a removed layer finds nothing to give back when it is done.
+        uses.forget(id)
+        asleep -= id
         databases.remove(id)?.let { database -> runCatching { database.close() } }
         depthSources.remove(id)?.let(::closeOffMainThread)
         imageBitmaps.remove(id)
         layerBounds.remove(id)
         layerMinZoom.remove(id)
         mbtilesMetadata.remove(id)
+        contours.forget(id)
         recolourJobs.remove(id)?.cancel()
         synchronized(renderLock) {
+            retireDrawings(id)
             renderTargets.remove(id)?.recycle()
             shades.remove(id)
+            slopes.remove(id)
         }
 
+        stopTileServerIfIdle()
+    }
+
+    /** The tile server runs only while a layer on the map is served from it. */
+    private fun stopTileServerIfIdle() {
         tileServer?.let { server ->
             if (server.activeLayerCount == 0) {
                 runCatching { server.stop() }
@@ -908,7 +1312,7 @@ class OverlayLayerController(
                 }.onFailure { error ->
                     Log.e(TAG, "Reopening ${record.name} failed", error)
                     DiagnosticLog.logError(TAG, "restore MBTiles ${record.name}: openReadOnly FAILED", error)
-                    onMessage("Could not reload ${record.name}")
+                    say("Could not reload ${record.name}")
                 }.map { database ->
                     val metadata = withContext(Dispatchers.IO) { readMbtilesMetadata(database) }
                     val bounds = metadata.bounds
@@ -946,7 +1350,7 @@ class OverlayLayerController(
             .onFailure { error ->
                 Log.e(TAG, "Reopening pyramid ${record.name} failed", error)
                 DiagnosticLog.logError(TAG, "restore pyramid ${record.name} FAILED", error)
-                onMessage("Could not reload ${record.name}")
+                say("Could not reload ${record.name}")
             }
             .map { pyramid ->
                 Prepared(
@@ -989,7 +1393,7 @@ class OverlayLayerController(
         if (realPath == null || (!isInPlace && !withContext(Dispatchers.IO) { RealPathResolver.canOpen(realPath) })) {
             Log.e(TAG, "Reopening GDAL layer ${record.name} failed: no readable real path")
             DiagnosticLog.log(TAG, "restore GDAL ${record.name}: no readable real path (source=${record.source})")
-            onMessage("Could not reload ${record.name} — its access permission may have been revoked")
+            say("Could not reload ${record.name} — its access permission may have been revoked")
             return null
         }
 
@@ -998,7 +1402,7 @@ class OverlayLayerController(
         }.onFailure { error ->
             Log.e(TAG, "Reopening GDAL layer ${record.name} failed", error)
             DiagnosticLog.logError(TAG, "restore GDAL ${record.name} FAILED", error)
-            onMessage("Could not reload ${record.name}")
+            say("Could not reload ${record.name}")
         }.map { tileSource ->
             Prepared(
                 layer = if (record.ramp == null) record.copy(ramp = autoFitRamp(tileSource)) else record,
@@ -1035,7 +1439,7 @@ class OverlayLayerController(
         return outcome.onFailure { error ->
             Log.e(TAG, "Re-reading ${record.name} failed", error)
             DiagnosticLog.logError(TAG, "restore GeoTIFF ${record.name} FAILED", error)
-            onMessage("Could not reload ${record.name}")
+            say("Could not reload ${record.name}")
         }.getOrNull()
     }
 
@@ -1045,17 +1449,31 @@ class OverlayLayerController(
 
     /** Publishes a prepared layer into the live stack. */
     private fun commit(prepared: Prepared) {
+        publish(prepared)
+        layers.add(prepared.layer)
+    }
+
+    /** Takes over what a prepared layer opened: its file, depths or picture, and where it lies. */
+    private fun publish(prepared: Prepared) {
         val id = prepared.layer.id
         prepared.database?.let { databases[id] = it }
         prepared.depthSource?.let { depthSources[id] = it }
         prepared.bitmap?.let { imageBitmaps[id] = it }
         prepared.bounds?.let { layerBounds[id] = it }
-        prepared.mbtiles?.let { mbtilesMetadata[id] = it }
-        layers.add(prepared.layer)
+        prepared.mbtiles?.let {
+            mbtilesMetadata[id] = it
+            // Known here too: a pack that starts hidden is not put on the map, where this was set.
+            layerMinZoom[id] = it.minZoom.toDouble()
+        }
     }
 
     // Attaching a single layer ---------------------------------------------
 
+    /**
+     * Puts [layer] on the map in its place in the stack, replacing what was
+     * there for it. A hidden layer is only taken off: it has no map sources
+     * or layers until it is shown.
+     */
     private fun attach(layer: OverlayLayer, generation: Int) {
         val style = mapHolder.styleFor(generation) ?: run {
             DiagnosticLog.log(
@@ -1066,12 +1484,19 @@ class OverlayLayerController(
             return
         }
         detach(style, layer.id)
+        if (!layer.visible) return
+        // Opened again in the background (see [wake]), which puts it on the map when ready.
+        if (layer.id in asleep) return
 
         runCatching {
+            val below = slotBelow(style, layer.id)
             when (layer.kind) {
-                LayerKind.MBTILES -> attachMbtiles(style, layer)
-                LayerKind.GEOTIFF -> attachGeoTiff(style, layer)
-                LayerKind.XYZ -> attachXyz(style, layer)
+                LayerKind.MBTILES -> attachMbtiles(style, layer, below)
+                LayerKind.GEOTIFF -> {
+                    attachGeoTiff(style, layer, below)
+                    attachContours(style, layer)
+                }
+                LayerKind.XYZ -> attachXyz(style, layer, below)
             }
         }.onSuccess {
             val mode = if (layer.kind == LayerKind.GEOTIFF) {
@@ -1082,23 +1507,55 @@ class OverlayLayerController(
             DiagnosticLog.log(
                 TAG,
                 "attach ${layer.kind} SUCCESS: layer=${layer.name} visible=${layer.visible} opacity=${layer.opacity}$mode " +
-                    "styleHasLayer=${style.getLayer(MapLayerIds.layerFor(layer.id)) != null}"
+                    "styleHasLayer=${runCatching { style.getLayer(MapLayerIds.layerFor(layer.id)) != null }.getOrDefault(false)}"
             )
         }.onFailure { error ->
             Log.e(TAG, "Attaching ${layer.name} failed", error)
             DiagnosticLog.logError(TAG, "attach ${layer.kind} FAILED: layer=${layer.name}", error)
             // Tell the user: otherwise the layer sits in the stack with
             // working controls but never draws, with no explanation.
-            onMessage(UserFacingErrors.describe(error, "Could not display ${layer.name}"))
+            say(UserFacingErrors.describe(error, "Could not display ${layer.name}"))
         }
     }
 
     private fun detach(style: Style, id: String) {
+        contours.detach(style, id)
         runCatching { style.removeLayer(MapLayerIds.layerFor(id)) }
         runCatching { style.removeSource(MapLayerIds.sourceFor(id)) }
     }
 
-    private fun attachMbtiles(style: Style, layer: OverlayLayer) {
+    /**
+     * The map layer that [id]'s own go under: the colours of the next layer
+     * above it that is on the map (its lowest map layer), or the anchor all
+     * overlays sit under when there is none. So a layer shown again, or put
+     * back after a colour change, keeps its place in the stack.
+     */
+    private fun slotBelow(style: Style, id: String): String =
+        LayerStack.firstOnMapAbove(layers.map { it.id }, id) { above ->
+            style.getLayer(MapLayerIds.layerFor(above)) != null
+        }?.let(MapLayerIds::layerFor) ?: MapLayerIds.OVERLAY_ANCHOR
+
+    /** A depth layer's contour lines go on just above its colours, when it has them on. */
+    private fun attachContours(style: Style, layer: OverlayLayer) {
+        val source = depthSources[layer.id]
+        val maxTileZoom = (source as? GdalTileSource)?.let { gdalMaxTileZoom(layer, it.colourTileSize).toInt() } ?: 0
+        // On their own: lines that cannot be drawn must not report the layer itself as not displayed.
+        runCatching { contours.attach(style, layer, source, maxTileZoom) }
+            .onFailure { DiagnosticLog.logError(TAG, "attach contour lines FAILED: layer=${layer.name}", it) }
+    }
+
+    /**
+     * The finest zoom a GDAL layer's tiles are drawn at. A tile of N x 256
+     * pixels already holds the source's full detail one zoom level (or more)
+     * earlier, so the map stops there and overzooms, rather than drawing
+     * tiles finer than the data itself.
+     */
+    private fun gdalMaxTileZoom(layer: OverlayLayer, tileSize: Int): Float {
+        val extraZoom = floor(ln(tileSize / WebMercatorTiles.TILE_SIZE.toDouble()) / ln(2.0)).toInt().coerceAtLeast(0)
+        return (layer.sanitisedMaxZoom - extraZoom).coerceAtLeast(1f)
+    }
+
+    private fun attachMbtiles(style: Style, layer: OverlayLayer, below: String) {
         val database = databases[layer.id] ?: run {
             DiagnosticLog.log(TAG, "attachMbtiles: NO open database registered for ${layer.name} (id=${layer.id}) -- nothing added")
             return
@@ -1136,21 +1593,21 @@ class OverlayLayerController(
                     PropertyFactory.lineOpacity(opacity)
                 )
             }
-            style.addLayerBelow(contourLayer, MapLayerIds.OVERLAY_ANCHOR)
+            style.addLayerBelow(contourLayer, below)
         } else {
             style.addSource(RasterSource(sourceId, tileSet, RASTER_TILE_SIZE))
             style.addLayerBelow(
                 RasterLayer(layerId, sourceId).withProperties(
                     PropertyFactory.rasterOpacity(opacity)
                 ),
-                MapLayerIds.OVERLAY_ANCHOR
+                below
             )
         }
     }
 
-    private fun attachGeoTiff(style: Style, layer: OverlayLayer) {
+    private fun attachGeoTiff(style: Style, layer: OverlayLayer, below: String) {
         if (layer.gdalOnDemand) {
-            attachGdalOnDemand(style, layer)
+            attachGdalOnDemand(style, layer, below)
             return
         }
 
@@ -1182,7 +1639,7 @@ class OverlayLayerController(
                 ),
                 PropertyFactory.rasterFadeDuration(0f)
             ),
-            MapLayerIds.OVERLAY_ANCHOR
+            below
         )
     }
 
@@ -1190,7 +1647,7 @@ class OverlayLayerController(
      * A GDAL layer as a raster source from [LocalTileServer], drawn on demand
      * up to [OverlayLayer.maxZoom], the file's real detail.
      */
-    private fun attachGdalOnDemand(style: Style, layer: OverlayLayer) {
+    private fun attachGdalOnDemand(style: Style, layer: OverlayLayer, below: String) {
         val source = depthSources[layer.id] as? GdalTileSource
             ?: throw GeoTiffReader.UnsupportedGeoTiffException(
                 "This layer's GDAL tile source is not loaded"
@@ -1204,15 +1661,13 @@ class OverlayLayerController(
         // treat the source as new and refetch every visible tile, rather
         // than serving stale-coloured tiles out of its own client cache.
         // Size-versioned for the same reason: a quality change re-renders every tile.
+        // And mark-versioned: the shallow-water stripes are drawn into the tiles too.
         val tileSize = source.colourTileSize
-        val url = server.urlTemplateFor(layer.id, LocalTileServer.Kind.GDAL) + "?ramp=${ramp.hashCode()}&px=$tileSize&v=${GdalTileSource.RENDER_VERSION}"
-        // A tile of N x 256 pixels already holds the source's full detail one
-        // zoom level (or more) earlier, so stop there and let MapLibre
-        // overzoom, rather than rendering tiles finer than the data itself.
-        val extraZoom = floor(ln(tileSize / WebMercatorTiles.TILE_SIZE.toDouble()) / ln(2.0)).toInt().coerceAtLeast(0)
+        val url = server.urlTemplateFor(layer.id, LocalTileServer.Kind.GDAL) +
+            "?ramp=${ramp.hashCode()}&px=$tileSize&v=${GdalTileSource.RENDER_VERSION}&shallow=${ShallowWater.markMetres}"
         val tileSet = TileSet(TILEJSON_VERSION, url).apply {
             minZoom = 0f
-            maxZoom = (layer.sanitisedMaxZoom - extraZoom).coerceAtLeast(1f)
+            maxZoom = gdalMaxTileZoom(layer, tileSize)
             setBounds(bounds.west.toFloat(), bounds.south.toFloat(), bounds.east.toFloat(), bounds.north.toFloat())
         }
 
@@ -1226,7 +1681,7 @@ class OverlayLayerController(
                 PropertyFactory.rasterResampling(Property.RASTER_RESAMPLING_LINEAR),
                 PropertyFactory.rasterFadeDuration(0f)
             ),
-            MapLayerIds.OVERLAY_ANCHOR
+            below
         )
         // Relief shading is now baked into the colour tiles themselves, at
         // their full pixel size (see ReliefShading); MapLibre's own hillshade
@@ -1238,7 +1693,7 @@ class OverlayLayerController(
         )
     }
 
-    private fun attachXyz(style: Style, layer: OverlayLayer) {
+    private fun attachXyz(style: Style, layer: OverlayLayer, below: String) {
         val sourceId = MapLayerIds.sourceFor(layer.id)
         val tileSet = TileSet(TILEJSON_VERSION, layer.source).apply {
             minZoom = 0f
@@ -1249,16 +1704,41 @@ class OverlayLayerController(
             RasterLayer(MapLayerIds.layerFor(layer.id), sourceId).withProperties(
                 PropertyFactory.rasterOpacity(paintOpacity(layer))
             ),
-            MapLayerIds.OVERLAY_ANCHOR
+            below
         )
     }
 
-    /** Renders a depth grid into that layer's reusable bitmap target. */
+    /**
+     * Counts, for each layer, the times it has given back its drawing caches
+     * (hidden and closed, or removed). A recolour drawn off the main thread
+     * remembers the count it began at ([drawTicket]) and draws nothing if it
+     * has changed by the time it gets [renderLock]: it would fill the caches
+     * again for a layer that is asleep or gone. Guarded by [renderLock].
+     */
+    private val drawEpochs = mutableMapOf<String, Int>()
+
+    /** Set by [release], under [renderLock]: no recolour draws after it. */
+    private var drawingReleased = false
+
+    private fun drawTicket(id: String): Int = synchronized(renderLock) { drawEpochs[id] ?: 0 }
+
+    /** Called holding [renderLock]: recolours of [id] begun before now draw nothing. */
+    private fun retireDrawings(id: String) {
+        drawEpochs[id] = (drawEpochs[id] ?: 0) + 1
+    }
+
+    /**
+     * Renders a depth grid into that layer's reusable bitmap target. With a
+     * [ticket] from [drawTicket], draws and keeps nothing (returning null)
+     * when the layer has given back its drawing caches since it was taken.
+     */
     private fun renderDepth(
         id: String,
         grid: DepthGrid,
-        ramp: DepthRampSettings
-    ): Bitmap = synchronized(renderLock) {
+        ramp: DepthRampSettings,
+        ticket: Int? = null
+    ): Bitmap? = synchronized(renderLock) {
+        if (ticket != null && (drawingReleased || (drawEpochs[id] ?: 0) != ticket)) return null
         val target = renderTargets[id]?.takeIf { it.matches(grid) }
             ?: DepthGridRenderer.newTarget(grid).also { fresh ->
                 renderTargets.remove(id)?.recycle()
@@ -1270,26 +1750,44 @@ class OverlayLayerController(
         val shade = cached?.shade ?: DepthGridRenderer.shadeFor(grid, ramp).also {
             shades[id] = ShadeCache(grid, ramp.hillshadeExaggeration, it)
         }
-        DepthGridRenderer.render(grid, ramp, target, shade)
+        // Slopes only change with the grid: kept while the layer is coloured by
+        // slope (so a change of the angle drawn red is quick), let go when it isn't.
+        val slope = if (!ramp.colourBySlope) {
+            slopes.remove(id)
+            null
+        } else {
+            slopes[id]?.takeIf { it.grid === grid }?.slopes
+                ?: DepthGridRenderer.slopesOf(grid).also { slopes[id] = SlopeCache(grid, it) }
+        }
+        DepthGridRenderer.render(grid, ramp, target, shade, slope, shallowMetres = ShallowWater.markMetres)
     }
 
     private class ShadeCache(val grid: DepthGrid, val strength: Double, val shade: FloatArray?)
 
+    private class SlopeCache(val grid: DepthGrid, val slopes: FloatArray)
+
     /** Guarded by [renderLock]. */
     private val shades = mutableMapOf<String, ShadeCache>()
 
-    /** Pushes visibility and opacity into an already attached layer. */
+    /** Guarded by [renderLock]. */
+    private val slopes = mutableMapOf<String, SlopeCache>()
+
+    /** Pushes the opacity into a layer on the map. A hidden layer has nothing there to change: it is saved for when it is shown. */
     private fun applyPaint(layer: OverlayLayer) {
         val opacity = paintOpacity(layer)
-        when (val mapLayer = mapHolder.style?.getLayer(MapLayerIds.layerFor(layer.id))) {
-            is RasterLayer -> mapLayer.setProperties(PropertyFactory.rasterOpacity(opacity))
-            is LineLayer -> mapLayer.setProperties(PropertyFactory.lineOpacity(opacity))
-            else -> Unit
-        }
+        // No style while a new one loads: the layer goes back on at this opacity when it is in.
+        runCatching {
+            when (val mapLayer = mapHolder.style?.getLayer(MapLayerIds.layerFor(layer.id))) {
+                is RasterLayer -> mapLayer.setProperties(PropertyFactory.rasterOpacity(opacity))
+                is LineLayer -> mapLayer.setProperties(PropertyFactory.lineOpacity(opacity))
+                else -> Unit
+            }
+        }.onFailure { DiagnosticLog.logError(TAG, "opacity change FAILED: layer=${layer.name}", it) }
+        contours.applyPaint(layer)
     }
 
-    private fun paintOpacity(layer: OverlayLayer): Float =
-        if (layer.visible) layer.sanitisedOpacity else 0f
+    /** Only a layer on show is ever on the map (see [attach]), so this is simply its opacity. */
+    private fun paintOpacity(layer: OverlayLayer): Float = layer.sanitisedOpacity
 
     // MBTiles metadata ------------------------------------------------------
 
@@ -1394,6 +1892,8 @@ class OverlayLayerController(
         private val RELEASE_EXECUTOR = java.util.concurrent.Executors.newSingleThreadExecutor { runnable ->
             Thread(runnable, "layer-release").apply { isDaemon = true }
         }
+        /** Never a real colour-tile key (those are positive): tiles saved under it are emptied on the next opening. */
+        private const val STALE_COLOURS_KEY = -1
         private const val TILEJSON_VERSION = "2.1.0"
         private const val RASTER_TILE_SIZE = 256
         private const val DEFAULT_MIN_ZOOM = 0

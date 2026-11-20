@@ -27,6 +27,8 @@ class LayerPanelBinder(
     private val panels: PanelDialogs,
     private val onEditDepthColours: (OverlayLayer) -> Unit,
     private val onOpen3d: ((OverlayLayer) -> Unit)? = null,
+    /** Contour lines for a depth layer: on or off, and how far apart. */
+    private val onEditContours: ((OverlayLayer) -> Unit)? = null,
     /** Tapping a layer's name goes to it on the map. */
     private val onShowLayer: ((OverlayLayer) -> Unit)? = null
 ) {
@@ -163,6 +165,10 @@ class LayerPanelBinder(
                 isChecked = layer.visible
                 contentDescription = "Show ${layer.name}"
                 setOnCheckedChangeListener { _, checked ->
+                    // A hidden survey's file is closed: it takes a moment to open before it shows.
+                    if (checked && controller.isAsleep(layer.id)) {
+                        android.widget.Toast.makeText(context, "Opening ${layer.name}", android.widget.Toast.LENGTH_SHORT).show()
+                    }
                     controller.setVisible(layer.id, checked)
                 }
             }
@@ -236,15 +242,18 @@ class LayerPanelBinder(
             )
         })
 
-        // Depth layers: their own tools on a second row.
-        if (controller.depthSourceFor(layer.id) != null) {
+        // Depth layers: their own tools on a second row (a hidden one too, though its file is closed).
+        if (controller.isDepthLayer(layer)) {
             addView(LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
                 setPadding(0, context.dp(6), 0, 0)
                 addView(wideChip(chip("COLOURS", "Depth colours for ${layer.name}") {
                     onEditDepthColours(layer)
-                }, last = onOpen3d == null))
+                }, last = onOpen3d == null && onEditContours == null))
+                onEditContours?.let { edit ->
+                    addView(wideChip(chip("CONTOURS", "Contour lines for ${layer.name}") { edit(layer) }, last = onOpen3d == null))
+                }
                 onOpen3d?.let { open ->
                     addView(wideChip(chip("3D VIEW", "Show ${layer.name} in 3D") { open(layer) }, last = true))
                 }
@@ -321,7 +330,7 @@ class LayerPanelBinder(
 
             LayerKind.GEOTIFF -> {
                 val ramp = layer.ramp
-                if (controller.depthSourceFor(layer.id) != null && ramp != null) {
+                if (controller.isDepthLayer(layer) && ramp != null) {
                     "Depth GeoTIFF • ${ramp.shallowMetres.roundToInt()} to " +
                         "${ramp.deepMetres.roundToInt()} m • $opacity"
                 } else {

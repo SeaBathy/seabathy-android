@@ -441,6 +441,9 @@ class ConditionsFeature(
     /** The box's size, for keeping the map's compass clear of it. */
     val boxView: View get() = box
 
+    /** The card along the bottom while sea conditions are shown, for keeping the chart's scale bar above it. */
+    val cardView: View get() = card
+
     /** One line of the box. Tapping it shows that on the map (or hides it, when it's already showing). */
     private inner class BoxRow {
         var layer: ColourChoice? = null

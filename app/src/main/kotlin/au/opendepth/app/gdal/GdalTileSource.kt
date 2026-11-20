@@ -10,6 +10,8 @@ import au.opendepth.app.geotiff.DepthHistogram
 import au.opendepth.app.geotiff.DepthSource
 import au.opendepth.app.geotiff.GeoTiffReader
 import au.opendepth.app.geotiff.MapProjection
+import au.opendepth.app.geotiff.SeabedSlope
+import au.opendepth.app.geotiff.ShallowWater
 import au.opendepth.app.model.DepthRampSettings
 import au.opendepth.app.model.GeoBounds
 import au.opendepth.app.tiles.WebMercatorTiles
@@ -25,6 +27,7 @@ import kotlin.math.abs
 import kotlin.math.atan
 import kotlin.math.ceil
 import kotlin.math.floor
+import kotlin.math.hypot
 import kotlin.math.roundToInt
 import kotlin.math.cos
 import kotlin.math.max
@@ -50,6 +53,8 @@ class GdalTileSource private constructor(
      * huge, compressed) survey again, which took minutes at high quality.
      */
     private val valuesCache: GdalTileCache,
+    /** The shallow-water mark the tiles already in [cache] were drawn with; see [cacheShallowMetres]. */
+    cachedShallowMetres: Double = 0.0,
     /** Opens another handle on the same file, for reading tiles in parallel; null = primary only. */
     private val openReader: (() -> Dataset)? = null
 ) : DepthSource, AutoCloseable {
@@ -109,12 +114,22 @@ class GdalTileSource private constructor(
     @Volatile
     private var closed = false
 
+    /** True once [close] has run: every read from then on comes back empty. */
+    val isClosed: Boolean get() = closed
+
     /**
      * Guarded by [cacheLock]: the ramp every tile in [cache] was rendered with,
      * set by [clearCache]. Null until the first ramp change, when the cache
      * holds tiles from the layer's saved ramp, which is still current.
      */
     private var cacheRamp: DepthRampSettings? = null
+
+    /**
+     * Guarded by [cacheLock]: the shallow-water mark (see [ShallowWater]) every
+     * tile in [cache] was drawn with. The cache file records it too, so tiles
+     * striped for another depth are never served after a restart.
+     */
+    private var cacheShallowMetres: Double = cachedShallowMetres
 
     @Volatile
     private var cachedPreview: DepthGrid? = null
@@ -161,23 +176,26 @@ class GdalTileSource private constructor(
         zoom
     }
 
-    /** PNG bytes for tile (z, x, y) — from cache if already generated, else rendered now and cached. Null if this tile does not overlap [bounds] at all. */
-    fun renderTile(z: Int, x: Int, y: Int, ramp: DepthRampSettings): ByteArray? {
+    /**
+     * PNG bytes for tile (z, x, y) — from cache if already generated, else rendered now and cached. Null if this
+     * tile does not overlap [bounds] at all. Water shallower than [shallowMetres] gets red stripes (0 for none).
+     */
+    fun renderTile(
+        z: Int,
+        x: Int,
+        y: Int,
+        ramp: DepthRampSettings,
+        shallowMetres: Double = ShallowWater.markMetres
+    ): ByteArray? {
         if (!colourCacheBypassed) readCached(cache, z, x, y)?.let { return it }
         if (closed) return null
 
         val size = colourTileSize
         val tileBoundsWgs84 = WebMercatorTiles.tileBounds(z, x, y) ?: return null
-        val window = tileWindowFor(z, x, y, size) ?: return null
 
         val t0 = System.nanoTime()
         val valueKey = "$size/$z/$x/$y"
-        val values = synchronized(valueCache) { valueCache[valueKey] }
-            ?: readStoredValues(z, x, y, size)?.also { cachePut(valueKey, it) }
-            ?: (readTileValues(window, size) ?: return null).also {
-                cachePut(valueKey, it)
-                storeValues(z, x, y, size, it)
-            }
+        val values = tileValues(z, x, y, size) ?: return null
         // A tile with no survey in it (at the edges): skip colouring and encoding.
         if (values.all { it.isNaN() }) return emptyPng(size)
 
@@ -196,7 +214,22 @@ class GdalTileSource private constructor(
         val shadeKey = "$valueKey/shade/${ramp.hillshadeExaggeration}"
         val shade = synchronized(valueCache) { valueCache[shadeKey] }
             ?: DepthGridRenderer.shadeFor(grid, ramp)?.also { cachePut(shadeKey, it) }
-        val bitmap = DepthGridRenderer.render(grid, ramp, shade = shade)
+        // Slopes depend only on the depths, so a change of the angle drawn red reuses them too.
+        val slopes = if (!ramp.colourBySlope) {
+            null
+        } else {
+            val slopeKey = "$valueKey/slope"
+            synchronized(valueCache) { valueCache[slopeKey] }
+                ?: tileSlopes(z, x, y, size, grid).also { cachePut(slopeKey, it) }
+        }
+        val bitmap = DepthGridRenderer.render(
+            grid, ramp,
+            shade = shade,
+            slopes = slopes,
+            shallowMetres = shallowMetres,
+            stripePeriod = ShallowWater.tilePeriod(size),
+            mapTile = true
+        )
         val t2 = System.nanoTime()
         val png = encodePng(bitmap)
         bitmap.recycle()
@@ -206,12 +239,62 @@ class GdalTileSource private constructor(
             // A render that started before the ramp last changed is still
             // served (its request URL carries the old ramp), but not cached:
             // the cache must only ever hold tiles in the current colours.
-            // Likewise for a render that started before the tile size changed.
-            if (!closed && !colourCacheBypassed && size == colourTileSize && (cacheRamp == null || cacheRamp == ramp)) {
+            // Likewise for a render that started before the tile size changed,
+            // or before the shallow-water mark did.
+            if (!closed && !colourCacheBypassed && size == colourTileSize &&
+                (cacheRamp == null || cacheRamp == ramp) && shallowMetres == cacheShallowMetres
+            ) {
                 writeCached(cache, z, x, y, png)
             }
         }
         return png
+    }
+
+    /**
+     * The seabed's slope at each pixel of tile (z, x, y), in degrees, from
+     * its depths in [grid]. Zoomed in past the survey's own detail a survey
+     * cell fills two or three tile pixels, and a slope taken from one pixel
+     * to the next reads flat inside each cell and too steep along its edges.
+     * There it is measured across whole survey cells instead; see
+     * [SeabedSlope.degreesByCell].
+     */
+    private fun tileSlopes(z: Int, x: Int, y: Int, size: Int, grid: DepthGrid): FloatArray {
+        val window = tileWindowFor(z, x, y, size)
+        if (window == null || !window.repeatsCells(size)) return DepthGridRenderer.slopesOf(grid)
+        return window.slopesByCell(
+            grid.values, size, nativeWidth, nativeHeight,
+            DepthGridRenderer.cellWidthMetres(grid), DepthGridRenderer.cellHeightMetres(grid)
+        )
+    }
+
+    /**
+     * The depths tile (z, x, y) is drawn from, [size] to a side, north row
+     * first: from memory, else from [valuesCache], else read from the file
+     * (and then kept in both). Null where the tile misses the survey, or
+     * once closed.
+     */
+    private fun tileValues(z: Int, x: Int, y: Int, size: Int): FloatArray? {
+        val window = tileWindowFor(z, x, y, size) ?: return null
+        val valueKey = "$size/$z/$x/$y"
+        return synchronized(valueCache) { valueCache[valueKey] }
+            ?: readStoredValues(z, x, y, size)?.also { cachePut(valueKey, it) }
+            ?: (readTileValues(window, size) ?: return null).also {
+                cachePut(valueKey, it)
+                storeValues(z, x, y, size, it)
+            }
+    }
+
+    /**
+     * The depths of tile (z, x, y), [size] to a side, north row first, NaN
+     * where there are none: the very ones its colours are drawn from, so
+     * contour lines traced from them sit where the colours change. Mostly
+     * already in memory or in the tile cache, as the map has just drawn the
+     * tile. Null where the tile misses the survey, or once closed. Can read
+     * the file: call off the main thread.
+     */
+    fun tileDepths(z: Int, x: Int, y: Int, size: Int = colourTileSize): FloatArray? {
+        if (closed) return null
+        return tileValues(z, x, y, size)
     }
 
     /** The depth at [lat]/[lng] read straight from the file (the nearest cell), whatever the tiles show. */
@@ -371,14 +454,16 @@ class GdalTileSource private constructor(
 
     /**
      * Drops every cached colour tile; from now on only tiles rendered with
-     * [ramp] are cached.
+     * [ramp], and striped for [shallowMetres], are cached.
      */
-    fun clearCache(ramp: DepthRampSettings) {
+    fun clearCache(ramp: DepthRampSettings, shallowMetres: Double = ShallowWater.markMetres) {
         synchronized(cacheLock) {
             if (closed) return
             cacheRamp = ramp
+            cacheShallowMetres = shallowMetres
             try {
                 cache.clear()
+                cache.setContentKey(colourCacheKey(colourTileSize, shallowMetres))
             } catch (error: Exception) {
                 // A full disk here must not crash the app. The stale-colour tiles left
                 // behind are never served again this session.
@@ -399,7 +484,7 @@ class GdalTileSource private constructor(
             colourTileSize = size
             try {
                 cache.clear()
-                cache.setContentKey(colourCacheKey(size))
+                cache.setContentKey(colourCacheKey(size, cacheShallowMetres))
                 valuesCache.clear()
                 valuesCache.setContentKey(valuesCacheKey(size))
             } catch (error: Exception) {
@@ -556,24 +641,6 @@ class GdalTileSource private constructor(
     // Tile <-> native pixel mapping -------------------------------------
 
     /**
-     * The part of the raster a tile needs ([sourceX]..+[sourceWidth] native
-     * pixels, read at [readWidth] x [readHeight]) and, every [SAMPLE_STEP]
-     * output pixels, the exact native pixel each tile position falls on.
-     */
-    private class TileWindow(
-        val sourceX: Int,
-        val sourceY: Int,
-        val sourceWidth: Int,
-        val sourceHeight: Int,
-        val readWidth: Int,
-        val readHeight: Int,
-        /** Grid nodes per side. */
-        val nodes: Int,
-        val nodeCol: DoubleArray,
-        val nodeRow: DoubleArray
-    )
-
-    /**
      * Where tile [z]/[x]/[y] lies in the raster. A projected survey (UTM)
      * is turned a little against the web map's grid, and Mercator latitude
      * isn't linear, so each tile position is projected on its own (exactly
@@ -629,32 +696,7 @@ class GdalTileSource private constructor(
 
     /** Fills [canvas] (a [tileSize]-square tile) from [decoded], the window as read. */
     private fun sample(decoded: FloatArray, window: TileWindow, canvas: FloatArray, tileSize: Int) {
-        val n = window.nodes
-        val scaleX = window.readWidth.toDouble() / window.sourceWidth
-        val scaleY = window.readHeight.toDouble() / window.sourceHeight
-        for (row in 0 until tileSize) {
-            val fy = (row + 0.5) / SAMPLE_STEP
-            val j = floor(fy).toInt().coerceIn(0, n - 2)
-            val ty = fy - j
-            for (col in 0 until tileSize) {
-                val fx = (col + 0.5) / SAMPLE_STEP
-                val i = floor(fx).toInt().coerceIn(0, n - 2)
-                val tx = fx - i
-                val a = j * n + i
-                val b = a + 1
-                val c = a + n
-                val d = c + 1
-                val nativeCol = (window.nodeCol[a] * (1 - tx) + window.nodeCol[b] * tx) * (1 - ty) +
-                    (window.nodeCol[c] * (1 - tx) + window.nodeCol[d] * tx) * ty
-                val nativeRow = (window.nodeRow[a] * (1 - tx) + window.nodeRow[b] * tx) * (1 - ty) +
-                    (window.nodeRow[c] * (1 - tx) + window.nodeRow[d] * tx) * ty
-                if (nativeCol < 0.0 || nativeRow < 0.0 || nativeCol >= nativeWidth || nativeRow >= nativeHeight) continue
-                val readCol = floor((nativeCol - window.sourceX) * scaleX).toInt()
-                val readRow = floor((nativeRow - window.sourceY) * scaleY).toInt()
-                if (readCol !in 0 until window.readWidth || readRow !in 0 until window.readHeight) continue
-                canvas[row * tileSize + col] = decoded[readRow * window.readWidth + readCol]
-            }
-        }
+        window.forEachPixel(tileSize, nativeWidth, nativeHeight) { pixel, cell -> canvas[pixel] = decoded[cell] }
     }
 
     /** A fully transparent tile of [size], encoded once. */
@@ -692,17 +734,16 @@ class GdalTileSource private constructor(
         /**
          * Bumped whenever tile rendering changes (2 = relief shading baked
          * in, 3 = depths past the range take the end colours, 4 = hidden or
-         * end colours as the ramp says), so caches
+         * end colours as the ramp says, 6 = slope colours and the shallow-water
+         * stripes, 7 = a red rim round shallow water, and slopes measured
+         * across whole survey cells), so caches
          * written by an older version are emptied on open. Also in the tile
          * URLs, so MapLibre's own cache doesn't serve old tiles either.
          */
-        const val RENDER_VERSION = 5
+        const val RENDER_VERSION = 7
 
         /** Lossless WebP effort, 0–100: quality is the same at any; low is quick and still compact. */
         private const val WEBP_EFFORT = 25
-
-        /** Tile pixels between exactly projected points; in between is interpolated (well under a pixel off). */
-        private const val SAMPLE_STEP = 16
 
         /** Parallel tile reads per layer: a core or two left for the map and the UI. */
         private val READERS = (Runtime.getRuntime().availableProcessors() - 2).coerceIn(1, 3)
@@ -716,8 +757,17 @@ class GdalTileSource private constructor(
          */
         private val VALUE_CACHE_BYTES: Long = min(Runtime.getRuntime().maxMemory() / 8, 64L * 1024 * 1024)
 
-        /** What a colour-tile cache holds: renderer version and tile size. */
-        fun colourCacheKey(tilePixels: Int): Int = RENDER_VERSION * 10_000 + tilePixels
+        /**
+         * What a colour-tile cache holds: renderer version, tile size, and the
+         * shallow-water mark its tiles are striped for (to the centimetre; 0
+         * for none), which is not part of a layer's own colours.
+         */
+        fun colourCacheKey(tilePixels: Int, shallowMetres: Double = 0.0): Int =
+            RENDER_VERSION * 10_000 + tilePixels +
+                (shallowMetres * 100).roundToInt().coerceIn(0, MAX_SHALLOW_KEY_CM) * 1_000_000
+
+        /** The deepest mark offered is 20 m; this keeps a stray larger one inside an Int. */
+        private const val MAX_SHALLOW_KEY_CM = 2_000
 
         /** What a values cache holds: its encoding and tile size (not the colours). */
         fun valuesCacheKey(tilePixels: Int): Int = TileValueCodec.VERSION * 10_000 + tilePixels
@@ -744,10 +794,12 @@ class GdalTileSource private constructor(
                 if (known == null && statsKey != null && info.rawMin.isFinite() && info.rawMax.isFinite()) {
                     stats.edit().putString(statsKey, "${info.rawMin},${info.rawMax}").apply()
                 }
-                cache = GdalTileCache.open(cacheFile, colourCacheKey(defaultColourTileSize))
+                // Tiles cached with stripes for another shallow-water mark are emptied here.
+                val shallowMetres = ShallowWater.markMetres
+                cache = GdalTileCache.open(cacheFile, colourCacheKey(defaultColourTileSize, shallowMetres))
                 deleteOldElevationCache(cacheFile)
                 val valuesCache = GdalTileCache.open(valuesCacheFileFor(cacheFile), valuesCacheKey(defaultColourTileSize))
-                GdalTileSource(dataset, info, cache, valuesCache) { GdalDepthImporter.openDataset(context, sourcePath) }
+                GdalTileSource(dataset, info, cache, valuesCache, shallowMetres) { GdalDepthImporter.openDataset(context, sourcePath) }
             } catch (error: Throwable) {
                 // The colour cache, opened first, isn't closed by a later failure on its own.
                 cache?.close()
@@ -777,6 +829,109 @@ class GdalTileSource private constructor(
 
         /** The stored tile depths, likewise next to [cacheFile]. */
         fun valuesCacheFileFor(cacheFile: File): File = File(cacheFile.parentFile, cacheFile.name + ".values")
+    }
+}
+
+/** Tile pixels between exactly projected points; in between is interpolated (well under a pixel off). */
+internal const val SAMPLE_STEP = 16
+
+/**
+ * The part of the raster a tile needs ([sourceX]..+[sourceWidth] native
+ * pixels, read at [readWidth] x [readHeight]) and, every [SAMPLE_STEP]
+ * output pixels, the exact native pixel each tile position falls on.
+ * Plain sums, so it is unit-tested on the JVM.
+ */
+internal class TileWindow(
+    val sourceX: Int,
+    val sourceY: Int,
+    val sourceWidth: Int,
+    val sourceHeight: Int,
+    val readWidth: Int,
+    val readHeight: Int,
+    /** Grid nodes per side. */
+    val nodes: Int,
+    val nodeCol: DoubleArray,
+    val nodeRow: DoubleArray
+) {
+    /** Cells as read for each native pixel: 1 at full detail, less when the read is thinned. */
+    val scaleX: Double = readWidth.toDouble() / sourceWidth
+    val scaleY: Double = readHeight.toDouble() / sourceHeight
+
+    /** How many cells, as read, the tile is across and down its middle (along its own lines, if the survey is turned). */
+    val cellsAcross: Double
+    val cellsDown: Double
+
+    init {
+        val middle = (nodes - 1) / 2
+        cellsAcross = cellsBetween(middle * nodes, middle * nodes + nodes - 1)
+        cellsDown = cellsBetween(middle, (nodes - 1) * nodes + middle)
+    }
+
+    private fun cellsBetween(a: Int, b: Int): Double =
+        hypot((nodeCol[b] - nodeCol[a]) * scaleX, (nodeRow[b] - nodeRow[a]) * scaleY)
+
+    /**
+     * True when a [tileSize]-square tile is drawn closer in than the survey
+     * is fine: a cell then fills more than one tile pixel, and neighbouring
+     * pixels repeat it.
+     */
+    fun repeatsCells(tileSize: Int): Boolean = cellsAcross < tileSize || cellsDown < tileSize
+
+    /**
+     * Which cell of the window as read each pixel of a [tileSize]-square
+     * tile shows: [onPixel] is given the pixel's place in the tile and the
+     * cell's in the window, for every pixel that falls on the raster
+     * ([nativeWidth] by [nativeHeight]).
+     */
+    inline fun forEachPixel(tileSize: Int, nativeWidth: Int, nativeHeight: Int, onPixel: (pixel: Int, cell: Int) -> Unit) {
+        val n = nodes
+        for (row in 0 until tileSize) {
+            val fy = (row + 0.5) / SAMPLE_STEP
+            val j = floor(fy).toInt().coerceIn(0, n - 2)
+            val ty = fy - j
+            for (col in 0 until tileSize) {
+                val fx = (col + 0.5) / SAMPLE_STEP
+                val i = floor(fx).toInt().coerceIn(0, n - 2)
+                val tx = fx - i
+                val a = j * n + i
+                val b = a + 1
+                val c = a + n
+                val d = c + 1
+                val nativeCol = (nodeCol[a] * (1 - tx) + nodeCol[b] * tx) * (1 - ty) +
+                    (nodeCol[c] * (1 - tx) + nodeCol[d] * tx) * ty
+                val nativeRow = (nodeRow[a] * (1 - tx) + nodeRow[b] * tx) * (1 - ty) +
+                    (nodeRow[c] * (1 - tx) + nodeRow[d] * tx) * ty
+                if (nativeCol < 0.0 || nativeRow < 0.0 || nativeCol >= nativeWidth || nativeRow >= nativeHeight) continue
+                val readCol = floor((nativeCol - sourceX) * scaleX).toInt()
+                val readRow = floor((nativeRow - sourceY) * scaleY).toInt()
+                if (readCol !in 0 until readWidth || readRow !in 0 until readHeight) continue
+                onPixel(row * tileSize + col, readRow * readWidth + readCol)
+            }
+        }
+    }
+
+    /**
+     * The seabed's slope at each pixel of a [tileSize]-square tile whose
+     * depths are [values], measured from survey cell to survey cell; see
+     * [SeabedSlope.degreesByCell]. [pixelX]/[pixelY] are a tile pixel's size
+     * on the ground in metres: a cell's is that times the pixels it fills,
+     * whatever units the survey itself is in.
+     */
+    fun slopesByCell(
+        values: FloatArray,
+        tileSize: Int,
+        nativeWidth: Int,
+        nativeHeight: Int,
+        pixelX: Double,
+        pixelY: Double
+    ): FloatArray {
+        val cellOf = IntArray(tileSize * tileSize) { SeabedSlope.NO_CELL }
+        forEachPixel(tileSize, nativeWidth, nativeHeight) { pixel, cell -> cellOf[pixel] = cell }
+        return SeabedSlope.degreesByCell(
+            values, cellOf, readWidth, readHeight,
+            cellX = pixelX * tileSize / cellsAcross,
+            cellY = pixelY * tileSize / cellsDown
+        )
     }
 }
 

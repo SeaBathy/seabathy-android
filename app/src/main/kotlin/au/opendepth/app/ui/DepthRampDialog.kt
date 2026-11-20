@@ -30,8 +30,9 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 
 /**
- * Colours and depth range for a GeoTIFF depth layer. Each change goes to
- * [onRampChanged], which recolours the layer; the file is never reread.
+ * Colours and depth range for a GeoTIFF depth layer: by depth, in a palette,
+ * or by how steep the seabed is. Each change goes to [onRampChanged], which
+ * recolours the layer; the file is never reread.
  */
 class DepthRampDialog(
     private val context: Context,
@@ -48,6 +49,8 @@ class DepthRampDialog(
         hillshadeAvailable: Boolean = false,
         /** How the layer's depths are spread, when known: for Fit, and for saying how much a range shows. */
         histogram: au.opendepth.app.geotiff.DepthHistogram? = null,
+        /** Runs however the sheet is closed. */
+        onClosed: () -> Unit = {},
         onRampChanged: (DepthRampSettings) -> Unit
     ) {
         var ramp = initial.normalised()
@@ -151,6 +154,9 @@ class DepthRampDialog(
             panels.addRow(body, input)
         }
 
+        lateinit var colourByRow: TextView
+        lateinit var steepRow: TextView
+        val steepNote = panels.caption("", topPaddingDp = 0)
         lateinit var paletteRow: TextView
         lateinit var invertRow: TextView
         lateinit var outsideRow: TextView
@@ -188,10 +194,22 @@ class DepthRampDialog(
             legend.setImageBitmap(
                 DepthGridRenderer.renderLegend(ramp, LEGEND_WIDTH_PX, LEGEND_HEIGHT_PX)
             )
-            shallowEndLabel.text = formatDepth(ramp.shallowMetres)
-            deepEndLabel.text = formatDepth(ramp.deepMetres)
+            // The legend runs shallow to deep, or flat to steep when colouring by slope.
+            val bySlope = ramp.colourBySlope
+            val steepest = formatDegrees(ramp.steepestDegrees)
+            shallowEndLabel.text = if (bySlope) "Flat" else formatDepth(ramp.shallowMetres)
+            deepEndLabel.text = if (bySlope) "$steepest or steeper" else formatDepth(ramp.deepMetres)
             shallowValue.text = formatDepth(ramp.shallowMetres)
             deepValue.text = formatDepth(ramp.deepMetres)
+            colourByRow.text = "$COLOUR_BY\n${COLOUR_BY_LABELS[if (bySlope) 1 else 0]}"
+            steepRow.text = "$RED_FROM\n${steepLabel(ramp.steepestDegrees)}"
+            steepNote.text = "Blue is flat seabed; red is $steepest or steeper. " +
+                "The depth range still decides which depths are shown."
+            // Slope has its own colours: a palette, and reversing it, are for depth.
+            steepRow.visibility = if (bySlope) View.VISIBLE else View.GONE
+            steepNote.visibility = if (bySlope) View.VISIBLE else View.GONE
+            paletteRow.visibility = if (bySlope) View.GONE else View.VISIBLE
+            invertRow.visibility = if (bySlope) View.GONE else View.VISIBLE
             paletteRow.text =
                 "Colour palette\n${DepthPalette.byId(ramp.paletteId).label}"
             invertRow.text =
@@ -230,6 +248,27 @@ class DepthRampDialog(
             publish(ramp, coalesce)
         }
 
+        colourByRow = panels.row(COLOUR_BY, COLOUR_BY_LABELS[if (ramp.colourBySlope) 1 else 0]) {
+            panels.showChoicePanel(
+                title = COLOUR_BY,
+                labels = COLOUR_BY_LABELS,
+                selectedIndex = if (ramp.colourBySlope) 1 else 0
+            ) { index ->
+                apply(ramp.copy(colourBySlope = index == 1), syncSliders = false, syncInputs = false)
+            }
+        }
+
+        steepRow = panels.row(RED_FROM, steepLabel(ramp.steepestDegrees)) {
+            val choices = DepthRampSettings.SLOPE_MAX_CHOICES
+            panels.showChoicePanel(
+                title = RED_FROM,
+                labels = choices.map { it.second },
+                selectedIndex = choices.indexOfFirst { it.first == ramp.steepestDegrees }
+            ) { index ->
+                apply(ramp.copy(slopeMaxDegrees = choices[index].first), syncSliders = false, syncInputs = false)
+            }
+        }
+
         paletteRow = panels.row("Colour palette", DepthPalette.byId(ramp.paletteId).label) {
             panels.showChoicePanel(
                 title = "Colour palette",
@@ -256,6 +295,9 @@ class DepthRampDialog(
         }
 
         body.addView(panels.sectionHeader("COLOURS"))
+        panels.addRow(body, colourByRow)
+        panels.addRow(body, steepRow)
+        body.addView(steepNote)
         panels.addRow(body, paletteRow)
         panels.addRow(body, invertRow)
         panels.addRow(body, outsideRow)
@@ -380,7 +422,7 @@ class DepthRampDialog(
         }
 
         apply(ramp, syncSliders = true, syncInputs = true)
-        panels.showPanel("Depth colours", body, overMap = true)
+        panels.showPanel("Depth colours", body, overMap = true, onDismiss = onClosed)
     }
 
     // Controls --------------------------------------------------------------
@@ -499,6 +541,12 @@ class DepthRampDialog(
     private fun formatExaggeration(value: Double): String =
         String.format(Locale.US, "%.1fx", value)
 
+    private fun formatDegrees(value: Double): String = "${formatPlain(value)}°"
+
+    /** The slope drawn red as its choice is worded ("5° (gentle seabeds)"), or just the angle. */
+    private fun steepLabel(degrees: Double): String =
+        DepthRampSettings.SLOPE_MAX_CHOICES.firstOrNull { it.first == degrees }?.second ?: formatDegrees(degrees)
+
     private fun formatPlain(metres: Double): String =
         if (abs(metres - metres.roundToInt()) < 0.05) {
             metres.roundToInt().toString()
@@ -523,6 +571,9 @@ class DepthRampDialog(
         const val LEGEND_WIDTH_PX = 512
         const val LEGEND_HEIGHT_PX = 24
         const val LEGEND_HEIGHT_DP = 30
+        const val COLOUR_BY = "Colour by"
+        const val RED_FROM = "Red from"
+        val COLOUR_BY_LABELS = listOf("Depth", "Slope (ledges and drop-offs)")
 
         val PRESETS = listOf(
             RangePreset("Fit to this layer's depths") { shallowest, deepest, histogram ->

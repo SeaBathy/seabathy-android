@@ -1,6 +1,8 @@
 package au.opendepth.app.nav
 
 import android.content.SharedPreferences
+import java.util.Locale
+import kotlin.math.abs
 
 /** Where the ETA and fuel figures take their speed from. */
 enum class PlanSpeedSource { CRUISE, GPS }
@@ -37,7 +39,12 @@ data class NavSettings(
     /** Turn the chart so the boat's course points up while following GPS. */
     val courseUp: Boolean = false,
     /** A dim red filter over the chart, to keep night vision. */
-    val nightFilter: Boolean = false
+    val nightFilter: Boolean = false,
+    /**
+     * Water shallower than this is marked with red stripes on the depth
+     * layers and in 3D; 0 = off. Kept in metres whatever the depth unit.
+     */
+    val shallowMarkM: Double = 0.0
 ) {
     /** The least water the boat should be in. */
     val minimumDepthM: Double get() = draftM + safetyMarginM
@@ -67,6 +74,42 @@ data class NavSettings(
         /** Faster than any boat SeaBathy is for; a bigger number is a typo. */
         const val MAX_CRUISE_KN = 100.0
     }
+}
+
+/**
+ * The depths offered for marking shallow water in red, in each depth unit,
+ * and how the choice is written. The mark itself is kept in metres.
+ */
+object ShallowMarks {
+    const val TITLE = "Mark shallow water in red"
+    const val NOTE = "Water shallower than this is striped red with a solid red edge, on your depth layers and in 3D. " +
+        "A guide only: the depths come from surveys and take no account of the tide."
+
+    /** Round figures in [unit], shallowest first. */
+    fun offered(unit: DepthUnit): List<Double> = when (unit) {
+        DepthUnit.METRES -> listOf(1.0, 2.0, 3.0, 5.0, 10.0, 20.0)
+        DepthUnit.FEET -> listOf(3.0, 6.0, 10.0, 15.0, 30.0, 60.0)
+        DepthUnit.FATHOMS -> listOf(0.5, 1.0, 2.0, 3.0, 5.0, 10.0)
+    }
+
+    /** The choices as listed: Off, then each of [offered]. */
+    fun choiceLabels(unit: DepthUnit): List<String> =
+        listOf("Off") + offered(unit).map { "Shallower than ${plain(it)} ${unit.label}" }
+
+    /** Which of [choiceLabels] a mark of [metres] is, or -1 when it is none of them (it was picked in another unit). */
+    fun choiceIndex(metres: Double, unit: DepthUnit): Int =
+        if (metres <= 0.0) 0 else offered(unit).indexOfFirst { abs(it / unit.perMetre - metres) < 0.02 }.let { if (it < 0) -1 else it + 1 }
+
+    /** The mark, in metres, for the choice at [index] of [choiceLabels]. */
+    fun metresFor(index: Int, unit: DepthUnit): Double =
+        offered(unit).getOrNull(index - 1)?.let { it / unit.perMetre } ?: 0.0
+
+    /** "Shallower than 3 m", "Shallower than 6.6 ft" for a mark picked in metres, or "Off". */
+    fun label(metres: Double, unit: DepthUnit): String =
+        if (metres > 0.0) "Shallower than ${plain(metres * unit.perMetre)} ${unit.label}" else "Off"
+
+    /** To a tenth, without a needless ".0". */
+    private fun plain(value: Double): String = String.format(Locale.US, "%.1f", value).removeSuffix(".0")
 }
 
 /** Saves [NavSettings] one key per field, so a missing key keeps its default. */
@@ -109,7 +152,8 @@ class NavSettingsRepository(private val preferences: SharedPreferences) {
             shallowAlarm = p.getBoolean(K_SHALLOW, d.shallowAlarm),
             keepScreenOn = p.getBoolean(K_SCREEN_ON, d.keepScreenOn),
             courseUp = p.getBoolean(K_COURSE_UP, d.courseUp),
-            nightFilter = p.getBoolean(K_NIGHT, d.nightFilter)
+            nightFilter = p.getBoolean(K_NIGHT, d.nightFilter),
+            shallowMarkM = double(K_SHALLOW_MARK, d.shallowMarkM)
         )
     }
 
@@ -144,6 +188,7 @@ class NavSettingsRepository(private val preferences: SharedPreferences) {
             .putBoolean(K_SCREEN_ON, s.keepScreenOn)
             .putBoolean(K_COURSE_UP, s.courseUp)
             .putBoolean(K_NIGHT, s.nightFilter)
+            .putString(K_SHALLOW_MARK, s.shallowMarkM.toString())
             .apply()
     }
 
@@ -183,5 +228,6 @@ class NavSettingsRepository(private val preferences: SharedPreferences) {
         const val K_SCREEN_ON = "nav_keep_screen_on"
         const val K_COURSE_UP = "nav_course_up"
         const val K_NIGHT = "nav_night_filter"
+        const val K_SHALLOW_MARK = "nav_shallow_mark_m"
     }
 }

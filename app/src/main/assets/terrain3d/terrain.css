@@ -92,7 +92,8 @@ label.inline { display: flex; align-items: center; gap: 6px; color: var(--muted)
 
 .label-3d { color: #fff; font-size: 12px; font-weight: 600; padding: 2px 6px; border-radius: 4px;
   background: rgba(0,0,0,.55); border-left: 3px solid var(--c, #ef4444); white-space: nowrap; transform: translateY(-14px); }
-.boat-label { border-left-color: #ff8a00; }
+/* The boat's label sits above its marker on the screen, so it never covers it, even looking straight down. */
+.boat-label { border-left-color: #ff8a00; margin-top: -30px; }
 
 /* Waypoint pins: a 0x0 anchor on the seabed point, the flag drawn above it. */
 .wpt-pin { width: 0; height: 0; }
@@ -103,6 +104,15 @@ label.inline { display: flex; align-items: center; gap: 6px; color: var(--muted)
 .wpt-stem { width: 2px; height: 20px; background: var(--c, #ef4444); }
 .wpt-dot { width: 14px; height: 14px; border-radius: 50%; background: var(--c, #ef4444); border: 2px solid #fff;
   box-shadow: 0 0 0 1px rgba(0, 0, 0, .5); }
+/* Where the seabed was last tapped: a 0x0 anchor on the point, with a small ball drawn on it and a thin ring round it.
+   The ball is the size of a waypoint's dot, so it is easy to see without getting in the way. */
+.tap-mark { width: 0; height: 0; pointer-events: none; }
+.tap-ball { position: absolute; left: -7px; top: -7px; width: 14px; height: 14px; border-radius: 50%; box-sizing: border-box;
+  background: radial-gradient(circle at 35% 30%, #fff, var(--accent) 60%, #0b7c70); border: 2px solid #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .6), 0 1px 3px rgba(0, 0, 0, .55); }
+.tap-ring { position: absolute; left: -11px; top: -11px; width: 22px; height: 22px; border-radius: 50%; box-sizing: border-box;
+  border: 1.5px solid rgba(255, 255, 255, .75); animation: tap-ring .4s ease-out 1; }
+@keyframes tap-ring { from { transform: scale(1.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 .contour-label { color: #fff; font-size: 11px; font-weight: 600; white-space: nowrap; pointer-events: none;
   text-shadow: 0 0 3px #000, 0 0 3px #000, 0 0 2px #000; }
 

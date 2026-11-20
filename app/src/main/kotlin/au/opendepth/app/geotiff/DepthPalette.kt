@@ -1,10 +1,9 @@
 package au.opendepth.app.geotiff
 
-import android.graphics.Color
-
 /**
  * A named colour ramp expressed as stops running from the shallow end of the
- * depth range (position 0) to the deep end (position 1).
+ * depth range (position 0) to the deep end (position 1). Colours are ARGB
+ * ints worked out with plain arithmetic, so the ramp is unit-tested on the JVM.
  */
 class DepthPalette(
     val id: String,
@@ -30,12 +29,11 @@ class DepthPalette(
         return IntArray(size) { index -> colorAt(index.toDouble() / (size - 1)) }
     }
 
-    private fun blend(from: Int, to: Int, amount: Float): Int = Color.argb(
-        255,
-        channel(Color.red(from), Color.red(to), amount),
-        channel(Color.green(from), Color.green(to), amount),
-        channel(Color.blue(from), Color.blue(to), amount)
-    )
+    private fun blend(from: Int, to: Int, amount: Float): Int =
+        (0xFF shl 24) or
+            (channel((from shr 16) and 0xFF, (to shr 16) and 0xFF, amount) shl 16) or
+            (channel((from shr 8) and 0xFF, (to shr 8) and 0xFF, amount) shl 8) or
+            channel(from and 0xFF, to and 0xFF, amount)
 
     private fun channel(from: Int, to: Int, amount: Float): Int =
         (from + (to - from) * amount).toInt().coerceIn(0, 255)
@@ -128,6 +126,23 @@ class DepthPalette(
                     0xFF3C3C3C.toInt(),
                     0xFF000000.toInt()
                 )
+            )
+        )
+
+        /**
+         * Slope colours, as the 3D view's and the web app's: flat seabed
+         * (blue) through moderate (yellow) to steep (red). Not one of [ALL]:
+         * it is used when a layer is coloured by slope, not picked as a palette.
+         */
+        val SLOPE = DepthPalette(
+            id = "slope",
+            label = "Slope",
+            stops = intArrayOf(
+                0xFF173880.toInt(),
+                0xFF149E9E.toInt(),
+                0xFFF5D642.toInt(),
+                0xFFF27321.toInt(),
+                0xFFC7141A.toInt()
             )
         )
 

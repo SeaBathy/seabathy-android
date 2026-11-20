@@ -52,6 +52,12 @@ let profileMode = false;
 // Waypoint key on: each tap on the seabed saves a waypoint there.
 let waypointMode = false;
 let lastTap = null;
+
+/** Puts the depth readout away, and with it the ball that shows where the depth was read. */
+function clearReadout() {
+  $('readout').hidden = true;
+  terrain.setTapMark(null);
+}
 let profileStart = null;
 let lastFix = null;
 /**
@@ -106,7 +112,7 @@ const units = (() => {
   try {
     if (bridge.units) return JSON.parse(bridge.units());
   } catch (e) { /* fall through */ }
-  return { depthPerM: 1, depthLabel: 'm', speedPerKnot: 1, speedLabel: 'kn' };
+  return { depthPerM: 1, depthLabel: 'm', speedPerKnot: 1, speedLabel: 'kn', shallowMetres: 0 };
 })();
 /** A distance up or down, metres in, in the chosen depth unit. */
 const depthUnits = (metres) => `${round1(metres * units.depthPerM)} ${units.depthLabel}`;
@@ -130,6 +136,15 @@ function formatDdm(lat, lng) {
   return `${part(lat, 'N', 'S')} ${part(lng, 'E', 'W')}`;
 }
 
+// A position written as the app writes them everywhere (its Position format setting);
+// degrees and decimal minutes without the app.
+function positionText(lat, lng) {
+  try {
+    if (bridge.position) return bridge.position(lat, lng);
+  } catch (e) { /* fall through */ }
+  return formatDdm(lat, lng);
+}
+
 // ------------------------------------------------------------------ terrain
 
 let loweredSaid = false;
@@ -151,14 +166,16 @@ const terrain = new Terrain3D($('view'), {
     lastTap = { lat: ll.lat, lng: ll.lng, depth: hit.depth };
     $('readout').innerHTML = `<span><b>${depthText(hit.depth)}</b>` +
       (slope === null ? '' : ` · slope ${slope.toFixed(slope < 10 ? 1 : 0)}°`) +
-      `<br>${formatDdm(ll.lat, ll.lng)}</span>` +
-      '<button id="readout-close" class="icon small" aria-label="Close depth readout">✕</button>';
+      `<br>${positionText(ll.lat, ll.lng)}</span>` +
+      '<button id="readout-close" aria-label="Clear the depth and its mark on the seabed">Clear</button>';
     $('readout').hidden = false;
+    // A ball on the seabed shows where that depth is.
+    terrain.setTapMark({ col: hit.col, row: hit.row });
     if (waypointMode) bridge.addWaypoint(ll.lat, ll.lng, hit.depth);
   },
-  // Moving the view or tapping off the terrain clears the depth readout.
-  onDragStart: () => { $('readout').hidden = true; },
-  onTapEmpty: () => { $('readout').hidden = true; },
+  // The readout and its ball stay while the view is turned, so the spot can be looked at from
+  // any side. Tapping off the terrain, or the readout's Clear button, clears both.
+  onTapEmpty: () => clearReadout(),
   // Tapping a pin opens the app's editor: name, notes, Go to, delete.
   onWaypointClick: (id) => {
     if (bridge.editWaypoint) bridge.editWaypoint(id);
@@ -188,7 +205,7 @@ async function loadGrid() {
       fillPalettes();
       colourRange = { lo: Math.min(meta.chart.deep, meta.chart.shallow), hi: Math.max(meta.chart.deep, meta.chart.shallow) };
     }
-    $('readout').hidden = true;
+    clearReadout();
     $('profile').hidden = true;
     $('title').textContent = meta.name;
     $('grid-info').textContent = (meta.isolated ? `Isolated ${depthText(meta.isolated.shallow)} – ${depthText(meta.isolated.deep)}. ` : '') +
@@ -253,6 +270,8 @@ function applyAll() {
   terrain.setFollowBoat(settings.followBoat);
   recolor();
   applyColorMode();
+  // Shallow water in red, at the depth picked in the app's Settings.
+  terrain.setShallow(units.shallowMetres || 0);
   updateContours();
   updateWaypoints();
 }
@@ -557,7 +576,7 @@ $('btn-save-offline').addEventListener('click', () => {
 });
 
 $('readout').addEventListener('click', (e) => {
-  if (e.target.id === 'readout-close') $('readout').hidden = true;
+  if (e.target.id === 'readout-close') clearReadout();
 });
 
 function setWaypointMode(on) {
@@ -798,7 +817,7 @@ function profileTap(hit) {
   }
   drawProfile(terrain.setProfile(profileStart, hit));
   $('toast').hidden = true;
-  $('readout').hidden = true;
+  clearReadout();
   setProfileMode(false);
 }
 
@@ -876,13 +895,26 @@ renderTabs();
 window.__terrainTest = {
   state: () => ({ cols: model?.cols, rows: model?.rows, min: model?.min, max: model?.max, exaggeration: settings.exaggeration,
     labels: document.querySelectorAll('.contour-label').length, isolated: model?.isolated || null, partial: model?.partial,
-    cell: model && Math.min(model.cellX, model.cellY) }),
+    cell: model && Math.min(model.cellX, model.cellY), shallow: terrain.uniforms.uShallow.value }),
   tapCentre: () => {
     const r = document.querySelector('#view canvas').getBoundingClientRect();
     const hit = terrain.pick(r.left + r.width / 2, r.top + r.height / 2);
     return hit && { depth: hit.depth };
   },
-  frames: () => terrain.renderCount
+  frames: () => terrain.renderCount,
+  // The view as a picture (a PNG data address), drawn afresh.
+  picture: () => terrain.screenshot(),
+  // Marks water shallower than this many metres, as the app's setting does.
+  shallowTo: (metres) => terrain.setShallow(metres),
+  // The boat's marker on the screen, or null when there is none.
+  boat: () => terrain.boatOnScreen(),
+  // Where the ball for the last tap is on the screen, or null when there is none.
+  tapMark: () => {
+    const mark = document.querySelector('.tap-mark');
+    if (!mark) return null;
+    const box = mark.getBoundingClientRect();
+    return { x: box.left, y: box.top };
+  }
 };
 // Frames actually drawn, for the performance check.
 window.__perf = {

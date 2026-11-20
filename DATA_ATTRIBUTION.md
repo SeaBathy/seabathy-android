@@ -30,16 +30,17 @@ on the chart and in the 3D view.
 | OpenTopoMap | © OpenStreetMap contributors, SRTM, OpenTopoMap (CC-BY-SA) | Asks for no bulk downloads |
 | USGS Imagery | USGS The National Map | Allowed (US public domain) |
 | OpenSeaMap seamarks | © OpenSeaMap contributors | Shown online only |
-| Sentinel-2 cloudless 2024 (EOX), the built-in offline source (also in 3D) | Sentinel-2 cloudless - https://s2maps.eu by EOX IT Services GmbH (Contains modified Copernicus Sentinel data 2024) | Allowed under [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/): non-commercial use, keep the credit, share packs under the same licence |
+| Sentinel-2 cloudless 2024 (EOX), the built-in offline source (also in 3D) | EOxCloudless https://cloudless.eox.at by EOX IT Services GmbH (Contains modified Copernicus Sentinel data 2024) | Allowed under [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/): non-commercial use, keep the credit, share packs under the same licence |
 
 The apps' built-in offline download source is Sentinel-2 cloudless, whose
 licence allows offline copies. "Save this area offline" (also in the 3D view)
 works with any online map, including ones whose terms don't allow offline
 copies: whether to save one is the user's choice.
 
-Esri's basemaps are not built in, because Esri's terms need an ArcGIS licence
-for use in apps. You can still add one yourself with "Add a map link" if your
-own Esri terms allow it; the app then shows "Powered by Esri" with it. For a map or link you add yourself, the
+Some map services need an account or licence for use in apps, so they are not
+built in. You can still add a map link of your own with "Add a map link" if its
+terms allow it; the app shows the credit you type with it, exactly as typed.
+For a map or link you add yourself, the
 offline downloader will download from whatever you choose:
 **the choice is yours, and so is checking whether a provider's terms allow it**.
 SeaBathy is a tool: what you download with it, and from where, is up to you. The

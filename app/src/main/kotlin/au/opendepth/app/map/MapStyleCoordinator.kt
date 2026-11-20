@@ -1,6 +1,8 @@
 package au.opendepth.app.map
 
 import au.opendepth.app.diagnostics.DiagnosticLog
+import au.opendepth.app.model.MapCredit
+import au.opendepth.app.model.MapCredits
 import au.opendepth.app.settings.AppSettingsRepository
 import au.opendepth.app.settings.BasemapType
 import org.maplibre.android.camera.CameraPosition
@@ -23,7 +25,7 @@ class MapStyleCoordinator(
     private val onMessage: (String) -> Unit,
     /** Whether the phone has working internet now (checked, not just a network). */
     private val isOnline: () -> Boolean = { true },
-    /** Credits for data drawn outside the overlay stack (sea conditions). */
+    /** Credits for data drawn outside the overlay stack (sea conditions, buoys, zones), each saying what it is for. */
     private val extraAttributions: () -> List<String> = { emptyList() },
     private val graticule: GraticuleController? = null,
     private val navMarks: NavMarksController? = null,
@@ -56,7 +58,8 @@ class MapStyleCoordinator(
         settings.loadBasemap().let { saved ->
             currentType = saved.current
             customUrl = saved.customUrl
-            customAttribution = saved.customAttribution
+            // The built-in satellite map chosen as the basemap by an older version was saved with its old credit.
+            customAttribution = MapCredits.current(saved.customAttribution)
         }
     }
 
@@ -179,24 +182,28 @@ class MapStyleCoordinator(
         }
     }
 
+    /**
+     * Every credit for what is on the chart now, in the order of the credit
+     * line: the basemap, the layers on show, then the built-in data that is
+     * switched on. The line and the full list are both made from these.
+     */
+    fun credits(): List<MapCredit> = buildList {
+        baseAttribution()?.let { add(MapCredit(MapCredit.Group.BASEMAP, "", it)) }
+        addAll(overlays.visibleCredits())
+        // Each of these already says what it is the credit of ("Sea: ...", "Nav marks: ...").
+        extraAttributions().forEach { add(MapCredit(MapCredit.Group.BUILT_IN, "", it)) }
+    }
+
     /** Recomputes the credit line from the basemap and visible overlays. */
     fun refreshAttribution() {
-        val credits = buildList {
-            add(NOT_FOR_NAVIGATION)
-            baseAttribution()?.let { add(it) }
-            addAll(overlays.visibleAttributions())
-            addAll(extraAttributions())
-        }
-        onAttributionChanged(credits.distinct().joinToString(SEPARATOR))
+        onAttributionChanged(MapCredits.line(credits()))
     }
 
     private fun baseAttribution(): String? = when {
         usingOfflineFallback -> null
         currentType == BasemapType.DARK || currentType == BasemapType.OSM -> "OpenFreeMap © OpenMapTiles • © OpenStreetMap contributors"
-        currentType == BasemapType.CUSTOM -> customAttribution.trim().ifBlank { "Custom online tiles" }.let {
-            // Esri's terms ask for "Powered by Esri" with any of its basemaps.
-            if (customUrl.contains("arcgis", ignoreCase = true) && !it.contains("Powered by Esri")) "$it · Powered by Esri" else it
-        }
+        // A map link somebody added shows the credit they typed, with nothing added to it.
+        currentType == BasemapType.CUSTOM -> MapCredits.current(customAttribution.trim()).ifBlank { "Custom online tiles" }
 
         else -> null
     }
@@ -211,9 +218,6 @@ class MapStyleCoordinator(
     }
 
     private companion object {
-        const val SEPARATOR = " • "
-        /** Always first in the credits line on the chart: the agreement's short form, never out of sight. */
-        const val NOT_FOR_NAVIGATION = "Not for navigation"
         const val TAG = "SeaBathyStyle"
     }
 }

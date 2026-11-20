@@ -7,6 +7,7 @@ import android.text.InputType
 import android.view.View
 import android.widget.Button
 import android.widget.TextView
+import au.opendepth.app.model.MapCredits
 import au.opendepth.app.settings.XyzTilePreset
 import au.opendepth.app.settings.XyzTilePresets
 
@@ -54,7 +55,7 @@ class XyzTileDialog(
         body.addView(panels.sectionHeader("YOUR OWN TILE LINK"))
         body.addView(
             panels.caption(
-                "A link with {z}, {x} and {y} in it (with your own key, if the service gives you one). Check the provider's licence allows this.",
+                "A link with {z}, {x} and {y} in it (with your own key, if the service gives you one). " + MapCredits.OWN_MAP_NOTE,
                 topPaddingDp = 0
             )
         )
@@ -70,9 +71,9 @@ class XyzTileDialog(
         }
         panels.addRow(body, urlInput)
 
-        body.addView(fieldLabel("Attribution"))
+        body.addView(fieldLabel("Credit shown on the map"))
         val attributionInput = panels.input {
-            hint = "Provider credit shown on the map"
+            hint = "The credit the map's owner asks for"
             setText(callbacks.currentBasemapAttribution())
             setSingleLine(false)
             minLines = 2

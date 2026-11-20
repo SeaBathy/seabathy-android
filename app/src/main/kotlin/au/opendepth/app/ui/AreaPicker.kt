@@ -32,21 +32,39 @@ import kotlin.math.min
  * at the bottom shows the box's size (and anything [describe] adds, such as the download size),
  * with Cancel and the confirm button. Boxes larger than [maxKm] across are shown in red and
  * can't be confirmed.
+ *
+ * A picker whose limit isn't the box's size alone (the offline map's, where it is the number
+ * of tiles) passes no [maxKm] and an [extra] control: that decides which boxes are refused.
  */
 class AreaPicker(
     private val context: Context,
     private val root: ViewGroup,
     private val mapView: MapView,
     private val map: MapLibreMap,
-    private val maxKm: Double,
+    /** The most the box may span either way, or null for no such limit. */
+    private val maxKm: Double?,
     private val confirmLabel: String,
     /** A line about the box (download size, say); call the callback on the main thread. null clears it. */
     private val describe: (Box, (String?) -> Unit) -> Unit,
     private val onConfirm: (Box) -> Unit,
     private val onCancel: () -> Unit,
     /** The small heading in the bar. */
-    private val title: String = "HIGH-DETAIL DEPTHS"
+    private val title: String = "HIGH-DETAIL DEPTHS",
+    /** A control of the caller's in the bar, which then says what a box means in place of [describe]. */
+    private val extra: Extra? = null
 ) {
+    /** What an [Extra] says about a box: the line shown under its control, and whether the box can be confirmed. */
+    class Verdict(val text: String, val ok: Boolean)
+
+    /** A control added to the bar, under the box's size: the offline map's DETAIL. */
+    interface Extra {
+        /** The control. Call [changed] when it changes what [judge] answers, so the box is asked about again. */
+        fun view(changed: () -> Unit): View
+
+        /** Asked for every box shown, also while one is being dragged. */
+        fun judge(box: Box): Verdict
+    }
+
     data class Box(val south: Double, val west: Double, val north: Double, val east: Double) {
         val widthKm: Double get() = (east - west) * 111.32 * cos(Math.toRadians((south + north) / 2))
         val heightKm: Double get() = (north - south) * 110.57
@@ -62,6 +80,8 @@ class AreaPicker(
     private lateinit var confirm: Button
     private val cameraListener = MapLibreMap.OnCameraMoveListener { overlay?.invalidate() }
     private var describeToken = 0
+    /** The [extra] refused the box last shown. */
+    private var refused = false
 
     /** Shows the picker, starting with [initial], or empty (the usual) for the user to draw. */
     fun show(initial: Box? = null) {
@@ -96,17 +116,27 @@ class AreaPicker(
         val token = ++describeToken
         if (b == null) {
             sizeText.text = "Drag a finger across the chart to draw the area"
-            infoText.text = String.format(Locale.US, "Up to about %.0f km across. Two fingers move and zoom the map.", maxKm)
+            infoText.setTextColor(palette.secondaryText)
+            infoText.text = if (maxKm != null) {
+                String.format(Locale.US, "Up to about %.0f km across. Two fingers move and zoom the map.", maxKm)
+            } else {
+                "Two fingers move and zoom the map."
+            }
             hintText.visibility = View.GONE
             enable(false)
             return
         }
-        hintText.visibility = View.VISIBLE
-        val tooBig = max(b.widthKm, b.heightKm) > maxKm
+        // With a control of its own in the bar, a short screen has no room for the hint as well.
+        hintText.visibility = if (extra != null && isShortScreen()) View.GONE else View.VISIBLE
         showSize(b)
-        if (tooBig) {
+        if (maxKm != null && max(b.widthKm, b.heightKm) > maxKm) {
             infoText.text = String.format(Locale.US, "Too big: up to about %.0f km across. Make the box smaller.", maxKm)
             enable(false)
+            return
+        }
+        if (extra != null) {
+            // [showSize] has asked it, and shown its answer.
+            enable(!refused)
             return
         }
         infoText.text = "Working out the download…"
@@ -116,7 +146,17 @@ class AreaPicker(
 
     private fun showSize(b: Box) {
         sizeText.text = String.format(Locale.US, "%s × %s", km(b.widthKm), km(b.heightKm))
+        val verdict = extra?.judge(b) ?: return
+        refused = !verdict.ok
+        infoText.text = verdict.text
+        infoText.setTextColor(if (verdict.ok) palette.secondaryText else palette.destructive)
     }
+
+    /** Whether [b] can't be confirmed: wider than [maxKm], or refused by the [extra] when it was last shown. */
+    private fun tooBig(b: Box): Boolean = (maxKm != null && max(b.widthKm, b.heightKm) > maxKm) || refused
+
+    private fun isShortScreen(): Boolean =
+        context.resources.displayMetrics.heightPixels < context.dp(SHORT_SCREEN_DP)
 
     private fun km(v: Double) = if (v < 10) String.format(Locale.US, "%.1f km", v) else String.format(Locale.US, "%.0f km", v)
 
@@ -147,6 +187,7 @@ class AreaPicker(
             text = "Drag the box to move it, or a corner to resize it."
         }
         bar.addView(sizeText)
+        extra?.let { bar.addView(it.view { box?.let(::setBox) }) }
         bar.addView(infoText)
         bar.addView(hintText)
         val buttons = LinearLayout(context).apply {
@@ -217,7 +258,7 @@ class AreaPicker(
             canvas.drawRect(r.right, r.top, width.toFloat(), r.bottom, shade)
             canvas.drawRect(r, fill)
             val shown = drag?.let { toBox(it) } ?: box
-            val tooBig = shown?.let { max(it.widthKm, it.heightKm) > maxKm } == true
+            val tooBig = shown?.let { tooBig(it) } == true
             val colour = if (tooBig) palette.destructive else palette.accent
             edge.color = colour
             dashed.color = colour
@@ -311,6 +352,8 @@ class AreaPicker(
                         setBox(toBox(r))
                     } else {
                         box?.let { showSize(it) }
+                        // No box yet: the extra's line goes back to the opening hint.
+                        if (box == null && extra != null) setBox(null)
                     }
                     invalidate()
                 }
@@ -326,4 +369,9 @@ class AreaPicker(
     }
 
     private enum class Mode { DRAW, MOVE, RESIZE }
+
+    private companion object {
+        /** A screen shorter than this (a phone on its side) is short of room for the bar. */
+        const val SHORT_SCREEN_DP = 480
+    }
 }

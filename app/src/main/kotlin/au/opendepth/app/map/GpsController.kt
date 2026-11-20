@@ -2,6 +2,7 @@ package au.opendepth.app.map
 
 import android.content.Context
 import android.location.Location
+import android.os.SystemClock
 import au.opendepth.app.location.LocationController
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
@@ -91,27 +92,65 @@ class GpsController(
 
     fun stop() = locationController.stop()
 
-    /** Clears the on-map position marker without changing the mode. */
+    /** Clears the on-map position marker without changing the mode (and with it the course arrow: the GPS was switched off). */
     fun clearMarker() {
+        drawnAt = null
+        drawnCourse = null
+        arrow = GpsMarker.arrow(arrow, way = null, nowMs = SystemClock.elapsedRealtime())
         mapHolder.style
             ?.getSourceAs<GeoJsonSource>(MapLayerIds.GPS_SOURCE)
             ?.setGeoJson(MapLayerIds.EMPTY_GEOJSON)
     }
 
-    private fun handleLocation(location: Location) {
-        val previous = lastLocation
-        lastLocation = location
-        receivedAt = System.currentTimeMillis()
-        onLocationChanged(location)
-        // GPS reports every second even when still; don't redraw the chart for the same spot.
-        if (previous != null && centredOnce && previous.distanceTo(location) < STILL_M) return
+    /**
+     * A new style starts with an empty marker source (the basemap was
+     * changed): the boat goes back where the GPS last had it, with its
+     * course arrow, instead of waiting for it to move.
+     */
+    fun onStyleInstalled() {
+        if (mode == Mode.OFF) return
+        val location = lastLocation ?: return
+        drawMarker(location, arrow.course)
+    }
+
+    /** Where, and with what course arrow (null for none), the marker was last drawn. */
+    private var drawnAt: Location? = null
+    private var drawnCourse: Float? = null
+
+    /** The course arrow, carried from fix to fix so it doesn't blink on and off (see [GpsMarker.arrow]). */
+    private var arrow = GpsMarker.Arrow.NONE
+
+    private fun wayOf(location: Location) =
+        GpsMarker.Way(location.hasBearing(), location.bearing, location.hasSpeed(), location.speed)
+
+    private fun drawMarker(location: Location, course: Float?) {
+        drawnAt = location
+        drawnCourse = course
         mapHolder.style
             ?.getSourceAs<GeoJsonSource>(MapLayerIds.GPS_SOURCE)
             ?.setGeoJson(
                 GeoJson.featureCollection(
-                    listOf(GeoJson.point(location.latitude, location.longitude, accuracyProperties(location)))
+                    listOf(GeoJson.point(location.latitude, location.longitude, markerProperties(location, course)))
                 )
             )
+    }
+
+    private fun handleLocation(location: Location) {
+        lastLocation = location
+        receivedAt = System.currentTimeMillis()
+        onLocationChanged(location)
+        // GPS reports every second even when still; the chart isn't redrawn for the same spot.
+        // Measured from where the marker is drawn, so a slow drift still moves it in the end.
+        val moved = drawnAt?.let { it.distanceTo(location) >= STILL_M } ?: true
+        // Even on the same spot the arrow may have to change: it goes when the boat stops
+        // (or fixes have had no course for a few seconds), comes back when it sets off, and follows a turn.
+        arrow = GpsMarker.arrow(arrow, wayOf(location), SystemClock.elapsedRealtime())
+        val course = arrow.course
+        val arrowChanged = GpsMarker.courseChanged(drawnCourse, course)
+        if (centredOnce && !moved && !arrowChanged) return
+        drawMarker(location, course)
+        // The arrow alone doesn't move the chart.
+        if (centredOnce && !moved) return
 
         when (mode) {
             Mode.LOCATE -> if (!centredOnce) {
@@ -136,11 +175,12 @@ class GpsController(
     /**
      * For the accuracy circle: "r0", the accuracy's radius in screen pixels at zoom 0 (it doubles
      * with each zoom level), so the circle on the chart is as big as the position is uncertain.
+     * And for the arrow, the [course] it points along, when it has one.
      */
-    private fun accuracyProperties(location: Location): String {
+    private fun markerProperties(location: Location, course: Float?): String {
         val accuracy = if (location.hasAccuracy()) location.accuracy.toDouble() else 0.0
         val metresPerPixelZoom0 = 78271.517 * Math.cos(Math.toRadians(location.latitude)).coerceAtLeast(0.01)
-        return String.format(java.util.Locale.US, "{\"r0\":%.9f}", accuracy / metresPerPixelZoom0)
+        return GpsMarker.properties(accuracy / metresPerPixelZoom0, course)
     }
 
     /** The zoom for jumping to the boat: the usual one, or further out so a rough position's whole circle is on screen. */

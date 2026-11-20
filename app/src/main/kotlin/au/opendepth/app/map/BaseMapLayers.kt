@@ -1,6 +1,11 @@
 package au.opendepth.app.map
 
+import android.content.res.Resources
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.Path
 import org.maplibre.android.maps.Style
 import org.maplibre.android.style.expressions.Expression
 import org.maplibre.android.style.layers.CircleLayer
@@ -8,6 +13,7 @@ import org.maplibre.android.style.layers.FillLayer
 import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.Property
 import org.maplibre.android.style.layers.PropertyFactory
+import org.maplibre.android.style.layers.SymbolLayer
 import org.maplibre.android.style.sources.GeoJsonSource
 
 /**
@@ -225,6 +231,24 @@ object BaseMapLayers {
                 PropertyFactory.circleStrokeColor(ACCENT)
             )
         )
+        // The course arrow goes on first, so the dot sits on top of it. Its image is
+        // added to every style: a new style (a change of basemap) starts with none.
+        runCatching {
+            style.addImage(MapLayerIds.GPS_COURSE_IMAGE, courseArrow())
+            style.addLayer(
+                SymbolLayer(MapLayerIds.GPS_COURSE, MapLayerIds.GPS_SOURCE)
+                    // Only a moving boat's marker has a course (see GpsMarker): no course, no arrow.
+                    .withFilter(Expression.has(GpsMarker.COURSE))
+                    .withProperties(
+                        PropertyFactory.iconImage(MapLayerIds.GPS_COURSE_IMAGE),
+                        PropertyFactory.iconRotate(Expression.get(GpsMarker.COURSE)),
+                        // Turned with the chart, so it stays true when the chart is turned or course-up.
+                        PropertyFactory.iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_MAP),
+                        PropertyFactory.iconAllowOverlap(true),
+                        PropertyFactory.iconIgnorePlacement(true)
+                    )
+            )
+        }
         style.addLayer(
             CircleLayer(MapLayerIds.GPS_DOT, MapLayerIds.GPS_SOURCE).withProperties(
                 PropertyFactory.circleRadius(8f),
@@ -234,6 +258,50 @@ object BaseMapLayers {
             )
         )
     }
+
+    /**
+     * The arrow for the boat's course: a pointer just clear of the dot, in the
+     * dot's own colour and white outline, pointing up (north) so that turning
+     * it by the course points it along the course. The dot is at the middle
+     * of the picture, which is what the picture turns about.
+     */
+    private fun courseArrow(): Bitmap = courseArrowImage ?: run {
+        val density = Resources.getSystem().displayMetrics.density
+        val size = (ARROW_BOX_DP * density).toInt().coerceAtLeast(2)
+        val middle = size / 2f
+        val shape = Path().apply {
+            moveTo(middle, middle - ARROW_TIP_DP * density)
+            lineTo(middle + ARROW_HALF_WIDTH_DP * density, middle - ARROW_BASE_DP * density)
+            lineTo(middle, middle - ARROW_NOTCH_DP * density)
+            lineTo(middle - ARROW_HALF_WIDTH_DP * density, middle - ARROW_BASE_DP * density)
+            close()
+        }
+        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        // The map sizes the picture by this: drawn for this screen, shown at the same size on it.
+        bitmap.density = Resources.getSystem().displayMetrics.densityDpi
+        val canvas = Canvas(bitmap)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { strokeJoin = Paint.Join.ROUND }
+        // The outline first, the fill over its inner half: a 2 dp white edge like the dot's.
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = 2 * ARROW_OUTLINE_DP * density
+        paint.color = Color.parseColor(WHITE)
+        canvas.drawPath(shape, paint)
+        paint.style = Paint.Style.FILL
+        paint.color = Color.parseColor(ACCENT)
+        canvas.drawPath(shape, paint)
+        bitmap.also { courseArrowImage = it }
+    }
+
+    /** Drawn once: every style is given the same picture. */
+    private var courseArrowImage: Bitmap? = null
+
+    // The dot is 8 dp across its radius with a 2 dp outline: the arrow starts just outside it.
+    private const val ARROW_BOX_DP = 52f
+    private const val ARROW_TIP_DP = 23f
+    private const val ARROW_BASE_DP = 11.5f
+    private const val ARROW_NOTCH_DP = 14f
+    private const val ARROW_HALF_WIDTH_DP = 7f
+    private const val ARROW_OUTLINE_DP = 2f
 
     private fun casing(id: String, source: String, width: Float): LineLayer =
         LineLayer(id, source)

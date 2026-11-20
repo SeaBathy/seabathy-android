@@ -49,6 +49,10 @@ object MapLayerIds {
     const val GPS_ACCURACY = "gps-acc"
     const val GPS_DOT = "gps-dot"
 
+    /** The arrow on the boat's dot along its course, and the image it is drawn with. */
+    const val GPS_COURSE = "gps-course"
+    const val GPS_COURSE_IMAGE = "gps-course-arrow"
+
     const val WAYPOINT_SOURCE = "waypoint-overlay-source"
     const val WAYPOINT_LAYER = "waypoint-overlay-layer"
     const val WAYPOINT_ICON_LAYER = "waypoint-overlay-icon-layer"
@@ -57,6 +61,13 @@ object MapLayerIds {
     fun sourceFor(layerId: String): String = "$layerId-src"
 
     fun layerFor(layerId: String): String = "$layerId-layer"
+
+    /** A depth layer's contour lines: their source, the lines, and the depths written along them. */
+    fun contourSourceFor(layerId: String): String = "$layerId-contours-src"
+
+    fun contourLineFor(layerId: String): String = "$layerId-contours-line"
+
+    fun contourLabelFor(layerId: String): String = "$layerId-contours-label"
 
     const val EMPTY_GEOJSON = """{"type":"FeatureCollection","features":[]}"""
 }

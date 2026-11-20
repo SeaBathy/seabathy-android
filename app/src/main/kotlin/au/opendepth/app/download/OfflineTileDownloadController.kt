@@ -1,23 +1,29 @@
 package au.opendepth.app.download
 
 import android.content.Context
+import android.view.ViewGroup
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import au.opendepth.app.map.MapHolder
 import au.opendepth.app.model.DataSource
 import au.opendepth.app.model.GeoBounds
 import au.opendepth.app.storage.LayerImportCoordinator
+import au.opendepth.app.ui.AreaPicker
 import au.opendepth.app.ui.DownloadZoneDialog
+import au.opendepth.app.ui.OfflineDetailControl
 import au.opendepth.app.ui.PanelDialogs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.maplibre.android.maps.MapView
 
 /**
- * Downloading an offline map of the area on screen: pick zooms in
- * [DownloadZoneDialog], check the size (a few sample tiles, see
- * [TileSampler]), then download.
+ * Downloading an offline map: the area is drawn as a box on the chart
+ * ([AreaPicker], with the detail to save and a live tile count), then
+ * [DownloadZoneDialog] shows the zooms, checks the size (a few sample tiles,
+ * see [TileSampler]) and downloads. The 3D view's own area goes straight to
+ * that second step.
  *
  * The size check runs here on the activity's [scope]. The download itself
  * runs in [OfflineTileDownloadService], a foreground service, so it keeps
@@ -33,54 +39,88 @@ class OfflineTileDownloadController(
     private val layerImports: LayerImportCoordinator,
     private val isOnline: () -> Boolean,
     private val onProgress: (String) -> Unit,
-    private val onError: (String) -> Unit
+    private val onError: (String) -> Unit,
+    /** The chart, and the view the area picker is laid over (the chart's parent). */
+    private val mapView: MapView,
+    private val pickerRoot: ViewGroup,
+    /** Takes the settings and layers panels off the chart, so the area can be drawn on it. */
+    private val closePanels: () -> Unit
 ) {
     private val sampleClient = TileFetchClient()
     private val tileSampler = TileSampler(sampleClient::fetch)
 
-    /** The current map viewport, or null if the map has not finished loading yet. */
-    fun currentViewportBounds(): GeoBounds? {
-        val map = mapHolder.map ?: return null
-        val bounds = runCatching { map.projection.visibleRegion.latLngBounds }.getOrNull() ?: return null
-        return GeoBounds(
-            west = bounds.longitudeWest,
-            south = bounds.latitudeSouth,
-            east = bounds.longitudeEast,
-            north = bounds.latitudeNorth
-        )
-    }
+    /** The area picker, while it is up. */
+    private var picker: AreaPicker? = null
 
-    /** Opens the download screen for [source] over the area on screen. Nothing is fetched until "Assess". */
+    /**
+     * Saving [source] offline starts on the chart: the panels close and the person draws the
+     * area as a box, with the DETAIL to save and how many tiles that needs. "Next" opens the
+     * download screen for exactly that box. Nothing is fetched until "Assess".
+     */
     fun beginDownload(source: DataSource) {
-        val bounds = currentViewportBounds()
-        if (bounds == null || !bounds.isValid) {
-            onError("Could not read the current map view — try again once the map has finished loading")
+        noOfflineReason(source.urlTemplate)?.let { onError(it); return }
+        val map = mapHolder.map
+        if (map == null) {
+            onError("The map hasn't finished loading. Try again in a moment.")
             return
         }
-        beginDownload(source, bounds, DEFAULT_MAX_ZOOM, "The area on screen. To change it, close this, move the map and open it again.")
+        closePanels()
+        picker?.dismiss()
+        val detail = OfflineDetailControl(context, OfflineDetail.topZoom(source.urlTemplate)) {
+            map.cameraPosition.target?.latitude ?: 0.0
+        }
+        picker = AreaPicker(
+            context = context,
+            root = pickerRoot,
+            mapView = mapView,
+            map = map,
+            // The limit is the number of tiles, which the DETAIL control counts.
+            maxKm = null,
+            confirmLabel = "Next",
+            describe = { _, show -> show(null) },
+            onConfirm = { box ->
+                picker = null
+                val zooms = OfflineDetail.zoomRange(detail.detail)
+                openDownloadScreen(
+                    source,
+                    OfflineDetail.boundsOf(box.south, box.west, box.north, box.east),
+                    zooms.first,
+                    zooms.last,
+                    "The box you drew on the chart. To change it, close this and draw it again."
+                )
+            },
+            onCancel = { picker = null },
+            title = "OFFLINE MAP",
+            extra = detail
+        ).also { it.show() }
     }
 
     /**
-     * The download screen for an area other than the one on screen: the 3D
-     * view's. Its max zoom starts as deep as [maxZoom] allows while staying a
+     * The download screen for an area that is already chosen: the 3D view's.
+     * Its max zoom starts as deep as [maxZoom] allows while staying a
      * sensible size, since a 3D area is usually small and wanted sharp.
      */
     fun beginDownload(
         source: DataSource,
         bounds: GeoBounds,
         maxZoom: Int,
-        areaNote: String = "The area shown in 3D. Check the map's terms allow offline copies. Load the file as an MBTiles layer when it's done, and it's in 3D's Map list."
+        areaNote: String = "The area shown in 3D. Load the file as an MBTiles layer when it's done, and it's in 3D's Map list."
     ) {
         noOfflineReason(source.urlTemplate)?.let { onError(it); return }
         var deepest = maxZoom.coerceAtLeast(DEFAULT_MIN_ZOOM)
         while (deepest > DEFAULT_MIN_ZOOM &&
             OfflineDownloadEstimator.estimateTiles(bounds, DEFAULT_MIN_ZOOM..deepest).tileCount > SUGGESTED_TILE_COUNT
         ) deepest--
+        openDownloadScreen(source, bounds, DEFAULT_MIN_ZOOM, deepest, areaNote)
+    }
+
+    /** The download screen for [bounds], its zooms starting at [minZoom] and [maxZoom]; [areaNote] says what the area is. */
+    private fun openDownloadScreen(source: DataSource, bounds: GeoBounds, minZoom: Int, maxZoom: Int, areaNote: String) {
         downloadZoneDialog.show(
             sourceName = source.name,
             bounds = bounds,
-            defaultMinZoom = DEFAULT_MIN_ZOOM,
-            defaultMaxZoom = deepest,
+            defaultMinZoom = minZoom,
+            defaultMaxZoom = maxZoom,
             areaNote = areaNote,
             onAssess = { zoomRange, onSuccess, onFailure -> assess(source, bounds, zoomRange, onSuccess, onFailure) },
             onConfirm = { zoomRange -> startDownload(source, bounds, zoomRange) }
@@ -103,7 +143,7 @@ class OfflineTileDownloadController(
         if (quickEstimate.tileCount > MAX_REASONABLE_TILE_COUNT) {
             onFailure(
                 "That's ${OfflineDownloadEstimator.formatTileCount(quickEstimate.tileCount)} tiles — " +
-                    "zoom in or lower the max zoom"
+                    "choose a smaller area or lower the max zoom"
             )
             return
         }
@@ -150,7 +190,7 @@ class OfflineTileDownloadController(
             return
         }
         if (OfflineDownloadEstimator.estimateTiles(bounds, zoomRange).tileCount > MAX_REASONABLE_TILE_COUNT) {
-            onError("That's too big to download: zoom in or lower the max zoom, then assess again")
+            onError("That's too big to download: choose a smaller area or lower the max zoom, then assess again")
             return
         }
         if (!isOnline()) {
@@ -199,11 +239,11 @@ class OfflineTileDownloadController(
                 "Pick another map to save, or view this one online."
         }
 
-        private const val DEFAULT_MIN_ZOOM = 10
-        private const val DEFAULT_MAX_ZOOM = 14
+        // One set of numbers for the area picker's DETAIL and for this screen: see [OfflineDetail].
+        private const val DEFAULT_MIN_ZOOM = OfflineDetail.DEFAULT_MIN_ZOOM
         /** More than this is almost always a mistake (an area or zoom range far too big): refused. */
-        private const val MAX_REASONABLE_TILE_COUNT = 200_000L
+        private const val MAX_REASONABLE_TILE_COUNT = OfflineDetail.MAX_TILES
         /** The 3D area's suggested download stops its max zoom here (tens of MB of imagery). */
-        private const val SUGGESTED_TILE_COUNT = 30_000L
+        private const val SUGGESTED_TILE_COUNT = OfflineDetail.SUGGESTED_TILES
     }
 }

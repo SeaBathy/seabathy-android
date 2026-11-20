@@ -18,6 +18,13 @@ val keystoreProperties = Properties().apply {
     }
 }
 
+// Phones and tablets are ARM. The Intel libraries (x86, x86_64) are only used by the
+// emulator and a few old devices, and they add about 40 MB, so the APK people download
+// (`assembleGithubPhone`) leaves them out. `-PallAbis` keeps them: that is the build to
+// run on this computer's emulator. The Google Play bundle always carries all four, since
+// Play sends each device only its own.
+val allAbis = project.hasProperty("allAbis")
+
 android {
     namespace = "au.opendepth.app"
     compileSdk = 36
@@ -27,8 +34,8 @@ android {
         // Google Play requires apps and updates to target Android 16 (API 36)
         // from 31 August 2026.
         targetSdk = 36
-        versionCode = 69
-        versionName = "1.3.8"
+        versionCode = 70
+        versionName = "1.3.9"
     }
     // Two builds of the same app. "github" keeps the original application id,
     // so the APKs already installed from GitHub keep updating. "play" is the
@@ -72,6 +79,9 @@ android {
             initWith(getByName("release"))
             signingConfig = signingConfigs.getByName("debug")
             matchingFallbacks += listOf("release")
+            if (!allAbis) {
+                ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
+            }
         }
     }
     compileOptions {

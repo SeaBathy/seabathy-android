@@ -10,8 +10,9 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
 import au.opendepth.app.model.DataSource
+import au.opendepth.app.model.MapCredits
 
-/** The "Offline maps" screen: add or remove tile sources, and download the area on screen from one. */
+/** The "Offline maps" screen: add or remove tile sources, and download an area drawn on the chart from one. */
 class DataSourceDialog(
     private val context: Context,
     private val panels: PanelDialogs
@@ -50,13 +51,13 @@ class DataSourceDialog(
             body.addView(panels.sectionHeader("ADD A SOURCE"))
             body.addView(
                 panels.caption(
-                    "A map or satellite tile link with {z}, {x} and {y} in it. " +
-                        "You're responsible for having the right to save this map offline: check its licence.",
+                    "A map or satellite tile link with {z}, {x} and {y} in it. " + MapCredits.OWN_MAP_NOTE + " " +
+                        "You're responsible for having the right to save it offline: check its licence.",
                     topPaddingDp = 0
                 )
             )
 
-            val nameInput = panels.input { hint = "Source name" }
+            val nameInput = panels.input { hint = "A name for this map" }
             panels.addRow(body, nameInput)
 
             val urlInput = panels.input {
@@ -67,7 +68,7 @@ class DataSourceDialog(
             panels.addRow(body, urlInput)
 
             val attributionInput = panels.input {
-                hint = "Credit shown on the map (optional)"
+                hint = "The credit the map's owner asks for"
                 setSingleLine(true)
             }
             panels.addRow(body, attributionInput)
@@ -130,7 +131,7 @@ class DataSourceDialog(
         if (source.attribution.isNotBlank()) {
             addView(
                 TextView(context).apply {
-                    text = source.attribution
+                    text = MapCredits.current(source.attribution)
                     textSize = 10f
                     maxLines = 1
                     ellipsize = TextUtils.TruncateAt.END
@@ -145,10 +146,9 @@ class DataSourceDialog(
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
 
-                addView(chip("DOWNLOAD", "Download ${source.name} for the area on screen") {
-                    // The estimate/confirm/progress prompts this triggers
-                    // read more naturally over the map than stacked on top
-                    // of this still-open source list.
+                addView(chip("DOWNLOAD", "Download ${source.name}: draw the area on the chart") {
+                    // The area is drawn on the chart next, so this list gets out
+                    // of its way.
                     dismiss()
                     callbacks.onDownload(source)
                 })

@@ -14,9 +14,11 @@ import android.widget.Button
 import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import au.opendepth.app.R
 import au.opendepth.app.model.Waypoint
+import au.opendepth.app.model.WaypointIcon
 import au.opendepth.app.model.WaypointPhoto
 import java.io.File
 import java.text.SimpleDateFormat
@@ -24,7 +26,11 @@ import java.util.Date
 import java.util.Locale
 import au.opendepth.app.util.CoordinateFormatter
 
-/** Edits a waypoint's name, notes and position. A plain dialog like [PanelDialogs.showPanel], not a themed AlertDialog. */
+/**
+ * Edits a waypoint's name, position, notes, colour, symbol and photos. A plain dialog like
+ * [PanelDialogs.showPanel], not a themed AlertDialog. The fields scroll when the screen is too
+ * short for them (a small phone, or on its side); the buttons stay in view.
+ */
 class WaypointEditDialog(
     private val context: Context,
     private val panels: PanelDialogs,
@@ -55,15 +61,26 @@ class WaypointEditDialog(
         val root = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(palette.background)
-            setPadding(context.dp(12), context.dp(12), context.dp(12), context.dp(12))
+            setPadding(context.dp(ROOT_PADDING_DP), context.dp(ROOT_PADDING_DP), context.dp(ROOT_PADDING_DP), context.dp(ROOT_PADDING_DP))
         }
 
-        val card = LinearLayout(context).apply {
+        // The buttons sit under the fields, outside the part that scrolls.
+        val frame = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             background = context.roundedBackground(palette.panel, palette.border, UiRadius.CARD)
-            setPadding(context.dp(20), context.dp(16), context.dp(20), context.dp(16))
+            setPadding(context.dp(CARD_PADDING_DP), context.dp(16), context.dp(CARD_PADDING_DP), context.dp(16))
         }
-        root.addView(card)
+        root.addView(frame)
+
+        val card = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        frame.addView(
+            ScrollView(context).apply {
+                isFillViewport = false
+                addView(card, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            },
+            // No taller than the fields; shorter, and scrolling, when the screen is.
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
+        )
 
         card.addView(
             TextView(context).apply {
@@ -118,6 +135,49 @@ class WaypointEditDialog(
         }
         card.addView(descriptionInput)
 
+        // Colour and symbol, as in the new-waypoint sheet. They change with Save, like the name,
+        // and only when one was tapped: a colour or symbol this build doesn't offer is kept.
+        var pickedColor: String? = null
+        var pickedIcon: String? = null
+        val rowWidth = (context.resources.displayMetrics.widthPixels * WIDTH_FRACTION).toInt() -
+            2 * context.dp(ROOT_PADDING_DP + CARD_PADDING_DP)
+
+        card.addView(panels.sectionHeader("COLOUR"))
+        val colourRow = swatchRow()
+        val colourSwatches = WaypointSwatches.addColours(
+            colourRow,
+            WaypointSwatches.fitScale(
+                rowWidth, Waypoint.PALETTE.size,
+                context.dp(WaypointSwatches.COLOUR_SIZE_DP + 2 * WaypointSwatches.COLOUR_MARGIN_DP)
+            )
+        )
+        colourSwatches.forEachIndexed { index, swatch ->
+            swatch.setOnClickListener {
+                pickedColor = Waypoint.PALETTE[index]
+                WaypointSwatches.showColour(colourSwatches, pickedColor)
+            }
+        }
+        WaypointSwatches.showColour(colourSwatches, waypoint.color)
+        card.addView(colourRow)
+
+        card.addView(panels.sectionHeader("SYMBOL"))
+        val iconRow = swatchRow()
+        val iconSwatches = WaypointSwatches.addIcons(
+            iconRow,
+            WaypointSwatches.fitScale(
+                rowWidth, WaypointIcon.ALL.size,
+                context.dp(WaypointSwatches.ICON_SIZE_DP + 2 * WaypointSwatches.ICON_MARGIN_DP)
+            )
+        )
+        iconSwatches.forEachIndexed { index, swatch ->
+            swatch.setOnClickListener {
+                pickedIcon = WaypointIcon.ALL[index].id
+                WaypointSwatches.showIcon(iconSwatches, pickedIcon)
+            }
+        }
+        WaypointSwatches.showIcon(iconSwatches, waypoint.icon)
+        card.addView(iconRow)
+
         // Photos, each with the conditions when it was taken.
         val photos = waypoint.photos.orEmpty()
         if (photos.isNotEmpty() || onAddPhoto != null) {
@@ -140,8 +200,10 @@ class WaypointEditDialog(
                     applySecondaryStyle(palette)
                     contentDescription = "Take a photo of this waypoint, saved with the tide and sea conditions"
                     setOnClickListener {
-                        // Keep what was typed before the camera opens.
+                        // Keep what was typed and chosen before the camera opens.
                         waypoint.desc = descriptionInput.text.toString().trim().takeIf { it.isNotBlank() }
+                        pickedColor?.let { waypoint.color = it }
+                        pickedIcon?.let { waypoint.icon = it }
                         onChanged()
                         dialog.dismiss()
                         onAddPhoto(waypoint)
@@ -206,6 +268,8 @@ class WaypointEditDialog(
                     }
                     waypoint.name = name
                     waypoint.desc = descriptionInput.text.toString().trim().takeIf { it.isNotBlank() }
+                    pickedColor?.let { waypoint.color = it }
+                    pickedIcon?.let { waypoint.icon = it }
                     onChanged()
                     dialog.dismiss()
                 }
@@ -213,7 +277,7 @@ class WaypointEditDialog(
             spacedParams()
         )
 
-        card.addView(buttonRow)
+        frame.addView(buttonRow)
 
         dialog.setContentView(root)
         dialog.window?.apply {
@@ -278,17 +342,25 @@ class WaypointEditDialog(
 
     private fun stamp(millis: Long): String = SimpleDateFormat("EEE d MMM yyyy, HH:mm", Locale.getDefault()).format(Date(millis))
 
+    /** A row of colour or symbol choices, from the left like the fields above it. */
+    private fun swatchRow() = LinearLayout(context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+    }
+
     private fun spacedParams(): LinearLayout.LayoutParams = LinearLayout.LayoutParams(
         LinearLayout.LayoutParams.WRAP_CONTENT,
         LinearLayout.LayoutParams.WRAP_CONTENT
     ).apply { marginStart = context.dp(8) }
 
     private fun coordinateLabel(waypoint: Waypoint): String =
-        "${CoordinateFormatter.formatDdm(waypoint.lat, waypoint.lng)}   •   EDIT COORDINATES"
+        "${CoordinateFormatter.format(waypoint.lat, waypoint.lng)}   •   EDIT COORDINATES"
 
     private companion object {
         const val DIM_AMOUNT = 0.72f
         const val WIDTH_FRACTION = 0.96f
         const val THUMB_DP = 72
+        const val ROOT_PADDING_DP = 12
+        const val CARD_PADDING_DP = 20
     }
 }

@@ -31,7 +31,8 @@ The same steps one at a time:
 ./gradlew testGithubDebugUnitTest   # unit tests
 ./gradlew assembleGithubDebug       # debug APK
 ./gradlew lintGithubDebug           # Android lint
-./gradlew assembleGithubPhone       # the GitHub APK (release-fast, signed with this computer's debug key)
+./gradlew assembleGithubPhone       # the GitHub APK (release-fast, signed with this computer's debug key), ARM only
+./gradlew assembleGithubPhone -PallAbis   # the same with the Intel libraries too, for the emulator
 ./gradlew bundlePlayRelease         # the Google Play bundle (.aab), signed with the upload key, see below
 ```
 

@@ -71,7 +71,7 @@ class CoordinateEditorDialog(
 
         card.addView(panels.sectionHeader("COORDINATES"))
         val input = panels.input {
-            setText(CoordinateFormatter.formatDdm(initialLat, initialLng))
+            setText(CoordinateFormatter.format(initialLat, initialLng))
             hint = "Paste latitude and longitude"
             minLines = 2
             maxLines = 4
@@ -88,7 +88,7 @@ class CoordinateEditorDialog(
 
         card.addView(panels.sectionHeader("PREVIEW"))
         val preview = TextView(context).apply {
-            text = CoordinateFormatter.formatDdm(initialLat, initialLng)
+            text = CoordinateFormatter.format(initialLat, initialLng)
             textSize = 13f
             typeface = Typeface.MONOSPACE
             setTextColor(palette.primaryText)
@@ -114,7 +114,7 @@ class CoordinateEditorDialog(
                         CoordinateFormatter.MODES[position]
                     )
                 )
-                preview.text = CoordinateFormatter.formatDdm(parsed.first, parsed.second)
+                preview.text = CoordinateFormatter.format(parsed.first, parsed.second)
             }
 
             override fun onNothingSelected(parent: AdapterView<*>?) = Unit
@@ -138,7 +138,7 @@ class CoordinateEditorDialog(
                 preview.text = if (parsed == null) {
                     "Enter valid coordinates"
                 } else {
-                    CoordinateFormatter.formatDdm(parsed.first, parsed.second)
+                    CoordinateFormatter.format(parsed.first, parsed.second)
                 }
                 preview.setTextColor(
                     if (parsed == null) palette.destructive else palette.primaryText
@@ -216,6 +216,8 @@ class CoordinateEditorDialog(
     private fun formatSpinner(): Spinner = Spinner(context).apply {
         background = context.roundedBackground(palette.raised, palette.border, UiRadius.ROW)
         adapter = PaletteSpinnerAdapter(context, CoordinateFormatter.MODE_LABELS)
+        // Starts on the format positions are written in everywhere else (Settings, Map display).
+        setSelection(CoordinateFormatter.MODES.indexOf(CoordinateFormatter.mode).coerceAtLeast(0))
     }
 
     private inline fun actions(

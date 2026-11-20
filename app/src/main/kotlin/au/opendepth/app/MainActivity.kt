@@ -158,7 +158,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var waypointSheet: NewWaypointSheet
     private lateinit var waypointEditDialog: WaypointEditDialog
     private lateinit var depthRampDialog: DepthRampDialog
+    private lateinit var contourLinesDialog: au.opendepth.app.ui.ContourLinesDialog
     private lateinit var settingsPanel: SettingsPanel
+    private lateinit var storagePanel: au.opendepth.app.ui.StoragePanel
     private lateinit var xyzDialog: XyzTileDialog
     private lateinit var dataSourceDialog: DataSourceDialog
     private lateinit var downloadZoneDialog: DownloadZoneDialog
@@ -166,6 +168,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var gpxExport: GpxExportService
     private lateinit var debugLogShare: DebugLogShareService
     private lateinit var terrain3d: Terrain3DScreen
+    private lateinit var scaleBar: au.opendepth.app.ui.ChartScaleBar
+    private lateinit var creditsPanel: au.opendepth.app.ui.MapCreditsPanel
 
     private var visual = VisualSettings()
     private var tool = ToolMode.NONE
@@ -258,10 +262,14 @@ class MainActivity : AppCompatActivity() {
         waypointStore.load()
         dataSourceStore.load()
         visual = settingsRepository.loadVisual()
+        // Before any position is written: the waypoint list below, then the chart readout.
+        au.opendepth.app.util.CoordinateFormatter.mode = settingsRepository.loadPositionFormat()
         settingsRepository.loadRasterQuality(this).let { quality ->
             GeoTiffReader.importMaxDimension = quality.maxDimension
             GdalTileSource.defaultColourTileSize = quality.gdalTilePixels
         }
+        // Before any depth layer is drawn: its shallow water is striped from the first tile.
+        au.opendepth.app.geotiff.ShallowWater.markMetres = navFeature.settings.shallowMarkM
         waypointOverlay.setNamesVisible(settingsRepository.loadShowWaypointNames())
         styleCoordinator.loadSettings()
 
@@ -429,7 +437,9 @@ class MainActivity : AppCompatActivity() {
             scope = scope,
             onStackChanged = ::onOverlayStackChanged,
             onMessage = ::showAlert,
-            onVisibilityChanged = ::onOverlayVisibilityChanged
+            onVisibilityChanged = ::onOverlayVisibilityChanged,
+            // Read when lines are drawn, by which time the settings are loaded.
+            depthUnit = { if (::navFeature.isInitialized) navFeature.settings.units.depth else au.opendepth.app.nav.DepthUnit.METRES }
         )
 
         measureController = MeasureController(mapHolder)
@@ -529,6 +539,12 @@ class MainActivity : AppCompatActivity() {
                 override fun requestNotifications() = requestNotificationPermissionIfNeeded()
                 override fun unitsChanged() {
                     if (::conditions.isInitialized) conditions.unitsChanged()
+                    // The depth layers are drawn again if the shallow-water mark changed, and
+                    // contour lines written again in the depth unit.
+                    overlays.setShallowMark(navFeature.settings.shallowMarkM)
+                    overlays.refreshContours()
+                    // The scale bar is in the distance unit.
+                    if (::scaleBar.isInitialized) scaleBar.update()
                 }
                 override fun depthReadoutChanged() {
                     if (tool == ToolMode.MEASURE) return
@@ -569,6 +585,7 @@ class MainActivity : AppCompatActivity() {
             activity = this,
             scope = scope,
             units = { navFeature.settings.units },
+            shallowMetres = { navFeature.settings.shallowMarkM },
             onAddWaypoint = { lat, lng, depth ->
                 val waypoint = waypointStore.add(
                     name = waypointStore.nextDefaultName(),
@@ -592,6 +609,8 @@ class MainActivity : AppCompatActivity() {
             onShowingChanged = { showing ->
                 // The sea conditions' moving lines would keep drawing, unseen, under the 3D view.
                 if (showing) conditions.onPause() else conditions.onResume()
+                // A hidden layer's file was opened to show it in 3D: closed again with the view.
+                if (!showing && ::overlays.isInitialized) overlays.restHidden()
             },
             onEditWaypoint = { id ->
                 waypointStore.all.firstOrNull { it.id == id }?.let { waypoint ->
@@ -601,11 +620,22 @@ class MainActivity : AppCompatActivity() {
             }
         )
         depthRampDialog = DepthRampDialog(this, panels)
+        contourLinesDialog = au.opendepth.app.ui.ContourLinesDialog(this, panels)
         xyzDialog = XyzTileDialog(this, panels)
         dataSourceDialog = DataSourceDialog(this, panels)
         downloadZoneDialog = DownloadZoneDialog(this, panels)
         settingsPanel = SettingsPanel(this, panels, xyzDialog, dataSourceDialog)
+        storagePanel = au.opendepth.app.ui.StoragePanel(this, panels, scope, clear3dTiles = { terrain3d.clearSavedTiles() })
         customBasemapDialog = CustomBasemapDialog(this, panels)
+        creditsPanel = au.opendepth.app.ui.MapCreditsPanel(panels)
+        scaleBar = au.opendepth.app.ui.ChartScaleBar(
+            root = views.mapView.parent as android.view.ViewGroup,
+            mapView = views.mapView,
+            mapHolder = mapHolder,
+            // It sits just above whichever of these is highest on screen, so none of them moves for it.
+            above = listOf(views.hint, views.routeCard, views.measureCard, views.mapAttribution, conditions.cardView),
+            unit = { navFeature.settings.units.distance }
+        )
         basemapSelector = BasemapSelector(this, views, styleCoordinator, customBasemapDialog)
 
         layerPanel = LayerPanelBinder(
@@ -615,6 +645,7 @@ class MainActivity : AppCompatActivity() {
             panels = panels,
             onEditDepthColours = ::showDepthRampDialog,
             onOpen3d = ::open3d,
+            onEditContours = ::showContourLinesDialog,
             onShowLayer = ::showLayer
         )
 
@@ -630,7 +661,10 @@ class MainActivity : AppCompatActivity() {
             layerImports = layerImports,
             isOnline = ::hasWorkingInternet,
             onProgress = ::toast,
-            onError = ::showAlert
+            onError = ::showAlert,
+            mapView = views.mapView,
+            pickerRoot = views.mapView.parent as android.view.ViewGroup,
+            closePanels = ::closePanelsForImport
         )
     }
 
@@ -751,9 +785,11 @@ class MainActivity : AppCompatActivity() {
             })
 
             map.addOnCameraMoveListener {
-                map.cameraPosition.target?.let { target ->
+                val position = map.cameraPosition
+                position.target?.let { target ->
                     hud.showCoordinates(target.latitude, target.longitude)
                 }
+                scaleBar.update(position)
             }
 
             map.addOnCameraIdleListener {
@@ -761,7 +797,10 @@ class MainActivity : AppCompatActivity() {
                 val target = position.target ?: return@addOnCameraIdleListener
                 settingsRepository.saveCameraPosition(position)
                 graticule.refresh()
+                // Contour lines are for the part of the chart on screen: worked out again once it rests.
+                overlays.refreshContours()
                 hud.showCoordinates(target.latitude, target.longitude)
+                scaleBar.update(position)
                 if (tool != ToolMode.MEASURE) {
                     scheduleDepthQuery(target.latitude, target.longitude)
                 }
@@ -776,6 +815,9 @@ class MainActivity : AppCompatActivity() {
         navFeature.onStyleInstalled()
         conditions.onStyleInstalled()
         showPendingAlertPlace()
+        // The new style starts with no boat on it: put back where the GPS last had it.
+        gpsController.onStyleInstalled()
+        scaleBar.update()
         navFeature.placeCompass()
         measureController.refresh()
         hud.showMeasureSummary(measureController.summary())
@@ -1033,6 +1075,15 @@ class MainActivity : AppCompatActivity() {
                         settingsRepository.saveShowGrid(visible)
                         graticule.setVisible(visible)
                     },
+                    showScaleBar = { settingsRepository.loadShowScaleBar() },
+                    onShowScaleBarChanged = { shown ->
+                        settingsRepository.saveShowScaleBar(shown)
+                        scaleBar.setShown(shown)
+                    },
+                    positionFormat = { au.opendepth.app.util.CoordinateFormatter.mode },
+                    onPositionFormatChanged = ::setPositionFormat,
+                    positionExample = { mapHolder.map?.cameraPosition?.target?.let { it.latitude to it.longitude } },
+                    onStorage = { storagePanel.show() },
                     showNavMarks = { navMarks.visible },
                     zones = zones,
                     confirmZones = ::confirmZones,
@@ -1233,6 +1284,8 @@ class MainActivity : AppCompatActivity() {
         }
 
         navFeature.bind()
+        scaleBar.bind(before = views.mapAttribution, shown = settingsRepository.loadShowScaleBar())
+        hud.onAttributionTapped { creditsPanel.show(styleCoordinator.credits()) }
         conditions.bind(
             root = views.mapView.parent as android.view.ViewGroup,
             mapView = views.mapView,
@@ -1399,25 +1452,65 @@ class MainActivity : AppCompatActivity() {
             }
             val (latLng, taken) = info
             if (latLng == null) {
-                val centre = mapHolder.map?.cameraPosition?.target
-                var placed = false
-                au.opendepth.app.ui.InfoCard(this@MainActivity).apply {
-                    badge = "Waypoint from a photo"
-                    title = "No location in this photo"
-                    paragraphs += "The camera's location tag may have been off, or the location was removed when the photo was shared."
-                    paragraphs += "Put the waypoint at the crosshair instead?"
-                    onDismiss = { if (!placed) file.delete() }
-                    actions += au.opendepth.app.ui.InfoCard.Action("Cancel")
-                    actions += au.opendepth.app.ui.InfoCard.Action("At the crosshair", primary = true) {
-                        placed = true
-                        if (centre != null) finishPhotoWaypoint(file, centre.latitude, centre.longitude, taken ?: System.currentTimeMillis())
-                    }
-                }.show()
+                askWherePhotoGoes(file, taken)
                 return@launch
             }
             finishPhotoWaypoint(file, latLng[0], latLng[1], taken ?: System.currentTimeMillis())
         }
     }
+
+    /**
+     * The photo has no location: the waypoint goes at the crosshair or where the phone is (the
+     * GPS), as the person chooses. With no GPS position the card stays open, so the photo isn't
+     * lost and the crosshair can still be chosen.
+     */
+    private fun askWherePhotoGoes(file: java.io.File, taken: Long?) {
+        val centre = mapHolder.map?.cameraPosition?.target
+        var placed = false
+        var card: android.app.Dialog? = null
+        val noFix = android.widget.TextView(this).apply {
+            textSize = 14f
+            setTextColor(au.opendepth.app.ui.AppTheme.palette.destructive)
+            setPadding(0, dp(12), 0, 0)
+            visibility = android.view.View.GONE
+            // Read out when it appears or changes.
+            accessibilityLiveRegion = android.view.View.ACCESSIBILITY_LIVE_REGION_POLITE
+        }
+        // Just taken: most likely here, at the boat. An older one: more likely a place to find on the chart.
+        val justTaken = taken != null && kotlin.math.abs(System.currentTimeMillis() - taken) < PHOTO_JUST_TAKEN_MS
+        card = au.opendepth.app.ui.InfoCard(this).apply {
+            badge = "Waypoint from a photo"
+            title = "No location in this photo"
+            paragraphs += "The camera's location tag may have been off, or the location was removed when the photo was shared."
+            paragraphs += "Put the waypoint at the crosshair, or where you are now (the phone's GPS)?"
+            extra = noFix
+            onDismiss = { if (!placed) file.delete() }
+            actions += au.opendepth.app.ui.InfoCard.Action("Cancel")
+            actions += au.opendepth.app.ui.InfoCard.Action("Crosshair", primary = !justTaken) {
+                placed = true
+                if (centre != null) finishPhotoWaypoint(file, centre.latitude, centre.longitude, taken ?: System.currentTimeMillis())
+            }
+            actions += au.opendepth.app.ui.InfoCard.Action("Where I am", primary = justTaken, closes = false) {
+                val fix = recentFix()
+                if (fix == null) {
+                    noFix.text = if (gpsController.isActive) {
+                        "Still waiting for a GPS position. Try again in a moment."
+                    } else {
+                        "No GPS position. Turn on the GPS button on the chart and wait for a position."
+                    }
+                    noFix.visibility = android.view.View.VISIBLE
+                } else {
+                    placed = true
+                    card?.dismiss()
+                    finishPhotoWaypoint(file, fix.latitude, fix.longitude, taken ?: System.currentTimeMillis())
+                }
+            }
+        }.show()
+    }
+
+    /** The GPS's latest position, when it's fresh enough to say where the phone is now. */
+    private fun recentFix(): android.location.Location? =
+        gpsController.last?.takeIf { System.currentTimeMillis() - it.time < MOB_FIX_MAX_AGE_MS }
 
     private fun finishPhotoWaypoint(file: java.io.File, lat: Double, lng: Double, taken: Long) {
         scope.launch {
@@ -1603,7 +1696,7 @@ class MainActivity : AppCompatActivity() {
      * turned on and the mark goes down at the first fix.
      */
     private fun manOverboard() {
-        val fix = gpsController.last?.takeIf { System.currentTimeMillis() - it.time < MOB_FIX_MAX_AGE_MS }
+        val fix = recentFix()
         if (fix != null) {
             markOverboard(fix)
             return
@@ -1751,7 +1844,7 @@ class MainActivity : AppCompatActivity() {
      * MBTiles layers never show up here and are never touched by it.
      */
     private fun pickDepthColourLayer() {
-        val depthLayers = overlays.stackTopFirst.filter { overlays.depthSourceFor(it.id) != null }
+        val depthLayers = overlays.stackTopFirst.filter { overlays.isDepthLayer(it) }
         when {
             depthLayers.isEmpty() ->
                 toast("Load a GeoTIFF depth layer first")
@@ -1767,45 +1860,87 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showDepthRampDialog(layer: OverlayLayer) {
-        val source = overlays.depthSourceFor(layer.id)
-        if (source == null) {
-            toast("${layer.name} has no depth data to recolour")
-            return
-        }
-        // The colours sheet leaves the map visible; the layer list would cover it.
-        sidePanel.close()
+        // One colours sheet for a layer: a second tap while it opens, or while it is up, does nothing.
+        useLayer(layer, au.opendepth.app.map.LayerUse.COLOURS) { opened, done ->
+            val source = overlays.depthSourceFor(opened.id)
+            if (source == null) {
+                done()
+                toast("${opened.name} has no depth data to recolour")
+                return@useLayer
+            }
+            // The colours sheet leaves the map visible; the layer list would cover it.
+            sidePanel.close()
 
-        scope.launch {
-            // How the depths are spread (a second or two the first time on a big survey).
-            val histogram = withContext(Dispatchers.IO) { runCatching { source.histogram() }.getOrNull() }
-            if (isFinishing || isDestroyed) return@launch
-            depthRampDialog.show(
-                layerName = layer.name,
-                dataShallowestMetres = source.shallowestMetres,
-                dataDeepestMetres = source.deepestMetres,
-                initial = layer.ramp ?: OverlayLayerController.autoFitRamp(source),
-                // Every depth layer is shaded now, not only GDAL-backed ones.
-                hillshadeAvailable = true,
-                histogram = histogram
-            ) { ramp -> overlays.setRamp(layer.id, ramp) }
+            scope.launch {
+                // How the depths are spread (a second or two the first time on a big survey).
+                val histogram = withContext(Dispatchers.IO) { runCatching { source.histogram() }.getOrNull() }
+                if (isFinishing || isDestroyed) {
+                    done()
+                    return@launch
+                }
+                depthRampDialog.show(
+                    layerName = opened.name,
+                    dataShallowestMetres = source.shallowestMetres,
+                    dataDeepestMetres = source.deepestMetres,
+                    initial = opened.ramp ?: OverlayLayerController.autoFitRamp(source),
+                    // Every depth layer is shaded now, not only GDAL-backed ones.
+                    hillshadeAvailable = true,
+                    histogram = histogram,
+                    // A hidden layer's file was opened for this: closed again once the colours are chosen.
+                    onClosed = done
+                ) { ramp -> overlays.setRamp(opened.id, ramp) }
+            }
+        }
+    }
+
+    /**
+     * Runs [then] with [layer] once its file is open: at once, unless it is
+     * a hidden layer whose file is closed, which is opened first (without
+     * showing it). [then] calls `done` once it has finished with the layer,
+     * and a hidden layer is closed again when all its uses are done. A
+     * second tap on the same [use] while the first is waiting or under way
+     * does nothing.
+     */
+    private fun useLayer(
+        layer: OverlayLayer,
+        use: au.opendepth.app.map.LayerUse,
+        then: (layer: OverlayLayer, done: () -> Unit) -> Unit
+    ) {
+        val opening = overlays.isAsleep(layer.id)
+        if (overlays.whenAwake(layer.id, use, then) && opening) toast("Opening ${layer.name}")
+    }
+
+    private fun showContourLinesDialog(layer: OverlayLayer) {
+        // The list's own copy of the layer may be from before its lines were last changed.
+        val current = overlays.stackTopFirst.firstOrNull { it.id == layer.id } ?: layer
+        // The sheet leaves the map visible; the layer list would cover it.
+        sidePanel.close()
+        contourLinesDialog.show(current.name, current.contourSettings) { settings ->
+            overlays.setContours(current.id, settings)
         }
     }
 
     private fun open3d(layer: OverlayLayer) {
-        val source = overlays.depthSourceFor(layer.id)
-        if (source == null) {
-            toast("${layer.name} has no depth data to show in 3D")
-            return
+        // One 3D view for a layer: a second tap while it opens or builds does nothing.
+        useLayer(layer, au.opendepth.app.map.LayerUse.VIEW_3D) { opened, done ->
+            val source = overlays.depthSourceFor(opened.id)
+            if (source == null) {
+                done()
+                toast("${opened.name} has no depth data to show in 3D")
+                return@useLayer
+            }
+            sidePanel.close()
+            terrain3d.open(
+                name = opened.name,
+                depthSource = source,
+                marks = waypointStore.all,
+                region = visibleRegionWithin(source.bounds),
+                detail = settingsRepository.loadRasterQuality(this).terrainDetail,
+                ramp = opened.ramp ?: OverlayLayerController.autoFitRamp(source),
+                // Closed, or could not be built: a hidden layer's file is closed again.
+                onDone = done
+            )
         }
-        sidePanel.close()
-        terrain3d.open(
-            name = layer.name,
-            depthSource = source,
-            marks = waypointStore.all,
-            region = visibleRegionWithin(source.bounds),
-            detail = settingsRepository.loadRasterQuality(this).terrainDetail,
-            ramp = layer.ramp ?: OverlayLayerController.autoFitRamp(source)
-        )
     }
 
     /**
@@ -1834,6 +1969,18 @@ class MainActivity : AppCompatActivity() {
         settingsRepository.saveVisual(settings)
         hud.applyVisualSettings(settings)
         hud.showDepth("")
+    }
+
+    /**
+     * How positions are written was changed (Settings, Map display): what is
+     * on screen now is written again in the new format, with no restart.
+     * Everything opened later reads the format as it opens.
+     */
+    private fun setPositionFormat(mode: String) {
+        settingsRepository.savePositionFormat(mode)
+        au.opendepth.app.util.CoordinateFormatter.mode = mode
+        mapHolder.map?.cameraPosition?.target?.let { hud.showCoordinates(it.latitude, it.longitude) }
+        refreshWaypointPanel()
     }
 
     // Depth readout --------------------------------------------------------
@@ -1869,7 +2016,16 @@ class MainActivity : AppCompatActivity() {
     /** Closes the panel and fits the layer on screen (tapping its name in the list). */
     private fun showLayer(layer: OverlayLayer) {
         val bounds = overlays.boundsOf(layer.id) ?: run {
-            toast("${layer.name} has no known area to show")
+            // A layer hidden since before the app started: where it lies is only known from its file,
+            // opened for this and closed again after (unless another of its tools still has it open).
+            if (overlays.isAsleep(layer.id)) {
+                useLayer(layer, au.opendepth.app.map.LayerUse.GO_TO) { opened, done ->
+                    if (overlays.boundsOf(opened.id) != null) showLayer(opened)
+                    done()
+                }
+            } else {
+                toast("${layer.name} has no known area to show")
+            }
             return
         }
         sidePanel.close()
@@ -2031,8 +2187,10 @@ class MainActivity : AppCompatActivity() {
 
     /** Public: the download service uses these to build its notification's intent. */
     companion object {
-        /** A fix older than this is too stale to mark a man overboard at. */
+        /** A fix older than this is too stale to mark a man overboard at, or to say where the phone is. */
         private const val MOB_FIX_MAX_AGE_MS = 30_000L
+        /** A photo no older than this was most likely taken where the phone still is. */
+        private const val PHOTO_JUST_TAKEN_MS = 10 * 60_000L
         /** Waypoint photos, under the app's files folder (backed up with the rest). */
         const val PHOTOS_DIR = "photos"
         private const val PHOTO_MAX_PX = 1600

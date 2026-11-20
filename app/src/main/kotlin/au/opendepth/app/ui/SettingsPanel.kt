@@ -4,6 +4,7 @@ import android.content.Context
 import android.widget.TextView
 import au.opendepth.app.settings.DepthDisplayMode
 import au.opendepth.app.settings.VisualSettings
+import au.opendepth.app.util.CoordinateFormatter
 import kotlin.math.roundToInt
 
 /**
@@ -52,7 +53,16 @@ class SettingsPanel(
         val zones: au.opendepth.app.map.MarineZonesController? = null,
         /** Asks once that the zones are a guide only; [done] runs when accepted. */
         val confirmZones: (done: () -> Unit) -> Unit = { it() },
-        val onZonesChanged: () -> Unit = {}
+        val onZonesChanged: () -> Unit = {},
+        val showScaleBar: () -> Boolean = { true },
+        val onShowScaleBarChanged: (Boolean) -> Unit = {},
+        /** How positions are written: one of [CoordinateFormatter.MODES]. */
+        val positionFormat: () -> String = { CoordinateFormatter.MODE_DDM },
+        val onPositionFormatChanged: (String) -> Unit = {},
+        /** A position to show each format with (the middle of the chart), as latitude and longitude. */
+        val positionExample: () -> Pair<Double, Double>? = { null },
+        /** Opens the Storage screen: what the app keeps on the phone. */
+        val onStorage: () -> Unit = {}
     )
 
     /**
@@ -85,6 +95,10 @@ class SettingsPanel(
                 if (callbacks.showWaypointNames()) "On" else "Off"
             rows[ROW_GRID]?.text = "Latitude and longitude grid\n" +
                 if (callbacks.showGrid()) "On" else "Off"
+            rows[ROW_SCALE_BAR]?.text = "Scale bar\n" +
+                if (callbacks.showScaleBar()) "On" else "Off"
+            rows[ROW_POSITION_FORMAT]?.text = "Position format\n" +
+                CoordinateFormatter.labelFor(callbacks.positionFormat())
             rows[ROW_NAV_MARKS]?.text = "Buoys, beacons, pipelines (beta)\n" +
                 if (callbacks.showNavMarks()) "On" else "Off"
         }
@@ -211,6 +225,35 @@ class SettingsPanel(
                     refresh()
                 }
             }.also { panels.addRow(body, it) }
+
+            rows[ROW_SCALE_BAR] = panels.row(
+                "Scale bar",
+                if (callbacks.showScaleBar()) "On" else "Off"
+            ) {
+                panels.showChoicePanel(
+                    title = "Scale bar",
+                    labels = listOf("Off", "On"),
+                    selectedIndex = if (callbacks.showScaleBar()) 1 else 0
+                ) { index ->
+                    callbacks.onShowScaleBarChanged(index == 1)
+                    refresh()
+                }
+            }.also { panels.addRow(body, it) }
+
+            rows[ROW_POSITION_FORMAT] = panels.row(
+                "Position format",
+                CoordinateFormatter.labelFor(callbacks.positionFormat())
+            ) {
+                val example = callbacks.positionExample()
+                panels.showChoicePanel(
+                    title = "Position format",
+                    labels = CoordinateFormatter.choiceLabels(example?.first, example?.second),
+                    selectedIndex = CoordinateFormatter.MODES.indexOf(callbacks.positionFormat())
+                ) { index ->
+                    callbacks.onPositionFormatChanged(CoordinateFormatter.MODES[index])
+                    refresh()
+                }
+            }.also { panels.addRow(body, it) }
         }
 
         fun depths(body: android.widget.LinearLayout) {
@@ -286,7 +329,7 @@ class SettingsPanel(
                 body,
                 panels.row(
                     "Offline maps",
-                    "Download the area on screen"
+                    "Draw the area on the chart, then download it"
                 ) {
                     dataSourceDialog.show(callbacks.dataSources)
                 }
@@ -414,6 +457,12 @@ class SettingsPanel(
                     callbacks.onExportGpx()
                 }
             )
+            panels.addRow(
+                body,
+                panels.row("Storage", "What the app keeps on this phone") {
+                    callbacks.onStorage()
+                }
+            )
             body.addView(
                 panels.caption(
                     "If something goes wrong, share this log so it can be fixed.",
@@ -450,13 +499,13 @@ class SettingsPanel(
         }
 
         val categories = listOf(
-            Triple("Map display", "Crosshair, text sizes, waypoint names, grid", ::mapDisplay),
+            Triple("Map display", "Crosshair, text sizes, waypoint names, grid, scale bar, position format", ::mapDisplay),
             Triple("Depths", "Seabed downloads, your own files, depth colours", ::depths),
             Triple("Online and offline maps", "Satellite and other map layers, save maps offline", ::maps),
             Triple("Boat and navigation", "Boat, units, routes, anchor alarm, tracks", ::boat),
             Triple("Tides and sea conditions", "Tide charts, wind, waves, currents, sea temperature", ::tidesAndSea),
             Triple("Australia", "Marine park zones, reef names, boat ramps, buoys", ::australia),
-            Triple("Waypoints and backup", "Backup, photos, GPX and KML, debug log", ::dataAndBackup),
+            Triple("Waypoints and backup", "Backup, photos, GPX and KML, storage, debug log", ::dataAndBackup),
             Triple("About", "Safety and terms, privacy, licences", ::about)
         )
 
@@ -512,6 +561,8 @@ class SettingsPanel(
         const val ROW_XYZ = "xyz"
         const val ROW_WAYPOINT_NAMES = "waypointNames"
         const val ROW_GRID = "grid"
+        const val ROW_SCALE_BAR = "scaleBar"
+        const val ROW_POSITION_FORMAT = "positionFormat"
         const val ROW_NAV_MARKS = "nav_marks"
 
         val COLOUR_NAMES = listOf(
