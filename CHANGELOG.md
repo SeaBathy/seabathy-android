@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.4.0 — 2026-11-21
+
+High-detail depths outside Australia.
+
+- **High detail in more places.** Besides Australian waters, **Get seabed depths** → **High
+  detail** now builds a sharp depth layer on US coasts, Hawaii and the US islands (NOAA's
+  coastal DEMs, about 3 m), on surveyed Canadian coasts and harbours (CHS NONNA, 10 m), in
+  European seas (EMODnet, about 115 m), on New Zealand coasts surveyed by lidar since 2024
+  (LINZ, 1 m, to about 25 m deep) and on the reef shallows of the Pacific islands (Digital Earth
+  Pacific, a satellite estimate at 10 m, to about 10 m deep). GMRT fills whatever they don't
+  cover, so the sea has no holes.
+- **Says where and what.** The "Which depths?" card lists where High detail works. After you
+  draw the box, the line under it names the country and region (say "USA (Florida)" or
+  "New Zealand (Northland)"), what the box will get and how big the file will be, or says
+  there's no high detail there and leaves **Get depths** off.
+- **Credits for each source.** The layer's credit line and the sources file saved beside it
+  list every source that has depths in that file, and GMRT when it filled gaps.
+- The credit line under the chart names each source once, even when two layers share it.
+- Nothing is hosted by SeaBathy and no depths come with the app: the phone asks each service
+  for the area you draw. Not for navigation; each source keeps its own vertical datum.
+
 ## 1.3.9 — 2026-11-21
 
 More to see on the chart and in 3D, and a download about half the size.

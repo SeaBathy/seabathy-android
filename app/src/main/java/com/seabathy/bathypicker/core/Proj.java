@@ -28,6 +28,8 @@ public abstract class Proj {
             if (code >= 28348 && code <= 28358) return Tm.utm(code - 28300, true, WGS84_A, GRS80_RF);  // GDA94 / MGA
             if (code >= 7846 && code <= 7859) return Tm.utm(code - 7800, true, WGS84_A, GRS80_RF);    // GDA2020 / MGA
             if (code == 3395) return new Mercator(WGS84_A, WGS84_RF);
+            if (code == 3832) return new Mercator(WGS84_A, WGS84_RF, 150);                          // WGS 84 / PDC Mercator
+            if (code == 2193) return new Tm(173, 0.9996, 1600000, 10000000, WGS84_A, GRS80_RF);  // NZGD2000 / NZTM2000
             if (code == 9473) return new AlbersProj();
             return null;
         }
@@ -63,19 +65,34 @@ public abstract class Proj {
         }
     }
 
-    /** Ellipsoidal Mercator (EPSG:3395, World Mercator). */
+    /**
+     * Ellipsoidal Mercator: EPSG:3395 (World Mercator), or EPSG:3832 (PDC Mercator, centred on
+     * 150 E so the Pacific isn't cut at the 180th meridian: longitudes are taken the short way
+     * round from the centre).
+     */
     static final class Mercator extends Proj {
-        final double a, e;
+        final double a, e, lon0;
 
         Mercator(double a, double rf) {
+            this(a, rf, 0);
+        }
+
+        Mercator(double a, double rf, double lon0) {
             this.a = a;
+            this.lon0 = lon0;
             double f = 1 / rf;
             e = Math.sqrt(f * (2 - f));
         }
 
         @Override public void forward(double lon, double lat, double[] out) {
             double phi = Math.toRadians(lat), s = Math.sin(phi);
-            out[0] = a * Math.toRadians(lon);
+            double d = lon;
+            if (lon0 != 0) {
+                d = lon - lon0;
+                while (d < -180) d += 360;
+                while (d >= 180) d -= 360;
+            }
+            out[0] = a * Math.toRadians(d);
             out[1] = a * Math.log(Math.tan(Math.PI / 4 + phi / 2) * Math.pow((1 - e * s) / (1 + e * s), e / 2));
         }
     }

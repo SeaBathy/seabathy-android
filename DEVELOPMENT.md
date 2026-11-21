@@ -32,7 +32,8 @@ app, see the [README](README.md). For building, signing and the device test, see
       ui/               panels, dialogs and view binding
       util/             small shared helpers
     app/src/main/java/com/seabathy/bathypicker/core/
-                        the high-detail depths engine (from BathyPicker)
+                        the high-detail depths engine (from BathyPicker); World.java
+                        adds the sources outside Australia, Lerc2.java reads LERC tiles
     app/src/main/assets/
                         marine park zones, buoys and beacons, the built-in world
                         coastline, map fonts, the PROJ database, licences.txt

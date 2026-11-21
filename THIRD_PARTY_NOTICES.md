@@ -28,6 +28,7 @@ services are listed separately in [`DATA_ATTRIBUTION.md`](DATA_ATTRIBUTION.md).
 | LeakCanary (debug builds only, not in release APKs) | 2.14 | Apache 2.0 | https://github.com/square/leakcanary |
 | High-detail depths engine (`app/src/main/java/com/seabathy/bathypicker/core`), from [BathyPicker](https://github.com/SeaBathy/BathyPicker) by the same authors | — | GPL-3.0 | this repository |
 | Code in that engine that follows GDAL 3.13.3: `Proximity.java` (from `gdalproximity.cpp`) and the resampling and scale steps in `Builder.java` (from `gdalwarpkernel.cpp` and `gdalwarpoperation.cpp`) | 3.13.3 | MIT (© Frank Warmerdam, Even Rouault); full text in `app/src/main/assets/licenses.txt` | https://github.com/OSGeo/gdal |
+| The LERC 2 decoder in that engine (`Lerc2.java`, for the New Zealand lidar files), ported from the decode path of Esri's LERC (`LercDecode.js`, as in the C++ `src/LercLib`) | 3.0.0 | Apache 2.0 (© 2015-2021 Esri) | https://github.com/Esri/lerc |
 
 ### Native GDAL (`app/libs/gdal-3.7.0.aar`)
 

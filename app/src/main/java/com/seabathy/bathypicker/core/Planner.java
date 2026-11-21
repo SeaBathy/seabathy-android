@@ -59,6 +59,20 @@ public final class Planner {
         public Map<String, Double> bandM = new HashMap<>();
         /** Filled in while building: the band each survey really got (narrower for small surveys). */
         public final Map<String, Double> bandUsedM = Collections.synchronizedMap(new HashMap<>());
+        /** Bottom layers in a coordinate system of their own, laid under the surveys instead of IMAS (see World). */
+        public List<Base> bases = new ArrayList<>();
+        /** What the progress line calls the bottom layer, and each layer on top. */
+        public String baseLabel = "the IMAS composite";
+        public String layerWord = "survey";
+        /** Count, while building, which layer each finished pixel came from (Builder.layerPixels, basePixels). */
+        public boolean countLayers;
+    }
+
+    /** A bottom layer read through its own projection: GMRT under the overseas sources. */
+    public static final class Base {
+        public RemoteTiff tiff;
+        public Proj proj;
+        public String label;
     }
 
     public static String crsLabel(String crs) {

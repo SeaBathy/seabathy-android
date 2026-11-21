@@ -33,6 +33,8 @@ public final class RemoteTiff {
         boolean strip;
         int rowsPerStrip, group, strips;
         int compression, predictor, bits, sampleFormat;
+        /** LERC (compression 34887): what the tile bytes are wrapped in, 0 nothing, 1 Deflate (TIFF tag 50674). */
+        int lercWrap;
         int offType, cntType;
         long offPtr, cntPtr;
         long[] offInline, cntInline;
@@ -116,6 +118,9 @@ public final class RemoteTiff {
                     case 322: L.tileW = (int) h.uint(type, dataPos); break;
                     case 323: L.tileH = (int) h.uint(type, dataPos); break;
                     case 339: L.sampleFormat = (int) h.uint(type, dataPos); break;
+                    case 50674:
+                        if (count >= 2) L.lercWrap = (int) h.uint(type, dataPos + typeSize(type));
+                        break;
                     case 278: L.rowsPerStrip = (int) Math.min(Integer.MAX_VALUE, h.uint(type, dataPos)); break;
                     case 273:
                         L.strip = true;
@@ -136,6 +141,18 @@ public final class RemoteTiff {
                         break;
                     case 33922:
                         if (lv.isEmpty()) { h.ensure(dataPos, (int) bytes); tie = h.doubles(dataPos, (int) count); }
+                        break;
+                    case 34264:
+                        // ModelTransformation (what GeoServer writes for a scaled request): kept when it
+                        // isn't turned, as a pixel size and a tie point.
+                        if (lv.isEmpty() && count >= 16) {
+                            h.ensure(dataPos, (int) bytes);
+                            double[] m = h.doubles(dataPos, 16);
+                            if (m[1] == 0 && m[4] == 0 && scale == null && tie == null) {
+                                scale = new double[]{m[0], -m[5], 0};
+                                tie = new double[]{0, 0, 0, m[3], m[7], 0};
+                            }
+                        }
                         break;
                     case 34735:
                         if (lv.isEmpty()) {
@@ -179,7 +196,9 @@ public final class RemoteTiff {
                 if (L.bits != 32 || L.sampleFormat != 3) throw new IOException(url + " isn't 32-bit float data.");
                 if (L.compression == 50000 || L.compression == 34926)
                     throw new UnsupportedException(url + " uses Zstandard compression, which the phone can't read.");
-                if (L.compression != 1 && L.compression != 5 && L.compression != 8 && L.compression != 32946)
+                if (L.compression == 34887 && L.lercWrap != 0 && L.lercWrap != 1)
+                    throw new UnsupportedException(url + " uses LERC with Zstandard, which the phone can't read.");
+                if (L.compression != 1 && L.compression != 5 && L.compression != 8 && L.compression != 32946 && L.compression != 34887)
                     throw new UnsupportedException(url + " uses TIFF compression " + L.compression + ", which this app can't read.");
                 L.tilesX = (L.width + L.tileW - 1) / L.tileW;
                 L.tilesY = (L.height + L.tileH - 1) / L.tileH;
@@ -359,6 +378,13 @@ public final class RemoteTiff {
     }
 
     private float[] decodeBlock(Level L, byte[] data, int off, int len, int tileW, int tileH) throws IOException {
+        if (L.compression == 34887) {
+            if (L.lercWrap == 1) {
+                byte[] blob = inflateAll(data, off, len);
+                return Lerc2.decode(blob, 0, blob.length, tileW, tileH);
+            }
+            return Lerc2.decode(data, off, len, tileW, tileH);
+        }
         int n = tileW * tileH;
         byte[] raw = new byte[n * 4];
         if (L.compression == 1) {
@@ -414,6 +440,26 @@ public final class RemoteTiff {
                 }
         }
         return out;
+    }
+
+    /** A whole zlib stream, size not known beforehand (LERC tiles wrapped in Deflate). */
+    private byte[] inflateAll(byte[] data, int off, int len) throws IOException {
+        Inflater inf = new Inflater();
+        try {
+            inf.setInput(data, off, len);
+            java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream(Math.max(1024, len * 3));
+            byte[] buf = new byte[65536];
+            while (!inf.finished()) {
+                int got = inf.inflate(buf);
+                if (got == 0 && (inf.needsInput() || inf.needsDictionary())) break;
+                out.write(buf, 0, got);
+            }
+            return out.toByteArray();
+        } catch (DataFormatException e) {
+            throw new IOException("A tile in " + url + " is damaged (" + e.getMessage() + ").");
+        } finally {
+            inf.end();
+        }
     }
 
     /** TIFF LZW (codes MSB first, 9 to 12 bits, early change), as in libtiff's LZWDecode. */

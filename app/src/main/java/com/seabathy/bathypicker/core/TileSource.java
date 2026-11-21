@@ -130,7 +130,7 @@ public final class TileSource {
                     jobs.add(CompletableFuture.runAsync(() -> {
                         try {
                             byte[] data = Http.range(t.url, start, len, cancel);
-                            bytesDownloaded.addAndGet(len);
+                            if (!t.url.startsWith("file:")) bytesDownloaded.addAndGet(len);
                             for (int tx = first; tx <= last; tx++) {
                                 int o = (int) (off[tx] - start);
                                 finish(owned, key(t, L, tx, fty),

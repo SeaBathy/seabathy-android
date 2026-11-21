@@ -114,8 +114,8 @@ class LayerImportCoordinator(
     }
 
     /**
-     * Builds high-detail Australian depths for [area] ([HighDetailDepths]) and opens them as a
-     * layer. Can take a few minutes for a big area; the dialog shows progress and can cancel.
+     * Builds high-detail depths for [area] ([HighDetailDepths]) and opens them as a layer. Can
+     * take a few minutes for a big area; the dialog shows progress and can cancel.
      */
     fun downloadHighDetail(area: SeabedDownload.Area) {
         var work: kotlinx.coroutines.Job? = null
@@ -125,30 +125,30 @@ class LayerImportCoordinator(
             val importer = GeoTiffImporter(context, File(filesDir, OverlayLayerController.GEOTIFF_TILE_CACHE_DIR))
             val result = try {
                 runCatchingCancellable {
-                    val (file, credits) = withContext(Dispatchers.IO) {
+                    val built = withContext(Dispatchers.IO) {
                         HighDetailDepths.build(context, area, File(filesDir, OverlayLayerController.SEABED_DIR)) { pct, stage ->
                             progress.update(if (pct > 0) "$pct%  $stage" else stage)
                         }
                     }
-                    val existing = overlays.layerWithSource(file.absolutePath)
+                    val existing = overlays.layerWithSource(built.file.absolutePath)
                     if (existing != null) {
-                        Triple(existing, null, credits)
+                        Triple(existing, null, built.credit)
                     } else {
                         progress.update("Opening the depths…")
-                        Triple(null, openOnIoClosingOnCancel({ importer.importFileOnDemand(file) }) { imported ->
+                        Triple(null, openOnIoClosingOnCancel({ importer.importFileOnDemand(built.file) }) { imported ->
                             (imported as? GeoTiffImporter.ImportedGeoTiff.OnDemand)?.tileSource?.close()
-                        }, credits)
+                        }, built.credit)
                     }
                 }
             } finally {
                 progress.dismiss()
             }
-            result.onSuccess { (existing, imported, _) ->
+            result.onSuccess { (existing, imported, credit) ->
                 if (existing != null) {
                     showAgain(existing)
                 } else if (imported != null) {
                     // No camera move: the box was drawn where the user is looking.
-                    overlays.addGeoTiff(imported, HighDetailDepths.CREDIT)
+                    overlays.addGeoTiff(imported, credit)
                     onResult(describe(imported))
                 }
             }.onFailure { error ->

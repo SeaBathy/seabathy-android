@@ -4,7 +4,7 @@
 Your depth maps in 3D, offline charts, tides and sea conditions. Works anywhere in the world.</p>
 
 <p align="center">
-  <img alt="Version 1.3.9" src="https://img.shields.io/badge/version-1.3.9-0f766e">
+  <img alt="Version 1.4.0" src="https://img.shields.io/badge/version-1.4.0-0f766e">
   <img alt="Android 8.0+" src="https://img.shields.io/badge/Android-8.0%2B-3ddc84?logo=android&logoColor=white">
   <img alt="GPL-3.0 licence" src="https://img.shields.io/badge/licence-GPL--3.0-blue">
   <img alt="No ads, no tracking" src="https://img.shields.io/badge/ads%20%26%20tracking-none-success">
@@ -45,7 +45,7 @@ once it's on the phone. Free and open source, with no account, ads or tracking.
 | | |
 |---|---|
 | 🗺️ **Your surveys, sharp** | GeoTIFF depth surveys, even multi-gigabyte BigTIFFs, coloured by depth or slope with relief shading and contour lines, shallow water in red. The depth under the crosshair as you pan. |
-| 🌊 **Free depths anywhere** | Download seabed depths for an area you draw on the chart, anywhere in the world (GMRT), or in high detail for Australian waters (IMAS composite with AusSeabed and state multibeam surveys, built on the phone). |
+| 🌊 **Free depths anywhere** | Download seabed depths for an area you draw on the chart, anywhere in the world (GMRT), or in high detail, built on the phone: Australian waters (IMAS composite with AusSeabed and state multibeam surveys), US coasts (NOAA), surveyed Canadian coasts (CHS), European seas (EMODnet), New Zealand coasts surveyed by lidar (LINZ) and Pacific island reef shallows (Digital Earth Pacific). |
 | 🏝️ **3D seabed** | Rotate and fly over any depth layer. Exaggerate the height up to 100× so every reef wall stands out, drape satellite or offline maps over it, tap for depth and slope. |
 | 📶 **Works offline** | Save satellite maps, tides and sea conditions for the area you fish, then use them with no signal. |
 | 🌡️ **Tides and sea conditions** | Tide charts, wind, waves, swell, currents with moving flow lines, sea temperature and its breaks, chlorophyll, sea level and salinity. |
@@ -70,7 +70,7 @@ reef wall, channel and bommie stand out, with depth colours or satellite on top.
 
 ## Install
 
-1. Download **[`SeaBathy-1.3.9.apk`](download/SeaBathy-1.3.9.apk)** onto your phone (or
+1. Download **[`SeaBathy-1.4.0.apk`](download/SeaBathy-1.4.0.apk)** onto your phone (or
    from the Releases page).
 2. Open it. If Android asks, allow your browser or file manager to *install unknown apps*.
 3. Open SeaBathy. The first start shows the whole world; zoom in to where you go.
@@ -101,6 +101,12 @@ area, up to 10 m detail.
 the area (drag the box to move it, or a corner to resize it). The depths
 come from GMRT, a free worldwide model built from ship surveys. They're sharpest where ships
 have surveyed and coarser elsewhere, and they're saved on the phone for offline use.
+
+**High detail** is offered in Australian waters (IMAS and multibeam surveys), on US coasts
+(NOAA, about 3 m), on surveyed Canadian coasts and harbours (CHS), in European seas (EMODnet,
+about 115 m), on New Zealand coasts surveyed by lidar since 2024 (LINZ, to about 25 m deep) and
+on Pacific island reef shallows (Digital Earth Pacific, a satellite estimate to about 10 m).
+The line under the box names the country and region and what it will get; GMRT fills any gaps.
 </details>
 
 <details>
@@ -316,7 +322,7 @@ height, wind (including Beaufort), waves and swell, current and sea temperature.
 <details>
 <summary><b>Also</b></summary>
 
-- Free seabed depths anywhere (GMRT), and high-detail Australian depths built on the phone (IMAS, AusSeabed); NASA's daily true colour picture; a latitude and longitude grid
+- Free seabed depths anywhere (GMRT), and high-detail depths built on the phone for Australia (IMAS, AusSeabed), the USA (NOAA), Canada (CHS), Europe (EMODnet), New Zealand (LINZ) and the Pacific islands (Digital Earth Pacific); NASA's daily true colour picture; a latitude and longitude grid
 - Offline map downloads of an area you draw, with a tile count, a size estimate, background progress and retries
 - Waypoints with icons, colours, notes and search; measurement tool; positions written as DDM, DMS or DD, your choice
 - A scale bar, a course arrow on the boat, and a storage screen showing what the app keeps

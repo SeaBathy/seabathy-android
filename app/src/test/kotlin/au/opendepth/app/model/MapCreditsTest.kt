@@ -88,6 +88,16 @@ class MapCreditsTest {
     }
 
     @Test
+    fun `two built layers both filled from the same source name it once on the line`() {
+        val usa = MapCredit(MapCredit.Group.LAYER, "Key West", "Depths: NOAA NCEI coastal DEMs (public domain); ${survey.text}")
+        val fiji = MapCredit(MapCredit.Group.LAYER, "Mamanuca", "Depths (estimate): Digital Earth Pacific; ${survey.text}")
+        assertEquals(
+            "Not for navigation • Depths: NOAA NCEI coastal DEMs (public domain) • ${survey.text} • Depths (estimate): Digital Earth Pacific",
+            MapCredits.line(listOf(usa, fiji))
+        )
+    }
+
+    @Test
     fun `everything on the line is in the full list`() {
         val credits = listOf(basemap, survey, pack, zones)
         val listed = MapCredits.sections(credits).flatMap { it.lines }.joinToString("\n")

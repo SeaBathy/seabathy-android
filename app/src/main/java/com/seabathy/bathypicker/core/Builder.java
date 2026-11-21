@@ -162,6 +162,16 @@ public final class Builder {
     private final List<List<Layer>> surveys = new ArrayList<>();
     private final List<Surveys.Survey> surveyOrder = new ArrayList<>();
 
+    /**
+     * With plan.countLayers (blended builds only): pixels each survey had data in, by survey id,
+     * and how many finished pixels came from the bottom layer alone (-1 until known).
+     */
+    public final Map<String, Long> layerPixels = Collections.synchronizedMap(new LinkedHashMap<>());
+    public volatile long basePixels = -1;
+    /** Pixels some survey had data in (row-major), while counting. */
+    private java.util.BitSet covered;
+    private final java.util.concurrent.atomic.AtomicLong baseOnly = new java.util.concurrent.atomic.AtomicLong();
+
     // statistics while writing
     private double min = Double.MAX_VALUE, max = -Double.MAX_VALUE;
     private long valid;
@@ -215,10 +225,19 @@ public final class Builder {
             L.label = plan.order.get(i).file;
             imas.add(L);
         }
+        double cx = (b[0] + b[2]) / 2, cy = (b[1] + b[3]) / 2;
+        // Bottom layers in their own projection (GMRT overseas), under everything else.
+        for (Planner.Base base : plan.bases) {
+            Layer L = new Layer();
+            L.t = base.tiff;
+            L.proj = base.proj;
+            L.label = base.label;
+            L.level = pickLevel(L.t, sourcePerOutput(L.t, base.proj, cx, cy) * shrink);
+            imas.add(L);
+        }
         // Surveys: the same rule, with the source pixels per output pixel measured at the box's middle.
         List<Surveys.Survey> bottomUp = new ArrayList<>(plan.chosen);
         Collections.reverse(bottomUp);
-        double cx = (b[0] + b[2]) / 2, cy = (b[1] + b[3]) / 2;
         for (Surveys.Survey s : bottomUp) {
             List<Layer> files = new ArrayList<>();
             for (Surveys.SFile f : s.files) {
@@ -281,6 +300,10 @@ public final class Builder {
         TiffWriter tw = new TiffWriter(out, in, width, height, gt, epsg(), outNodata);
         for (Layer L : imas) {
             RemoteTiff.Level lv = L.t.levels.get(L.level);
+            if (L.proj != null) {
+                job.add(L.label + (L.level == 0 ? "" : " (overview " + L.level + ")"));
+                continue;
+            }
             job.add(String.format(Locale.ROOT, "%s: %s m%s", L.label, Planner.g(Math.round(lv.resX * 100) / 100.0),
                     L.level == 0 ? "" : " (overview " + L.level + ")"));
         }
@@ -298,7 +321,8 @@ public final class Builder {
             blended(tw, mainShare);
         } else {
             AtomicInteger doneBlocks = new AtomicInteger();
-            String stage = surveys.isEmpty() ? "Reading from IMAS and merging the depth layers" : "Reading IMAS and the surveys and merging them";
+            String stage = !plan.bases.isEmpty() ? "Reading " + plan.baseLabel + " and the layers on top and merging them"
+                    : surveys.isEmpty() ? "Reading from IMAS and merging the depth layers" : "Reading IMAS and the surveys and merging them";
             job.progress(0, stage);
             List<Future<?>> fs = new ArrayList<>();
             for (int by = 0; by < blocksY; by++) {
@@ -746,11 +770,12 @@ public final class Builder {
         File cf = new File(workDir, "bp-" + tag0 + "-c.tmp"), sf = new File(workDir, "bp-" + tag0 + "-s.tmp"),
                 df = new File(workDir, "bp-" + tag0 + "-d.tmp");
         try (Grid C = new Grid(cf, width, height); Grid S = new Grid(sf, width, height); Grid D = new Grid(df, width, height)) {
-            job.progress(0, "Reading the IMAS composite");
-            toGrid(tw, C, imas, share * ++done[0] / steps, "Reading the IMAS composite");
+            job.progress(0, "Reading " + plan.baseLabel);
+            toGrid(tw, C, imas, share * ++done[0] / steps, "Reading " + plan.baseLabel);
+            if (plan.countLayers) covered = new java.util.BitSet();
             for (int i = 0; i < nLayers; i++) {
                 Surveys.Survey s = surveyOrder.get(i);
-                String tag = nLayers > 1 ? "survey " + (i + 1) + " of " + nLayers : "the survey";
+                String tag = nLayers > 1 ? plan.layerWord + " " + (i + 1) + " of " + nLayers : "the " + plan.layerWord;
                 String st = "Reading " + tag + ": " + s.name;
                 job.progress(share * done[0] / steps, st);
                 toGrid(tw, S, surveys.get(i), share * (done[0] + 1) / steps, st);
@@ -764,7 +789,8 @@ public final class Builder {
                 plan.bandUsedM.put(s.id, band * plan.resM);
                 job.add(String.format(Locale.ROOT, "Blending %s over %.0f m", tag, band * plan.resM));
                 job.progress(share * done[0] / steps, "Blending the edges of " + tag);
-                blend(C, S, D, band);
+                long n = blend(C, S, D, band);
+                if (plan.countLayers) layerPixels.put(s.id, n);
                 done[0]++;
             }
             job.progress(share * done[0] / steps, "Writing the GeoTIFF");
@@ -851,8 +877,9 @@ public final class Builder {
     }
 
     /** blend_calc: S where far enough in, a smooth ramp from C to S across the band, C where S is empty. */
-    private void blend(Grid C, Grid S, Grid D, double band) throws IOException {
+    private long blend(Grid C, Grid S, Grid D, double band) throws IOException {
         int w = width;
+        long n = 0;
         float[] c = new float[w], s = new float[w], d = new float[w];
         for (int y = 0; y < height; y++) {
             job.check();
@@ -861,6 +888,8 @@ public final class Builder {
             D.read(y, 0, d, 0, w);
             for (int x = 0; x < w; x++) {
                 if (s[x] == NODATA) continue;               // C stays
+                n++;
+                if (covered != null) covered.set(y * w + x);
                 if (c[x] == NODATA || d[x] >= band) {       // S as it is
                     c[x] = s[x];
                     continue;
@@ -870,6 +899,7 @@ public final class Builder {
             }
             C.write(y, 0, c, 0, w);
         }
+        return n;
     }
 
     /** The finished grid into the GeoTIFF's tiles, a block at a time. */
@@ -887,11 +917,20 @@ public final class Builder {
                     int c0 = fbx * BLOCK_TILES * TiffWriter.TILE, r0 = fby * BLOCK_ROWS * TiffWriter.TILE;
                     int cw = Math.min(bw, width - c0), ch = Math.min(blockH(tw, fby), height - r0);
                     for (int y = 0; y < ch; y++) g.read(r0 + y, c0, buf, y * bw, cw);
+                    if (covered != null) {
+                        long only = 0;
+                        for (int y = 0; y < ch; y++) {
+                            long row = (long) (r0 + y) * width + c0;
+                            for (int x = 0; x < cw; x++) if (buf[y * bw + x] != NODATA && !covered.get((int) (row + x))) only++;
+                        }
+                        baseOnly.addAndGet(only);
+                    }
                     writeBlock(tw, buf, fbx, fby);
                     return null;
                 }));
             }
         }
         waitAll(fs);
+        if (covered != null) basePixels = baseOnly.get();
     }
 }

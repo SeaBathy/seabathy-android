@@ -51,7 +51,12 @@ class AreaPicker(
     /** The small heading in the bar. */
     private val title: String = "HIGH-DETAIL DEPTHS",
     /** A control of the caller's in the bar, which then says what a box means in place of [describe]. */
-    private val extra: Extra? = null
+    private val extra: Extra? = null,
+    /**
+     * In place of [describe]: a line about the box that can also refuse it (no data there, say).
+     * Call the callback on the main thread.
+     */
+    private val judge: ((Box, (Verdict) -> Unit) -> Unit)? = null
 ) {
     /** What an [Extra] says about a box: the line shown under its control, and whether the box can be confirmed. */
     class Verdict(val text: String, val ok: Boolean)
@@ -141,6 +146,21 @@ class AreaPicker(
         }
         infoText.text = "Working out the download…"
         enable(true)
+        val judging = judge
+        if (judging != null) {
+            refused = false
+            infoText.setTextColor(palette.secondaryText)
+            judging(b) { verdict ->
+                if (token == describeToken) {
+                    refused = !verdict.ok
+                    infoText.text = verdict.text
+                    infoText.setTextColor(if (verdict.ok) palette.secondaryText else palette.destructive)
+                    enable(verdict.ok)
+                    overlay?.invalidate()
+                }
+            }
+            return
+        }
         describe(b) { line -> if (token == describeToken) infoText.text = line ?: "" }
     }
 

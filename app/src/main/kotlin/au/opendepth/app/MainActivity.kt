@@ -1127,7 +1127,7 @@ class MainActivity : AppCompatActivity() {
                 badge = "Seabed depths"
                 title = "Which depths?"
                 rows += au.opendepth.app.ui.InfoCard.Row("High detail",
-                    "Australian waters only. The IMAS composite with AusSeabed and state multibeam surveys on top: down to a metre or two where surveyed. Up to about ${au.opendepth.app.storage.HighDetailDepths.MAX_SPAN_KM} km across.")
+                    "${au.opendepth.app.storage.HighDetailDepths.WHERE} Up to about ${au.opendepth.app.storage.HighDetailDepths.MAX_SPAN_KM} km across.")
                 rows += au.opendepth.app.ui.InfoCard.Row("Standard",
                     "GMRT, worldwide. Ship surveys blended with the GEBCO grid; much coarser away from surveys. Up to about ${SeabedDownload.MAX_SPAN_KM} km across, 55 MB at most, quick.")
                 fine = "Next you draw the area on the chart and see its size first. Either one is added as a layer that also works in 3D and offline."
@@ -1190,13 +1190,17 @@ class MainActivity : AppCompatActivity() {
             map = map,
             maxKm = au.opendepth.app.storage.HighDetailDepths.MAX_SPAN_KM.toDouble(),
             confirmLabel = "Get depths",
-            describe = { box, show ->
+            describe = { _, _ -> },
+            judge = { box, show ->
                 scope.launch {
-                    val line = withContext(Dispatchers.IO) {
+                    val estimate = withContext(Dispatchers.IO) {
                         runCatching { au.opendepth.app.storage.HighDetailDepths.estimate(this@MainActivity, box.toArea()) }
-                            .getOrElse { "Couldn't reach the depth data. Check the internet connection." }
+                            .getOrElse {
+                                au.opendepth.app.storage.HighDetailDepths.Estimate(
+                                    "Couldn't reach the depth data. Check the internet connection.", true)
+                            }
                     }
-                    show(line)
+                    show(au.opendepth.app.ui.AreaPicker.Verdict(estimate.text, estimate.ok))
                 }
             },
             onConfirm = { box -> layerImports.downloadHighDetail(box.toArea()) },

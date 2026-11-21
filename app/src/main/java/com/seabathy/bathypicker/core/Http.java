@@ -25,6 +25,7 @@ public final class Http {
 
     private static byte[] range(String url, long offset, int length, Cancel cancel, boolean allowShort) throws IOException {
         if (length <= 0) return new byte[0];
+        if (url.startsWith("file:")) return local(url, offset, length, allowShort);
         String host = host(url);
         IOException last = null;
         for (int attempt = 0; attempt <= MAX_RETRY; attempt++) {
@@ -90,6 +91,27 @@ public final class Http {
             }
         }
         throw last != null ? last : new IOException("Download failed");
+    }
+
+    /** The same from a file on this device (a file: URL), such as a GeoTIFF a server made for the box. */
+    private static byte[] local(String url, long offset, int length, boolean allowShort) throws IOException {
+        java.io.File f;
+        try {
+            f = new java.io.File(java.net.URI.create(url));
+        } catch (IllegalArgumentException e) {
+            throw new IOException("Not a file: " + url, e);
+        }
+        try (java.io.RandomAccessFile raf = new java.io.RandomAccessFile(f, "r")) {
+            long size = raf.length();
+            int n = (int) Math.max(0, Math.min(length, size - offset));
+            if (n < length && !allowShort) throw new IOException("Short read from " + f.getName() + " (" + n + " of " + length + " bytes)");
+            byte[] out = new byte[n];
+            if (n > 0) {
+                raf.seek(offset);
+                raf.readFully(out);
+            }
+            return out;
+        }
     }
 
     private static String host(String url) {

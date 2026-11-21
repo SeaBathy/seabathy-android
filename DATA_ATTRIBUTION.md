@@ -77,8 +77,17 @@ phone or PC only. SeaBathy shows their credit on the map while they're shown.
 | Salinity | NOAA CoastWatch SMAP, then SMOS, daily | Free to use and redistribute |
 | Temperature at depth | HYCOM Consortium (ESPC-D-V02 ocean model) | Public release; demonstration product with no guarantee of availability |
 | Latest true colour | NASA Global Imagery Browse Services (GIBS), VIIRS | NASA data, no restriction on use; credit requested |
-| Seabed depths | GMRT, Global Multi-Resolution Topography (Ryan et al. 2009, doi:10.1029/2008GC002332) | CC BY 4.0; not to be used for navigation |
+| Seabed depths | GMRT, Global Multi-Resolution Topography (Ryan et al. 2009, doi:10.1029/2008GC002332); also fills the gaps in the high-detail depths outside Australia | CC BY 4.0; not to be used for navigation |
 | High-detail depths (Australia) | Flukes, E. (2026), Multi-resolution bathymetry composite surface for Australian waters (EEZ), IMAS, doi:10.25959/Y9VF-V723; AusSeabed surveys, © Commonwealth of Australia (Geoscience Australia), and state surveys, each credited in the _sources.txt saved beside the file | CC BY 4.0; not to be used for navigation |
+| High-detail depths (USA) | NOAA NCEI coastal DEMs, from NOAA's DEM global mosaic (gis.ngdc.noaa.gov), made for the drawn box; the DEMs used are named in the sources file | US public domain. Credited "Depths: NOAA NCEI coastal DEMs (public domain)" |
+| High-detail depths (Canada) | Canadian Hydrographic Service NONNA-10 non-navigational bathymetry, from CHS's coverage service (nonna-geoserver.data.chs-shc.ca) | Open Government Licence - Canada; not for navigation. Credited "Contains information licensed under the Open Government Licence - Canada (CHS NONNA, not for navigation)" |
+| High-detail depths (Europe) | EMODnet Bathymetry Consortium (2024), EMODnet Digital Bathymetry (DTM 2024), from EMODnet's coverage service (ows.emodnet-bathymetry.eu) | CC BY 4.0 |
+| High-detail depths (New Zealand) | Toitū Te Whenua Land Information New Zealand, New Zealand Coastal LiDAR 1m DEM, read in place from LINZ's public files (nz-coastal on AWS) | CC BY 4.0 |
+| High-detail depths (Pacific islands) | Digital Earth Pacific, Pacific Community (SPC), satellite-derived bathymetry from Sentinel-2 (product version 0.0.1), read in place from its public files; an estimate, shallow water only | CC BY 4.0. Credited "Depths (estimate): ..." |
+
+Outside Australia each high-detail build lists, in the sources file saved beside it, every source
+that has depths in that file (and GMRT when it filled gaps), with the credit line above. Nothing is
+hosted by SeaBathy: each phone asks these services for the area drawn.
 
 The forecasts come from models about 8 km apart. Near the shore, round
 headlands and in narrow channels the real current can be very different.

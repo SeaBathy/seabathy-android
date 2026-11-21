@@ -36,9 +36,13 @@ object MapCredits {
      */
     fun current(saved: String): String = if (saved.trim() == EOX_CLOUDLESS_BEFORE) EOX_CLOUDLESS else saved
 
-    /** The credit line on the chart: "Not for navigation", then each different credit once. */
+    /**
+     * The credit line on the chart: "Not for navigation", then each different credit once. A
+     * layer built from several sources keeps them as one text joined by "; ", so the parts are
+     * compared one by one: two such layers both filled from GMRT name it only once.
+     */
     fun line(credits: List<MapCredit>): String =
-        (listOf(NOT_FOR_NAVIGATION) + credits.map { it.text.trim() }.filter { it.isNotEmpty() })
+        (listOf(NOT_FOR_NAVIGATION) + credits.flatMap { it.text.split("; ") }.map { it.trim() }.filter { it.isNotEmpty() })
             .distinct()
             .joinToString(SEPARATOR)
 
