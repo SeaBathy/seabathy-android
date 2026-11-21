@@ -62,7 +62,13 @@ class SettingsPanel(
         /** A position to show each format with (the middle of the chart), as latitude and longitude. */
         val positionExample: () -> Pair<Double, Double>? = { null },
         /** Opens the Storage screen: what the app keeps on the phone. */
-        val onStorage: () -> Unit = {}
+        val onStorage: () -> Unit = {},
+        /** Opens the drift planner over the chart. */
+        val onDriftPlanner: (() -> Unit)? = null,
+        /** Saves what's on the chart as a GPX file for a chartplotter. */
+        val onPlotterExport: (() -> Unit)? = null,
+        /** Wrecks, artificial reefs, shark gear, fishing closures and NSW reefs (Australia page). */
+        val fishing: au.opendepth.app.map.FishingLayersController? = null
     )
 
     /**
@@ -363,6 +369,12 @@ class SettingsPanel(
                     callbacks.onTracks()
                 }
             )
+            callbacks.onDriftPlanner?.let { open ->
+                panels.addRow(body, panels.row("Drift planner", "Where to start a drift so it passes over a mark") {
+                    closeAll()
+                    open()
+                })
+            }
         }
 
         fun tidesAndSea(body: android.widget.LinearLayout) {
@@ -416,6 +428,21 @@ class SettingsPanel(
                     reopen()
                 })
             }
+            callbacks.fishing?.let { fishing ->
+                fun toggle(title: String, on: Boolean, off: String, set: (Boolean) -> Unit) =
+                    panels.addRow(body, panels.row(title, if (on) "On" else "Off: $off") {
+                        set(!on)
+                        callbacks.onZonesChanged()
+                        reopen()
+                    })
+                toggle("Shipwrecks", fishing.wrecks, "about 5,700 wrecks. Many positions are approximate", fishing::setWrecks)
+                toggle("Artificial reefs", fishing.reefs, "reefs built for fishing in Queensland, and the Gold Coast reef", fishing::setReefs)
+                toggle("Shark nets and drumlines", fishing.sharkGear, "Queensland Shark Control Program gear", fishing::setSharkGear)
+                toggle("Fishing closures", fishing.closures,
+                    "closed areas, fishing limits, no-anchoring and fish habitat areas (Qld, WA, Great Barrier Reef)", fishing::setClosures)
+                toggle("NSW seabed reefs", fishing.nswReefs,
+                    "reef mapped from lidar and sonar. Loads as you zoom in, kept for offline", fishing::setNswReefs)
+            }
             rows[ROW_NAV_MARKS] = panels.row(
                 "Buoys, beacons, pipelines (beta)",
                 if (callbacks.showNavMarks()) "On" else "Off"
@@ -457,6 +484,12 @@ class SettingsPanel(
                     callbacks.onExportGpx()
                 }
             )
+            callbacks.onPlotterExport?.let { export ->
+                panels.addRow(body, panels.row("Export for a chartplotter", "What's on screen, with contours and marks, as GPX for an SD card") {
+                    closeAll()
+                    export()
+                })
+            }
             panels.addRow(
                 body,
                 panels.row("Storage", "What the app keeps on this phone") {
@@ -502,9 +535,9 @@ class SettingsPanel(
             Triple("Map display", "Crosshair, text sizes, waypoint names, grid, scale bar, position format", ::mapDisplay),
             Triple("Depths", "Seabed downloads, your own files, depth colours", ::depths),
             Triple("Online and offline maps", "Satellite and other map layers, save maps offline", ::maps),
-            Triple("Boat and navigation", "Boat, units, routes, anchor alarm, tracks", ::boat),
+            Triple("Boat and navigation", "Boat, units, routes, anchor alarm, tracks, drift planner", ::boat),
             Triple("Tides and sea conditions", "Tide charts, wind, waves, currents, sea temperature", ::tidesAndSea),
-            Triple("Australia", "Marine park zones, reef names, boat ramps, buoys", ::australia),
+            Triple("Australia", "Marine park zones, closures, wrecks, reefs, boat ramps, buoys", ::australia),
             Triple("Waypoints and backup", "Backup, photos, GPX and KML, storage, debug log", ::dataAndBackup),
             Triple("About", "Safety and terms, privacy, licences", ::about)
         )

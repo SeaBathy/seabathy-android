@@ -34,7 +34,9 @@ class StoragePanel(
     private val panels: PanelDialogs,
     private val scope: CoroutineScope,
     /** Empties the 3D view's saved map tiles through its own cache; called off the main thread. */
-    private val clear3dTiles: () -> Unit
+    private val clear3dTiles: () -> Unit,
+    /** Deletes the kept NSW reef outlines through their owner; called off the main thread. */
+    private val clearReefOutlines: () -> Unit = {}
 ) {
     fun show() {
         val body = panels.body()
@@ -82,6 +84,7 @@ class StoragePanel(
         line(body, "Drawn tiles of big surveys", report[Group.SURVEY_TILES], "kept so they draw fast; they go with the layer")
         line(body, "Offline maps", report[Group.OFFLINE_MAPS], "in ${offlineDownloadsLabel(context)}")
         line(body, "Sea conditions and tides", report[Group.CONDITIONS], "saved for use offline")
+        line(body, "Reef outlines (NSW)", report[Group.REEF_OUTLINES], "kept from looking at the coast, for offline")
         line(body, "Waypoint photos", report[Group.PHOTOS])
         line(body, "Tracks", report[Group.TRACKS])
         line(body, "Temporary files", report[Group.TEMPORARY], "map pictures kept from online maps, working files")
@@ -103,6 +106,29 @@ class StoragePanel(
                 confirmLabel = "Clear"
             ) { clear(body, report[Group.TEMPORARY]) }
         })
+        if (report[Group.REEF_OUTLINES] > 0L) {
+            panels.addRow(body, panels.row("Clear reef outlines (NSW)", "${size(report[Group.REEF_OUTLINES])} of NSW seabed reef outlines") {
+                panels.confirm(
+                    title = "Clear the NSW reef outlines?",
+                    message = "This removes the NSW seabed reef outlines kept on the phone. They load again from the internet " +
+                        "when you look at the NSW coast with the layer on, and won't show offline until then.",
+                    confirmLabel = "Clear"
+                ) { clearReefs(body) }
+            })
+        }
+    }
+
+    private fun clearReefs(body: LinearLayout) {
+        body.removeAllViews()
+        body.addView(panels.caption("Clearing…", topPaddingDp = 0))
+        applyReadableText(body)
+        scope.launch {
+            withContext(Dispatchers.IO) {
+                runCatching { clearReefOutlines() }
+                    .onFailure { DiagnosticLog.logError(TAG, "clearing the NSW reef outlines FAILED", it) }
+            }
+            refresh(body, cleared = null)
+        }
     }
 
     /** One part's row: its size, then a few words on what it is. */

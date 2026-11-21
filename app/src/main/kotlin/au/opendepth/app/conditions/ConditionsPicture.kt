@@ -23,7 +23,9 @@ enum class ColourChoice(val label: String, val forecast: Boolean, val fixedRange
     TEMP_BELOW("Temperature at depth (model)", false),
     CHLOROPHYLL("Chlorophyll (satellite, 5-day blend)", false),
     SEA_LEVEL("Sea level and eddies (satellite)", false),
-    SALINITY("Salinity (satellite)", false);
+    SALINITY("Salinity (satellite)", false),
+    /** Rough visibility from the satellite's Kd490, in metres. */
+    WATER_CLARITY("Water clarity (satellite estimate)", false, fixedRange = true);
 
     val satellite: SatelliteKind?
         get() = when (this) {
@@ -32,6 +34,7 @@ enum class ColourChoice(val label: String, val forecast: Boolean, val fixedRange
             CHLOROPHYLL -> SatelliteKind.CHLOROPHYLL
             SEA_LEVEL -> SatelliteKind.SEA_LEVEL
             SALINITY -> SatelliteKind.SALINITY
+            WATER_CLARITY -> SatelliteKind.WATER_CLARITY
             else -> null
         }
 
@@ -56,7 +59,7 @@ enum class ArrowChoice(val label: String, val short: String) {
         ColourChoice.SWELL -> SWELL
         // A satellite (or model) picture is of one day, so no forecast lines over it: and with them, no time slider.
         ColourChoice.SEA_TEMP_SATELLITE, ColourChoice.SEA_TEMP_BREAKS, ColourChoice.TEMP_BELOW,
-        ColourChoice.CHLOROPHYLL, ColourChoice.SEA_LEVEL, ColourChoice.SALINITY -> NONE
+        ColourChoice.CHLOROPHYLL, ColourChoice.SEA_LEVEL, ColourChoice.SALINITY, ColourChoice.WATER_CLARITY -> NONE
         else -> CURRENT
     }
 
@@ -207,6 +210,7 @@ class ColourScale(
                 val (lo, hi) = stretch(values, minSpan = 0.5) ?: (33.0 to 37.0)
                 ColourScale(lo, hi, false, SPECTRUM)
             }
+            ColourChoice.WATER_CLARITY -> WaterClarity.scale()
             ColourChoice.NONE -> ColourScale(0.0, 1.0, false, SPECTRUM)
         }
 

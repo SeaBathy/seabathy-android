@@ -10,6 +10,7 @@ import com.seabathy.bathypicker.core.Job
 import com.seabathy.bathypicker.core.Planner
 import com.seabathy.bathypicker.core.Surveys
 import com.seabathy.bathypicker.core.TileSource
+import com.seabathy.bathypicker.core.Warehouse
 import com.seabathy.bathypicker.core.World
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -65,8 +66,12 @@ object HighDetailDepths {
     /** The credit of an Australian build. */
     const val CREDIT = "Depths: IMAS composite (Flukes 2026), AusSeabed and state surveys (CC BY 4.0)"
 
+    /** [CREDIT], naming IMAS's marine park mosaics too when the build used one. */
+    fun credit(plan: Planner.Plan): String =
+        if (Credits.usesParks(plan)) CREDIT.replace("IMAS composite (Flukes 2026)", "IMAS composite (Flukes 2026) and ${Credits.PARKS}") else CREDIT
+
     /** Where High detail works, for the "Which depths?" card. */
-    const val WHERE = "Australia: all waters (IMAS, with multibeam surveys on top), down to a metre or two where surveyed. " +
+    const val WHERE = "Australia: all waters (IMAS, with marine park mosaics and multibeam surveys on top), down to a metre or two where surveyed. " +
         "USA: all coasts, Hawaii and the US islands at about 3 m; Alaska in parts; the Great Lakes coarser. " +
         "Canada: surveyed coasts and harbours. " +
         "New Zealand: coasts surveyed by lidar since 2024, to about 25 m deep. " +
@@ -125,15 +130,19 @@ object HighDetailDepths {
             return Estimate((plan.json["errors"] as? List<*>).orEmpty().joinToString(" ").ifBlank { "No high-detail depths here." }, true)
         }
         val mb = ((plan.json["est_bytes"] as? Number)?.toDouble() ?: 0.0) / 1e6
+        val downloadMb = ((plan.json["download_bytes"] as? Number)?.toDouble() ?: 0.0) / 1e6
         val res = (plan.json["res_m"] as? Number)?.toDouble() ?: plan.resM
-        val surveysIn = plan.chosen.size
-        return Estimate(String.format(java.util.Locale.US, "Up to about %.0f MB at %s m detail · %s", mb.coerceAtLeast(1.0),
+        val onTop = Surveys.onTop(plan.chosen)
+        // The file is what the size limit counts; say so when reading the sources means downloading more than that.
+        val download = if (downloadMb > mb * 1.2) String.format(java.util.Locale.US, " (about %.0f MB to download)", downloadMb) else ""
+        return Estimate(String.format(java.util.Locale.US, "Up to about %.0f MB at %s m detail%s · %s", mb.coerceAtLeast(1.0),
             if (res < 10) String.format(java.util.Locale.US, "%.1f", res).removeSuffix(".0") else String.format(java.util.Locale.US, "%.0f", res),
-            if (surveysIn == 0) "the IMAS composite (no multibeam surveys in this box)" else "$surveysIn multibeam survey${if (surveysIn == 1) "" else "s"} on top"), true)
+            download, onTop.ifEmpty { "the IMAS composite (no multibeam surveys in this box)" }), true)
     }
 
     /** A finished build: the GeoTIFF, its sources file's text, and the credit shown under the chart. */
-    data class Built(val file: File, val sources: String, val credit: String)
+    /** [note]: what changed from the plan, to tell the user (a survey left out, a coarser detail), or "". */
+    data class Built(val file: File, val sources: String, val credit: String, val note: String = "")
 
     /**
      * Builds the depths for [area] into [dir] and returns the file and its credits. Reuses a
@@ -171,16 +180,40 @@ object HighDetailDepths {
             throw IOException(errors.ifBlank { "No high-detail depths for this area." })
         }
         currentCoroutineContext().ensureActive()
-        return buildInto(job, target, onProgress) { raf, src ->
-            val builder = Builder(plan, job, src, workers)
-            builder.workDir = context.cacheDir
-            builder.run(raf.channel, raf.channel)
-            val text = Credits.text(plan, target.name, "SeaBathy ${BuildConfig.VERSION_NAME}")
-                .replace("Made with BathyPicker for Android SeaBathy", "Made with SeaBathy")
-            runCatching { credits.writeText(text) }
-            Built(target, text, CREDIT)
+        // The warehouse's surveys are cut into a folder of this build's own, which goes when the build
+        // ends however it ends; folders left by a build that never ended (the app was closed) go now.
+        val root = File(context.cacheDir, WAREHOUSE_DIR)
+        val work = File(root, java.lang.Long.toHexString(System.nanoTime()))
+        synchronized(warehouseDirs) {
+            root.listFiles()?.filter { it !in warehouseDirs }?.forEach { it.deleteRecursively() }
+            work.mkdirs()
+            warehouseDirs += work
+        }
+        val fetched = java.util.Collections.synchronizedList(mutableListOf<File>())
+        try {
+            return buildInto(job, target, onProgress) { raf, src ->
+                // The warehouse's surveys are cut for this box first, then read like any other survey.
+                Warehouse.fetch(plan, work, World.HTTP, job, src.bytesDownloaded, fetched)
+                val builder = Builder(plan, job, src, workers)
+                builder.workDir = context.cacheDir
+                builder.run(raf.channel, raf.channel)
+                val credit = credit(plan)
+                val text = Credits.text(plan, target.name, "SeaBathy ${BuildConfig.VERSION_NAME}")
+                    .replace("Made with BathyPicker for Android SeaBathy", "Made with SeaBathy")
+                    .replaceFirst("\n\n", "\n$ON_THE_CHART$credit\n\n")
+                runCatching { credits.writeText(text) }
+                Built(target, text, credit, plan.notes.joinToString(" "))
+            }
+        } finally {
+            synchronized(fetched) { fetched.forEach { it.delete() } }
+            work.deleteRecursively()
+            synchronized(warehouseDirs) { warehouseDirs -= work }
         }
     }
+
+    private const val WAREHOUSE_DIR = "warehouse-depths"
+    /** The warehouse folders of the builds running now. */
+    private val warehouseDirs = mutableSetOf<File>()
 
     /** Outside Australia: the sources [World] finds for the box, with GMRT under them. */
     private suspend fun buildOverseas(
@@ -246,9 +279,25 @@ object HighDetailDepths {
         }
     }
 
-    /** The survey list: the copy fetched last time, else the one in the app; refreshed online once per run. */
+    /**
+     * The survey list: the copy fetched last time, else the one in the app; refreshed online once
+     * per run. The app's own extra layers (IMAS marine park mosaics, AusSeabed warehouse surveys,
+     * assets/bathypicker/extra_surveys.json) are added to whichever copy that is.
+     */
     private fun surveys(context: Context): Surveys? {
         surveys?.let { return it }
+        val extra = runCatching {
+            context.assets.open(EXTRA_SURVEYS).use { Surveys.parse(it.readBytes().decodeToString(), "bundled extras") }
+        }.getOrNull()
+        val merged = Surveys.merge(catalogue(context), extra)
+        surveys = merged
+        return merged
+    }
+
+    private const val EXTRA_SURVEYS = "bathypicker/extra_surveys.json"
+
+    /** The BathyPicker catalogue: the copy fetched last time, else the one in the app; refreshed online once per run. */
+    private fun catalogue(context: Context): Surveys? {
         val saved = File(context.filesDir, "bathypicker_surveys.json")
         val cached = runCatching { Surveys.parse(saved.readText(), "cached") }.getOrNull()
         val bundled = runCatching {
@@ -276,7 +325,6 @@ object HighDetailDepths {
                 con.disconnect()
             }
         }
-        surveys = best
         return best
     }
 

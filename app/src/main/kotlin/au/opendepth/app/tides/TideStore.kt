@@ -111,9 +111,16 @@ class TideForecast(
     /** Space the place's tide files take, bytes. */
     val storedBytes: Long = 0,
     /** The lowest tide here (LAT), metres from mean sea level (negative), once worked out. */
-    val lowestTideM: Double? = null
+    val lowestTideM: Double? = null,
+    /**
+     * The Maritime Safety Queensland station when these are its official predictions
+     * ([modelLat]/[modelLng] are then the gauge's position), or null for the model.
+     */
+    val station: MsqStation? = null,
+    /** Official tides drawn from MSQ's 10-minute predictions (not half cosines between highs and lows). */
+    val tenMinute: Boolean = false
 ) {
-    /** How far the model's nearest ocean point is from the spot asked for. */
+    /** How far the model's nearest ocean point (or the official station) is from the spot asked for. */
     val modelDistanceM: Double get() = NavGeo.distanceM(requestLat, requestLng, modelLat, modelLng)
 }
 
@@ -141,12 +148,23 @@ data class PlaceResult(val name: String, val detail: String, val lat: Double, va
  * working offline for the days it covers (about nine). The API picks the nearest ocean
  * cell to the spot asked for, so a town or a point on land still gets the
  * tide just offshore. This is a global model, not an official tide table.
+ * Near a Maritime Safety Queensland station its official predictions are used
+ * instead ([official]), whenever they are saved.
  */
 class TideStore(context: Context) {
 
     private val cacheDir = File(context.filesDir, CACHE_DIR).apply { mkdirs() }
     private val client by lazy {
         OkHttpClient.Builder().dns(au.opendepth.app.util.FallbackDns).connectTimeout(15, TimeUnit.SECONDS).readTimeout(20, TimeUnit.SECONDS).build()
+    }
+    private val assets = context.applicationContext.assets
+
+    /** Official Queensland predictions: the station list is read on first use. */
+    private val official: OfficialTides by lazy {
+        val index = runCatching { MsqStationIndex.parse(assets.open(MsqStationIndex.ASSET).use { it.readBytes().decodeToString() }) }
+            .onFailure { DiagnosticLog.logError(TAG, "tide station list unreadable", it) }
+            .getOrElse { MsqStationIndex(emptyList(), emptyList()) }
+        OfficialTides(File(cacheDir, OFFICIAL_DIR), index, ::getOfficial)
     }
     /** Short-range model forecasts, as downloaded. */
     private val forecasts = mutableMapOf<String, TideForecast>()
@@ -182,7 +200,16 @@ class TideStore(context: Context) {
      */
     fun forecast(key: String): TideForecast? {
         val now = System.currentTimeMillis()
-        merged[key]?.let { (builtAt, value) -> if (now - builtAt < REBUILD_MS) return value }
+        merged[key]?.let { (builtAt, value) ->
+            // Kept while fresh, unless official tides have run out, or have just come to cover now.
+            val stillRight = if (value.station == null) !official.covers(key, now) else value.curve.covers(now)
+            if (now - builtAt < REBUILD_MS && stillRight) return value
+        }
+        // Official predictions, where they apply and are saved, come before the model.
+        official.forecast(key, now)?.let {
+            merged[key] = now to it
+            return it
+        }
         val raw = forecasts[key]
         val long = saved[key]
         val result = when {
@@ -231,6 +258,8 @@ class TideStore(context: Context) {
 
     /** Loads a place's downloaded and saved tides from disk. */
     suspend fun load(key: String): TideForecast? = withContext(Dispatchers.IO) {
+        // Reads the tide station list here, off the main thread.
+        if (official.index.stations.isEmpty()) DiagnosticLog.log(TAG, "no official tide stations")
         if (key !in forecasts) {
             val file = file(key)
             if (file.isFile) {
@@ -407,7 +436,81 @@ class TideStore(context: Context) {
         deleteSaved(key)
         lowest.remove(key)
         lowestFile(key).delete()
+        official.forget(key)
     }
+
+    // Official predictions (Maritime Safety Queensland) -------------------------------
+
+    /** The Queensland tide station whose official predictions hold at [lat]/[lng], or null. */
+    fun officialStationAt(lat: Double, lng: Double): MsqStation? = official.stationAt(lat, lng)
+
+    /** The waters with tides of their own that [lat]/[lng] is in (no station is used there), if any. */
+    fun separateAreaAt(lat: Double, lng: Double): String? = official.index.separateAt(lat, lng)?.name
+
+    /** The station whose official predictions [key] uses, if any. */
+    fun officialStationFor(key: String): MsqStation? = official.chosenStation(key)
+
+    /** True when [key] already uses [station], chosen near [lat]/[lng]. */
+    fun usesOfficial(key: String, station: MsqStation, lat: Double, lng: Double): Boolean =
+        official.isChosen(key, station, lat, lng, OFFICIAL_MOVE_M)
+
+    /** Points [key] at the station near [lat]/[lng] (or back to the model), reading its saved predictions. */
+    suspend fun useOfficial(key: String, lat: Double, lng: Double): MsqStation? {
+        val station = withContext(Dispatchers.IO) { official.choose(key, lat, lng) }
+        merged.remove(key)
+        return station
+    }
+
+    /** Back to the model for [key]. */
+    fun dropOfficial(key: String) {
+        if (official.chosenStation(key) == null) return
+        official.forget(key)
+        merged.remove(key)
+    }
+
+    /** When the official tides saved for a spot run out, or null without any. */
+    fun officialSavedUntil(lat: Double, lng: Double): Long? = official.savedUntilAt(lat, lng, System.currentTimeMillis())
+
+    /** True when [key] has official predictions for now. */
+    fun hasOfficial(key: String): Boolean = official.covers(key, System.currentTimeMillis())
+
+    fun officialNeedsDownload(station: MsqStation, ignoreWait: Boolean = false): Boolean =
+        official.needsDownload(station, System.currentTimeMillis(), ignoreWait)
+
+    /** Downloads [station]'s missing years from data.qld.gov.au. */
+    suspend fun downloadOfficial(station: MsqStation) {
+        withContext(Dispatchers.IO) { official.download(station, System.currentTimeMillis()) }
+        merged.clear()
+    }
+
+    /** Official tides at [lat]/[lng] from what is saved, without changing which tides a place uses. */
+    suspend fun officialAt(lat: Double, lng: Double): TideForecast? = withContext(Dispatchers.IO) {
+        official.forecastAt(lat, lng, System.currentTimeMillis())
+    }
+
+    /** Official tide files: data.qld.gov.au, CC BY 4.0; not counted against the tide model's calls. */
+    private fun getOfficial(url: String): String =
+        try {
+            client.newCall(
+                Request.Builder().url(url).header("User-Agent", "SeaBathy/${BuildConfig.VERSION_NAME} (Android tides)").build()
+            ).execute().use { response ->
+                // Redirects are followed: the answer must still come from data.qld.gov.au.
+                if (!OfficialTides.isDataQld(response.request.url.toString())) {
+                    throw IOException("Tide predictions came from somewhere else (${response.request.url.host})")
+                }
+                if (response.code == 404) throw OfficialTides.NotFound(url)
+                if (!response.isSuccessful) throw IOException("Tide predictions returned an error (HTTP ${response.code})")
+                val body = response.body ?: throw IOException("Tide predictions sent an empty reply")
+                // A year of highs and lows is about 50 KB; anything far bigger isn't one. Read with a
+                // limit, as a reply sent in chunks doesn't say its length.
+                if (body.contentLength() > OFFICIAL_MAX_BYTES) throw IOException("Tide predictions file is too big")
+                body.byteStream().use { OfficialTides.readCapped(it, OFFICIAL_MAX_BYTES) }.decodeToString()
+            }
+        } catch (error: java.net.UnknownHostException) {
+            throw IOException("No internet connection. Tides already downloaded keep working offline.")
+        } catch (error: java.net.SocketTimeoutException) {
+            throw IOException("data.qld.gov.au didn't answer — check the connection and try again.")
+        }
 
     /** Towns and places matching [query] (Open-Meteo geocoding, free). */
     suspend fun search(query: String): List<PlaceResult> = withContext(Dispatchers.IO) {
@@ -587,6 +690,10 @@ class TideStore(context: Context) {
         const val FOLLOW_KEY = "follow"
         private const val TAG = "TideStore"
         private const val CACHE_DIR = "tides"
+        private const val OFFICIAL_DIR = "official"
+        /** Following the boat, the official tides' spot moves along every this far. */
+        private const val OFFICIAL_MOVE_M = 1_000.0
+        private const val OFFICIAL_MAX_BYTES = 4 * 1024 * 1024
         private const val REQUEST_LAT = "seabathy_request_lat"
         private const val REQUEST_LNG = "seabathy_request_lng"
         private const val REFRESH_DISTANCE_M = 15_000.0
@@ -602,9 +709,33 @@ class TideStore(context: Context) {
     }
 }
 
-/** How far chart datum (LAT) is below mean sea level here: typed in, or from the tide model; null until known. */
-fun TideSettings.chartDatumBelowMsl(forecast: TideForecast?): Double? =
-    if (!chartDatumAuto) chartDatumBelowMslM else forecast?.lowestTideM?.let { -it }
+/**
+ * How far chart datum (LAT) is below mean sea level here: typed in, or from the tide
+ * model; null until known. Official predictions are published above LAT, so while
+ * they are the tides shown (Forecast), theirs is used (the station's mean sea level
+ * above LAT), whatever is typed. With a manual height, a typed value counts as before.
+ */
+fun TideSettings.chartDatumBelowMsl(forecast: TideForecast?): Double? = when {
+    forecast?.station != null && mode == TideMode.MODEL -> forecast.lowestTideM?.let { -it }
+    !chartDatumAuto -> chartDatumBelowMslM
+    else -> forecast?.lowestTideM?.let { -it }
+}
+
+/** How far a place's tides are used from where they're for, metres: beyond this the tide is someone else's. */
+const val TIDE_REACH_M = 50_000.0
+
+/**
+ * True when these tides (the tide screen's) hold at [lat]/[lng]: within [TIDE_REACH_M] of
+ * where they're for, and, for official predictions, only where their own station is the
+ * one that applies ([stationThere], from [MsqStationIndex.nearest]); not near another
+ * station, nor in waters with tides of their own. Modelled tides say they're modelled,
+ * so they hold anywhere within reach.
+ */
+fun TideForecast.holdsAt(lat: Double, lng: Double, stationThere: MsqStation?): Boolean {
+    if (NavGeo.distanceM(lat, lng, requestLat, requestLng) > TIDE_REACH_M) return false
+    val own = station ?: return true
+    return stationThere?.id == own.id
+}
 
 /**
  * The tide to add to survey depths at [timeMillis]: its height above the

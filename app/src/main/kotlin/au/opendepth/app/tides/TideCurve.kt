@@ -9,7 +9,12 @@ data class TideExtreme(val timeMillis: Long, val heightM: Double, val isHigh: Bo
  * the times of high and low water fall between samples. Heights are metres
  * above the model's mean sea level. Pure Kotlin, unit-tested.
  */
-class TideCurve(private val timesMillis: LongArray, private val heightsM: DoubleArray) {
+class TideCurve(
+    private val timesMillis: LongArray,
+    private val heightsM: DoubleArray,
+    /** Highs and lows known exactly (an official table's), returned as they are instead of found on the curve. */
+    private val knownExtremes: List<TideExtreme>? = null
+) {
 
     init {
         require(timesMillis.size == heightsM.size) { "times and heights differ in length" }
@@ -51,6 +56,7 @@ class TideCurve(private val timesMillis: LongArray, private val heightsM: Double
     fun extremes(fromMillis: Long, toMillis: Long): List<TideExtreme> {
         val start = maxOf(fromMillis, startMillis ?: return emptyList())
         val end = minOf(toMillis, endMillis ?: return emptyList())
+        knownExtremes?.let { known -> return known.filter { it.timeMillis in start..end } }
         if (end - start < 2 * SCAN_STEP_MS) return emptyList()
         val out = mutableListOf<TideExtreme>()
         var tPrev = start

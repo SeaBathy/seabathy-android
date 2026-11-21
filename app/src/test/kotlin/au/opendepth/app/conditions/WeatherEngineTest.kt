@@ -558,6 +558,21 @@ class WeatherEngineTest {
     }
 
     @Test
+    fun aSatelliteKindNewInAnUpdateComesWithTheNextUpdate() {
+        // Saved by an older version: every picture but water clarity, and no record of what was asked for.
+        net.satelliteFail = { kind -> if (kind == SatelliteKind.WATER_CLARITY) ConditionsClient.NoDataException("none") else null }
+        engine.setSpot(atSea)
+        kv.keys.filter { it.startsWith(WeatherEngine.KEY_SATELLITES_TRIED) }.forEach { kv.remove(it) }
+        net.satelliteFail = null
+        val before = net.satellites
+        // Asked for again soon after: only the new kind comes, not the day's whole set.
+        advance(5 * 60_000L)
+        engine.evaluate(userAsked = true)
+        assertEquals(before + 1, net.satellites)
+        assertNotNull(engine.spotArea!!.satellites[SatelliteKind.WATER_CLARITY])
+    }
+
+    @Test
     fun inlandTheAreaGoesOverTheSea() {
         // The coast at 151°E; the boat 100 km inland, west of it.
         net.coastLng = 151.0

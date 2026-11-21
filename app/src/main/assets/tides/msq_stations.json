@@ -1,0 +1,1629 @@
+{
+ "source": "Maritime Safety Queensland predicted high/low tides, data.qld.gov.au",
+ "licence": "CC BY 4.0, (c) State of Queensland (Department of Transport and Main Roads)",
+ "built": "2026-11-22",
+ "separate": [
+  {
+   "name": "Pumicestone Passage",
+   "south": -27.075,
+   "west": 153.03,
+   "north": -26.795,
+   "east": 153.155
+  },
+  {
+   "name": "Hinchinbrook Channel",
+   "south": -18.53,
+   "west": 146.05,
+   "north": -18.29,
+   "east": 146.27
+  },
+  {
+   "name": "Great Sandy Strait narrows",
+   "south": -25.83,
+   "west": 152.85,
+   "north": -25.5,
+   "east": 153.1
+  },
+  {
+   "name": "The Narrows, Curtis Island",
+   "south": -23.74,
+   "west": 150.95,
+   "north": -23.45,
+   "east": 151.12
+  }
+ ],
+ "stations": [
+  {
+   "id": "100547",
+   "name": "Boigu Island",
+   "lat": -9.2167,
+   "lng": 142.2167,
+   "reachKm": 15,
+   "dataset": "boigu-island-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/837a79ee-5774-4a1e-a4b6-ee0400e64e4f/resource/79b00a6a-1f34-45e3-8a07-9a414d24911e/download/q100547_boigu-island_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/837a79ee-5774-4a1e-a4b6-ee0400e64e4f/resource/4273b8e9-028a-43fe-98fe-b51e3a3ff356/download/q100547_boigu-island-barge-ramp_2027_hilo.csv"
+   },
+   "mslAboveLatM": 2.26,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.367,
+   "halfCosineMaxM": 0.896,
+   "useInterval": true,
+   "intervalDataset": "boigu-island-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/ee798f1b-fb7d-487a-a9dc-48227d2c3dfc/resource/ddda5732-a1e3-4119-ae5d-15eea1651665/download/p100547_boigu-island-barge-ramp_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/ee798f1b-fb7d-487a-a9dc-48227d2c3dfc/resource/4dd16793-8e20-47b6-96ce-7ccd56ba25a0/download/p100547_boigu-island-barge-ramp_2027_10min.csv"
+   }
+  },
+  {
+   "id": "100548",
+   "name": "Saibai Island",
+   "lat": -9.3667,
+   "lng": 142.6,
+   "reachKm": 15,
+   "dataset": "saibai-island-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/09153309-f4f4-4b91-a52f-cf4ccf59c8ae/resource/802a4a46-d992-4e2e-b6ae-7285ce42f2f7/download/q100548_saibai-island-barge-ramp_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/09153309-f4f4-4b91-a52f-cf4ccf59c8ae/resource/a2e78f5c-65c9-4f42-934a-fa911d12bd5a/download/q100548_saibai-island-barge-ramp_2027_hilo.csv"
+   },
+   "mslAboveLatM": 1.84,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.25,
+   "halfCosineMaxM": 1.079,
+   "useInterval": true,
+   "intervalDataset": "saibai-island-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/0341beb4-679e-4b17-b387-9dc1301824c8/resource/cdb39e89-1f3d-4be4-a329-bbf55da387e7/download/p100548_saibai-island-barge-ramp_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/0341beb4-679e-4b17-b387-9dc1301824c8/resource/8153c35a-a9e8-4167-b063-654386d1c13f/download/p100548_saibai-island-barge-ramp_2027_10min.csv"
+   }
+  },
+  {
+   "id": "100546",
+   "name": "Dauan Island",
+   "lat": -9.4,
+   "lng": 142.5333,
+   "reachKm": 15,
+   "dataset": "dauan-island-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/b2661508-f881-4912-a3be-4e4fa4fc5cd8/resource/a045202c-ae02-46a2-baed-aeb9aa2387ca/download/q100546_dauan-island-barge-ramp_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/b2661508-f881-4912-a3be-4e4fa4fc5cd8/resource/fb445201-3de9-4dca-a77d-a85f768e9385/download/q100546_dauan-island-barge-ramp_2027_hilo.csv"
+   },
+   "mslAboveLatM": 1.989,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.212,
+   "halfCosineMaxM": 0.919,
+   "useInterval": true,
+   "intervalDataset": "dauan-island-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/49f86950-c9a7-4557-831f-ea84fcdc4f39/resource/c927924a-5b87-44ff-a737-53e199a149e1/download/p100546_dauan-island-barge-ramp_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/49f86950-c9a7-4557-831f-ea84fcdc4f39/resource/ebf8b7ef-38c1-4e52-9dc0-c983401d41e3/download/p100546_dauan-island-barge-ramp_2027_10min.csv"
+   }
+  },
+  {
+   "id": "100553",
+   "name": "Stephens Island (Ugar)",
+   "lat": -9.5,
+   "lng": 143.5333,
+   "reachKm": 15,
+   "dataset": "stephens-island-ugar-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/abd65eab-b1ce-4101-9095-cd37a6230d7e/resource/1b1800f7-1913-4fbf-a923-02e25297624b/download/q100553_stephens-island-ugar-barge-ramp_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/abd65eab-b1ce-4101-9095-cd37a6230d7e/resource/1558baf2-b9c1-4532-9fae-e5d4253761c2/download/q100553_ugar-stephens-island-barge-ramp_2027_hilo.csv"
+   },
+   "mslAboveLatM": 1.98,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.202,
+   "halfCosineMaxM": 0.495,
+   "useInterval": true,
+   "intervalDataset": "stephens-island-ugar-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/1ade349a-0d24-4ecb-bcbd-92fd74f96b8d/resource/a49bd12c-ddda-40b7-87ed-676fd3406599/download/p100553_stephens-island-ugar-barge-ramp_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/1ade349a-0d24-4ecb-bcbd-92fd74f96b8d/resource/2a70c964-4c5b-4408-8833-3914822ea74f/download/p100553_ugar-stephens-island-barge-ramp_2027_10min.csv"
+   }
+  },
+  {
+   "id": "100554",
+   "name": "Darnley Island (Erub)",
+   "lat": -9.5833,
+   "lng": 143.75,
+   "reachKm": 15,
+   "dataset": "darnley-island-erub-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/61bf7305-4776-4d58-aeb3-98de81caad07/resource/72af710a-ed5b-4170-ba7d-8d2a9a5fba61/download/q100554_darnley-island-erub-barge-ramp_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/61bf7305-4776-4d58-aeb3-98de81caad07/resource/a85b0249-3af5-436d-a662-c9145d3ba111/download/q100554_erub-darnley-island-barge-ramp_2027_hilo.csv"
+   },
+   "mslAboveLatM": 2.09,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.099,
+   "halfCosineMaxM": 0.374,
+   "useInterval": true,
+   "intervalDataset": "darnley-island-erub-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/4f2783f7-69ba-41f9-91ae-32d8f4f812d7/resource/75e180b7-2f2a-4ca7-a37a-6a3370c64427/download/p100554_darnley-island-erub-barge-ramp_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/4f2783f7-69ba-41f9-91ae-32d8f4f812d7/resource/0819dc8a-b434-49f0-a2e3-e3668fa5e487/download/p100554_erub-darnley-island-barge-ramp_2027_10min.csv"
+   }
+  },
+  {
+   "id": "100552",
+   "name": "Yorke Island (Masig)",
+   "lat": -9.7333,
+   "lng": 143.4,
+   "reachKm": 15,
+   "dataset": "yorke-island-masig-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/db38f635-6a7d-4a9a-9b00-08006f5cd41d/resource/7ba07745-12a8-4c3c-a6ea-7495db4534b9/download/q100552_yorke-island-masig-barge-ramp_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/db38f635-6a7d-4a9a-9b00-08006f5cd41d/resource/75bb0ed1-0a19-4a08-b64e-db3812272568/download/q100552_masig-yorke-island-barge-ramp_2027_hilo.csv"
+   },
+   "mslAboveLatM": 2.2,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.151,
+   "halfCosineMaxM": 0.332,
+   "useInterval": true,
+   "intervalDataset": "yorke-island-masig-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/295908b3-1de3-4bad-b520-cfc09b4675aa/resource/08286cff-32df-450a-a779-5c3959c0196c/download/p100552_yorke-island-masig-barge-ramp_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/295908b3-1de3-4bad-b520-cfc09b4675aa/resource/bcec93e6-ddcb-4274-9e20-2df88100d87b/download/p100552_masig-yorke-island-barge-ramp_2027_10min.csv"
+   }
+  },
+  {
+   "id": "100549",
+   "name": "Yam Island (Iama)",
+   "lat": -9.9,
+   "lng": 142.7667,
+   "reachKm": 15,
+   "dataset": "yam-island-iama-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/237806a6-7754-4c2e-b8a5-a87dcc7dbdb7/resource/61992e8b-c1c7-4cd4-bc38-cb8f5f8b2d72/download/q100549_yam-island-iama_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/237806a6-7754-4c2e-b8a5-a87dcc7dbdb7/resource/68dc9e67-be97-400d-ab83-296b47f14e60/download/q100549_iama-yam-island-barge-ramp_2027_hilo.csv"
+   },
+   "mslAboveLatM": 2.0,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.142,
+   "halfCosineMaxM": 0.875,
+   "useInterval": true,
+   "intervalDataset": "yam-island-iama-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/f24d2b9d-c75b-4a5b-8820-4ff41b6660a4/resource/eef4711f-82a9-495c-a2e3-9841b7518cff/download/p100549_yam-island-iama-barge-ramp_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/f24d2b9d-c75b-4a5b-8820-4ff41b6660a4/resource/b65f5732-16cd-46cb-9fce-92d728367f12/download/p100549_iama-yam-island-barge-ramp_2027_10min.csv"
+   }
+  },
+  {
+   "id": "100555",
+   "name": "Murray Island (Meer)",
+   "lat": -9.9,
+   "lng": 144.0333,
+   "reachKm": 15,
+   "dataset": "murray-island-meer-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/32bb36f1-26f4-4694-88dd-5f56b3002c21/resource/562a9593-dbd7-4e21-8d10-aa477d1b89c2/download/q100555_murray-island-meer-barge-ramp_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/32bb36f1-26f4-4694-88dd-5f56b3002c21/resource/381806ee-39d0-46f5-9e6a-544f85b94a4d/download/q100555_mer-murray-island-barge-ramp_2027_hilo.csv"
+   },
+   "mslAboveLatM": 1.78,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.094,
+   "halfCosineMaxM": 0.271,
+   "useInterval": true,
+   "intervalDataset": "murray-island-meer-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/51f96daa-c7fe-47c9-b70e-f675ca85d734/resource/98a0b6a9-adc6-4691-a17b-f229e4559d50/download/p100555_murray-island-meer-barge-ramp_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/51f96daa-c7fe-47c9-b70e-f675ca85d734/resource/68a1bdea-c452-4006-92a9-64f86ccfcaba/download/p100555_mer-murray-island-barge-ramp_2027_10min.csv"
+   }
+  },
+  {
+   "id": "100545",
+   "name": "Mabuiag Island",
+   "lat": -9.95,
+   "lng": 142.2,
+   "reachKm": 15,
+   "dataset": "mabuiag-island-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/2fb76d67-f706-45ab-8ba3-fec147909bc9/resource/a58e915f-bc4f-46ad-b038-24d860f2829e/download/q100545_mabuiag-island-barge-ramp_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/2fb76d67-f706-45ab-8ba3-fec147909bc9/resource/f2587f88-186d-4364-9d6f-eca0fa55b3a7/download/q100545_mabuiag-island-barge-ramp_2027_hilo.csv"
+   },
+   "mslAboveLatM": 1.97,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.222,
+   "halfCosineMaxM": 0.611,
+   "useInterval": true,
+   "intervalDataset": "mabuiag-island-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/a30b76c4-6c44-4806-b32f-14fa925e3257/resource/2e798802-8236-48e4-9709-46c0cecd5c18/download/p100545_mabuiag-island-barge-ramp_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/a30b76c4-6c44-4806-b32f-14fa925e3257/resource/4e7d61ea-9a64-48a9-a838-cd87c0562a7b/download/p100545_mabuiag-island-barge-ramp_2027_10min.csv"
+   }
+  },
+  {
+   "id": "100551",
+   "name": "Coconut Island (Poruma)",
+   "lat": -10.0333,
+   "lng": 143.05,
+   "reachKm": 15,
+   "dataset": "coconut-island-poruma-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/417fb006-a1cb-4271-a6d4-5083cfb2395d/resource/467feb19-895b-4150-9c62-3802e493a410/download/q100551_coconut-island-poruma-barge-ramp_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/417fb006-a1cb-4271-a6d4-5083cfb2395d/resource/e86c7921-05ec-4918-b73c-0f2a1d9591b4/download/q100551_poruma-coconut-island-barge-ramp_2027_hilo.csv"
+   },
+   "mslAboveLatM": 2.28,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.123,
+   "halfCosineMaxM": 0.514,
+   "useInterval": true,
+   "intervalDataset": "coconut-island-poruma-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/ecef53c8-573e-4130-ad21-3914f33c80c2/resource/a5665100-efe0-47ae-af5f-6f5c06453af7/download/p100551_coconut-island-poruma-barge-ramp_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/ecef53c8-573e-4130-ad21-3914f33c80c2/resource/904ff5e3-3c39-475a-b8dd-d3951ea254cb/download/p100551_poruma-coconut-island-barge-ramp_2027_10min.csv"
+   }
+  },
+  {
+   "id": "100544",
+   "name": "Badu Island",
+   "lat": -10.1667,
+   "lng": 142.1667,
+   "reachKm": 15,
+   "dataset": "badu-island-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/60ef56cc-d528-4635-af84-19adf58d73ac/resource/f8ba2323-aff0-494a-9a2d-ce1df6db40b5/download/q100544_badu-island_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/60ef56cc-d528-4635-af84-19adf58d73ac/resource/3f8056a5-f692-447d-9768-70f96936aa45/download/q100544_badu-island-barge-ramp_2027_hilo.csv"
+   },
+   "mslAboveLatM": 2.2,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.275,
+   "halfCosineMaxM": 0.683,
+   "useInterval": true,
+   "intervalDataset": "badu-island-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/a10ab594-18df-43dd-903c-682eb2d256b4/resource/81e63157-d74c-4ddd-9edd-787c949aacd3/download/p100544_badu-island-barge-ramp_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/a10ab594-18df-43dd-903c-682eb2d256b4/resource/56cad3c3-625a-44ea-9751-8dabc1424a88/download/p100544_badu-island-barge-ramp_2027_10min.csv"
+   }
+  },
+  {
+   "id": "100543",
+   "name": "St Pauls (Moa Island)",
+   "lat": -10.1833,
+   "lng": 142.3333,
+   "reachKm": 15,
+   "dataset": "st-pauls-moa-island-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/7244e68f-d5ed-47e7-9630-aa43021584b4/resource/af2d1ced-c0a6-4bbf-9e5c-a2461387a6ea/download/q100543_st-pauls-moa-island-barge-ramp_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/7244e68f-d5ed-47e7-9630-aa43021584b4/resource/450583d4-8908-4276-8796-d251e6b074d1/download/q100543_st-pauls-moa-island-barge-ramp_2027_hilo.csv"
+   },
+   "mslAboveLatM": 1.964,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.26,
+   "halfCosineMaxM": 0.635,
+   "useInterval": true,
+   "intervalDataset": "st-pauls-moa-island-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/3f47d756-8dff-429b-8f4b-deb6a9730c5e/resource/0217c038-f64e-401c-8973-cca843f69314/download/p100543_st-pauls-moa-island-barge-ramp_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/3f47d756-8dff-429b-8f4b-deb6a9730c5e/resource/97fa3e6d-7225-43cc-8761-4bdecf36327c/download/p100543_st-pauls-moa-island-barge-ramp_2027_10min.csv"
+   }
+  },
+  {
+   "id": "100550",
+   "name": "Sue Island (Warraber)",
+   "lat": -10.2,
+   "lng": 142.8167,
+   "reachKm": 15,
+   "dataset": "sue-island-warraber-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/ffe57d56-021e-488b-a3df-a319c4d4be8d/resource/348472d3-b6e1-41c0-9e58-37e9361b66fb/download/q100550_sue-island-warraber-barge-ramp_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/ffe57d56-021e-488b-a3df-a319c4d4be8d/resource/743bfe2c-3cac-4753-aca1-2856ea63362a/download/q100550_warraber-sue-island-barge-ramp_2027_hilo.csv"
+   },
+   "mslAboveLatM": 2.02,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.11,
+   "halfCosineMaxM": 0.653,
+   "useInterval": true,
+   "intervalDataset": "sue-island-warraber-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/cfb8f7f7-e1b1-449a-bfa3-46d2abf008df/resource/835c5d52-1915-42ea-9d85-b7c2aa6bbf29/download/p100550_sue-island-warraber-barge-ramp_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/cfb8f7f7-e1b1-449a-bfa3-46d2abf008df/resource/00717d0a-343d-484c-b0cd-4d4d2b680873/download/p100550_warraber-sue-island-barge-ramp_2027_10min.csv"
+   }
+  },
+  {
+   "id": "100542",
+   "name": "Kubin (Moa Island)",
+   "lat": -10.2333,
+   "lng": 142.2,
+   "reachKm": 15,
+   "dataset": "kubin-moa-island-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/6e410010-3db3-40e4-a0ad-6d2fdee31a6b/resource/b0767781-cc13-4291-b61a-8ad5f8f59feb/download/q100542_kubin-moa-island-barge-ramp_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/6e410010-3db3-40e4-a0ad-6d2fdee31a6b/resource/cf06758f-6c04-401f-b6eb-028304bdb727/download/q100542_kubin-moa-island-barge-ramp_2027_hilo.csv"
+   },
+   "mslAboveLatM": 2.08,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.352,
+   "halfCosineMaxM": 1.207,
+   "useInterval": true,
+   "intervalDataset": "kubin-moa-island-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/af8512d1-a94b-441f-9e2a-b76aeb89f400/resource/1c7132a3-bf31-410c-ae59-7dcf757b5882/download/p100542_kubin-moa-island-barge-ramp_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/af8512d1-a94b-441f-9e2a-b76aeb89f400/resource/5c1ad872-bb18-46b3-a65a-c715c11ff429/download/p100542_kubin-moa-island-barge-ramp_2027_10min.csv"
+   }
+  },
+  {
+   "id": "057027A",
+   "name": "Twin Island",
+   "lat": -10.4667,
+   "lng": 142.4333,
+   "reachKm": 15,
+   "dataset": "twin-island-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/c1952406-7efe-4513-a3bc-4a8668b6620b/resource/8dd91fd2-5d23-40db-8d89-7eaa5de97a22/download/q057027a_twin-island_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/c1952406-7efe-4513-a3bc-4a8668b6620b/resource/b3d75283-62d2-4896-ad9e-b7bf9b14c266/download/q057027a_twin-island-torres-strait_2027_hilo.csv"
+   },
+   "mslAboveLatM": 1.833,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.272,
+   "halfCosineMaxM": 0.703,
+   "useInterval": true,
+   "intervalDataset": "twin-island-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/2ca07af7-28c0-47cc-8e26-1415833fcf1e/resource/6ec53749-1546-4d79-a2ec-218fcee26bb8/download/p057027a_twin-island_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/2ca07af7-28c0-47cc-8e26-1415833fcf1e/resource/33faedbf-4c22-488d-8a6d-680cf27c5172/download/p057027a_twin-island-torres-strait_2027_10min.csv"
+   }
+  },
+  {
+   "id": "100541",
+   "name": "Hammond Island",
+   "lat": -10.55,
+   "lng": 142.2167,
+   "reachKm": 15,
+   "dataset": "hammond-island-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/b94ec7b0-fd4c-485d-a978-57f00b68361a/resource/ccfd884f-0e48-428f-8395-63e8b7c43479/download/q100541_hammond-island-barge-ramp_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/b94ec7b0-fd4c-485d-a978-57f00b68361a/resource/d47059be-bdb2-465f-9969-86b67e0b99ef/download/q100541_hammond-island-barge-ramp_2027_hilo.csv"
+   },
+   "mslAboveLatM": 1.84,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.238,
+   "halfCosineMaxM": 0.707,
+   "useInterval": true,
+   "intervalDataset": "hammond-island-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/4af8a5fc-d633-4b9c-866c-11796d24211b/resource/018efcfb-8ffe-445b-83c8-d0fbcf637266/download/p100541_hammond-island-barge-ramp_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/4af8a5fc-d633-4b9c-866c-11796d24211b/resource/ccfb7b53-f8d8-4484-8fe6-67c8c0e28854/download/p100541_hammond-island-barge-ramp_2027_10min.csv"
+   }
+  },
+  {
+   "id": "057025A",
+   "name": "Goods Island",
+   "lat": -10.5667,
+   "lng": 142.15,
+   "reachKm": 15,
+   "dataset": "goods-island-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/3dfdb2c9-adf7-4c0d-acb7-fc8a990d9fe7/resource/2000ad5d-50a5-41aa-b01b-3ab84bcdb6d1/download/q057025a_goods-island_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/3dfdb2c9-adf7-4c0d-acb7-fc8a990d9fe7/resource/c26d82b6-0b0b-47fd-8022-2c776f97f300/download/q057025a_goods-island_2027_hilo.csv"
+   },
+   "mslAboveLatM": 2.213,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.252,
+   "halfCosineMaxM": 0.929,
+   "useInterval": true,
+   "intervalDataset": "goods-island-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/75d89fe3-9bf1-4ab5-9b21-245210da8903/resource/559c7c29-dbcb-4d72-87e6-74454670e35b/download/p057025a_goods-island_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/75d89fe3-9bf1-4ab5-9b21-245210da8903/resource/7f02eedd-11f0-4ea7-9442-7e00b4608af0/download/p057025a_goods-island_2027_10min.csv"
+   }
+  },
+  {
+   "id": "057022B",
+   "name": "Thursday Island",
+   "lat": -10.5833,
+   "lng": 142.2167,
+   "reachKm": 15,
+   "dataset": "thursday-island-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/e9cfce61-8cad-4f8d-b1b7-7282d2f3e768/resource/ccee5ff2-f48d-43e3-8783-4c9719206fd3/download/q057022b_thursday-island_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/e9cfce61-8cad-4f8d-b1b7-7282d2f3e768/resource/e2d12cb6-7baa-48db-a5bd-4480293be25c/download/q057022b_thursday-island_2027_hilo.csv"
+   },
+   "mslAboveLatM": 1.934,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.257,
+   "halfCosineMaxM": 0.805,
+   "useInterval": true,
+   "intervalDataset": "thursday-island-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/0ba14f17-e49e-4cd9-bf3c-2eed7477a9e4/resource/dc113209-25a2-4bc3-97a2-2188db73e30b/download/p057022b_thursday-island_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/0ba14f17-e49e-4cd9-bf3c-2eed7477a9e4/resource/0d8b04b2-9445-4c3e-b767-b5d87bfdadab/download/p057022b_thursday-island_2027_10min.csv"
+   }
+  },
+  {
+   "id": "057024A",
+   "name": "Booby Island",
+   "lat": -10.6,
+   "lng": 141.9167,
+   "reachKm": 15,
+   "dataset": "booby-island-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/3b26e321-0653-4c17-8fa2-a11f4a6379f9/resource/a1a0b35e-d143-4e8e-a1ce-3edbe521ca99/download/q057024a_booby-island_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/3b26e321-0653-4c17-8fa2-a11f4a6379f9/resource/375e8047-bb12-4072-9272-d2efd796ff84/download/q057024a_booby-island_2027_hilo.csv"
+   },
+   "mslAboveLatM": 2.516,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.162,
+   "halfCosineMaxM": 0.865,
+   "useInterval": true,
+   "intervalDataset": "booby-island-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/362273bb-f386-4fd0-a07d-ba5c1ae36570/resource/5cfc4eba-b95a-488b-82f0-d4331eda7119/download/p057024a_booby-island_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/362273bb-f386-4fd0-a07d-ba5c1ae36570/resource/91a76c6c-c391-4cde-9b0d-995fedd4a9c4/download/p057024a_booby-island_2027_10min.csv"
+   }
+  },
+  {
+   "id": "057026A",
+   "name": "Red Island Point Bamaga",
+   "lat": -10.8333,
+   "lng": 142.3667,
+   "reachKm": 15,
+   "dataset": "red-island-point-bamaga-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/b5b74fb6-a7f8-42c5-a0f7-5273217bb38e/resource/82f57720-66cc-4542-ad32-251451a18a2c/download/q057026a_red-island-point-bamaga_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/b5b74fb6-a7f8-42c5-a0f7-5273217bb38e/resource/6c316980-1f50-4dab-946b-0e57e30c1831/download/q057026a_red-island-point-bamaga_2027_hilo.csv"
+   },
+   "mslAboveLatM": 1.623,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.269,
+   "halfCosineMaxM": 0.898,
+   "useInterval": true,
+   "intervalDataset": "red-island-point-bamaga-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/2fe37363-c1f1-47f7-9838-d6439865572b/resource/9267cda6-7b81-4df3-874c-f070fac2dc1d/download/p057026a_red-island-point-bamaga_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/2fe37363-c1f1-47f7-9838-d6439865572b/resource/e5ffdb61-b766-4337-94ff-21c386f30d8f/download/p057026a_red-island-point-bamaga_2027_10min.csv"
+   }
+  },
+  {
+   "id": "101203",
+   "name": "Skardon River Offshore",
+   "lat": -11.75,
+   "lng": 141.9833,
+   "reachKm": 15,
+   "dataset": "skardon-river-offshore-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/7fca3d7e-1b74-455d-8be0-6f499dc8a90e/resource/b1f4e425-e218-403d-a1bf-f7df8fe3d502/download/q101203_skardon-river-offshore_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/7fca3d7e-1b74-455d-8be0-6f499dc8a90e/resource/ec08bc10-5a70-4f15-ac35-8a0450c1a38b/download/q101203_skardon-river-offshore_2027_hilo.csv"
+   },
+   "mslAboveLatM": 2.287,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.249,
+   "halfCosineMaxM": 0.614,
+   "useInterval": true,
+   "intervalDataset": "skardon-river-offshore-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/56b1b13a-f188-46e0-a009-e825ff044b0e/resource/8386ac44-833f-4de7-8bf7-847f6628b2c1/download/p101203_skardon-river-offshore_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/56b1b13a-f188-46e0-a009-e825ff044b0e/resource/1d5a92b8-cf1e-464d-b7e9-a45a27a55bea/download/p101203_skardon-river-offshore_2027_10min.csv"
+   }
+  },
+  {
+   "id": "100029",
+   "name": "Skardon River",
+   "lat": -11.75,
+   "lng": 142.0667,
+   "reachKm": 8,
+   "dataset": "skardon-river-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/1546d169-19bb-4611-ae97-b11c33ac90a9/resource/7dc4589f-0709-407d-8f66-3f1858ca070c/download/q100029_skardon-river-barge-ramp_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/1546d169-19bb-4611-ae97-b11c33ac90a9/resource/9c772fb3-94f9-44b2-8b88-492de14a13f2/download/q100029_skardon-river-barge-ramp_2027_hilo.csv"
+   },
+   "mslAboveLatM": 2.595,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.191,
+   "halfCosineMaxM": 0.373,
+   "useInterval": true,
+   "intervalDataset": "skardon-river-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/b39f630f-7ca1-4856-a9a3-cc57a1c0429d/resource/3ae60393-4dbd-4a8d-b2fd-98d18584b8e6/download/p100029_skardon-river-barge-ramp_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/b39f630f-7ca1-4856-a9a3-cc57a1c0429d/resource/9a3c114d-3653-4972-8155-2fe33a0c7199/download/p100029_skardon-river-barge-ramp_2027_10min.csv"
+   }
+  },
+  {
+   "id": "056013A",
+   "name": "Portland Roads",
+   "lat": -12.5833,
+   "lng": 143.4,
+   "reachKm": 15,
+   "dataset": "portland-roads-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/b6ed6437-774b-4db4-905e-75b23045f19d/resource/4129df96-1c3c-48cb-a3ab-a449352540ff/download/q056013a_portland-roads_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/b6ed6437-774b-4db4-905e-75b23045f19d/resource/15ee8ae1-b916-49ca-bc2d-2b9c14d47034/download/q056013a_portland-roads_2027_hilo.csv"
+   },
+   "mslAboveLatM": 1.63,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.068,
+   "halfCosineMaxM": 0.319,
+   "useInterval": true,
+   "intervalDataset": "portland-roads-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/638ddba5-f907-4535-90f5-f8715881e9a5/resource/b43caaf8-01d1-4cc0-823d-3b81fe892d4f/download/p056013a_portland-roads_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/638ddba5-f907-4535-90f5-f8715881e9a5/resource/9a86b502-ee5a-45ef-ad73-8b4666f9df3b/download/p056013a_portland-roads_2027_10min.csv"
+   }
+  },
+  {
+   "id": "100281",
+   "name": "Weipa",
+   "lat": -12.6667,
+   "lng": 141.85,
+   "reachKm": 15,
+   "dataset": "weipa-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/7f32f5df-baac-4d2d-8663-3f0e394fb047/resource/53165a16-84d4-4bc3-be3a-1c42b33a46eb/download/q100281_weipa-vts_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/7f32f5df-baac-4d2d-8663-3f0e394fb047/resource/8112f704-b1a4-4c91-a521-4e98afd4f813/download/q100281_weipa_2027_hilo.csv"
+   },
+   "mslAboveLatM": 1.912,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.387,
+   "halfCosineMaxM": 1.117,
+   "useInterval": true,
+   "intervalDataset": "weipa-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/34b5c13f-56c7-4c6a-a0d9-e48e03806800/resource/01d7c31c-7155-482c-80dd-775de473adff/download/p100281_weipa-vts_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/34b5c13f-56c7-4c6a-a0d9-e48e03806800/resource/3bfacdc1-2d15-4324-8fc9-50e88c72b61e/download/p100281_weipa_2027_10min.csv"
+   }
+  },
+  {
+   "id": "070019G",
+   "name": "No 2 Beacon Weipa",
+   "lat": -12.6833,
+   "lng": 141.7,
+   "reachKm": 15,
+   "dataset": "no-2-beacon-weipa-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/1840f3c0-d01d-4fa5-80ae-52293b2c5bef/resource/4e176393-719a-4381-9841-33a182a122f1/download/q070019g_no-2-beacon-weipa_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/1840f3c0-d01d-4fa5-80ae-52293b2c5bef/resource/3229b71a-c5f9-498b-bafb-95e25e8b5ea8/download/q070019g_no-2-beacon-weipa_2027_hilo.csv"
+   },
+   "mslAboveLatM": 1.912,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.49,
+   "halfCosineMaxM": 1.077,
+   "useInterval": true,
+   "intervalDataset": "no-2-beacon-weipa-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/e517b617-17cd-41f9-af5c-7c0807c8b569/resource/5c23babe-45d4-4d2e-8579-93b2ef07a715/download/p070019g_no-2-beacon-weipa_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/e517b617-17cd-41f9-af5c-7c0807c8b569/resource/bb01e619-e0af-40c4-ac40-c584b64d85f7/download/p070019g_no-2-beacon-weipa_2027_10min.csv"
+   }
+  },
+  {
+   "id": "101804",
+   "name": "Amrun",
+   "lat": -12.9167,
+   "lng": 141.6,
+   "reachKm": 15,
+   "dataset": "amrun-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/5ab52ed4-4e2f-444f-91d1-b57b1c1f5b05/resource/b337ccfa-92eb-4568-8e3a-f377203bde0f/download/q101804_chith-export-facility-amrun_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/5ab52ed4-4e2f-444f-91d1-b57b1c1f5b05/resource/249c6dc7-69d3-4052-8f7c-5737df420f60/download/q101804_chith-export-facility-amrun_2027_hilo.csv"
+   },
+   "mslAboveLatM": 1.985,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.454,
+   "halfCosineMaxM": 0.925,
+   "useInterval": true,
+   "intervalDataset": "amrun-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/69003d7b-d7f3-4b9e-ac4d-01f4d17770b1/resource/835a1db8-f1ee-471a-9790-c123f921d54f/download/p101283_chith-export-facility-amrun_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/69003d7b-d7f3-4b9e-ac4d-01f4d17770b1/resource/1d139f74-477c-4b40-94d5-f3bf3e3c8004/download/p101804_chith-export-facility-amrun_2027_10min.csv"
+   }
+  },
+  {
+   "id": "042023A",
+   "name": "Aurukun Archer River",
+   "lat": -13.3667,
+   "lng": 141.7167,
+   "reachKm": 8,
+   "dataset": "aurukun-archer-river-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/4f05d639-097a-4a3c-ab23-ce23efeab081/resource/be3c103a-1e43-4f75-80ff-c5ce5752c8a2/download/q042023a_aurukun-archer-river_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/4f05d639-097a-4a3c-ab23-ce23efeab081/resource/9b1b9d5b-5cd1-49a6-8535-4a5c308d8c05/download/q042023a_aurukun-archer-river_2027_hilo.csv"
+   },
+   "mslAboveLatM": 1.597,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.313,
+   "halfCosineMaxM": 0.673,
+   "useInterval": true,
+   "intervalDataset": "aurukun-archer-river-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/da5f13c3-b29e-49bf-93a9-a20c2608b8e9/resource/09efda70-0f14-4dd3-847e-0ed58ab9ef74/download/p042023a_aurukun-archer-river_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/da5f13c3-b29e-49bf-93a9-a20c2608b8e9/resource/30f7df82-0a94-4d23-8633-5a61caed7fd1/download/p042023a_aurukun-archer-river_2027_10min.csv"
+   }
+  },
+  {
+   "id": "100007",
+   "name": "Leggatt Island",
+   "lat": -14.5167,
+   "lng": 144.85,
+   "reachKm": 15,
+   "dataset": "leggatt-island-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/4ccf2e1e-fc17-41db-8e5a-8ada97eaa71c/resource/eeac8e95-7abe-4308-8730-c9baa17a7745/download/q100007_leggatt-island_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/4ccf2e1e-fc17-41db-8e5a-8ada97eaa71c/resource/1d7a026b-1173-4888-a7a1-55390111ce0a/download/q100007_leggatt-island_2027_hilo.csv"
+   },
+   "mslAboveLatM": 1.764,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.074,
+   "halfCosineMaxM": 0.332,
+   "useInterval": true,
+   "intervalDataset": "leggatt-island-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/8ca460a3-347c-41a4-a0fd-898b28a13fe5/resource/5f12d90b-eee1-46ad-aa14-7d2b819f9575/download/p100007_leggatt-island_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/8ca460a3-347c-41a4-a0fd-898b28a13fe5/resource/7ea2293e-b981-49b9-9807-1b471f2f0606/download/p100007_leggatt-island_2027_10min.csv"
+   }
+  },
+  {
+   "id": "042002A",
+   "name": "Lizard Island",
+   "lat": -14.6667,
+   "lng": 145.4333,
+   "reachKm": 15,
+   "dataset": "lizard-island-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/5f0e1cbd-14ad-4304-8832-c24f07852add/resource/6a76b241-c0e5-43e5-a8ec-32760df160d2/download/q042002a_lizard-island_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/5f0e1cbd-14ad-4304-8832-c24f07852add/resource/98e5d171-7e4e-4edb-ae5f-a1746dd57384/download/q042002a_lizard-island_2027_hilo.csv"
+   },
+   "mslAboveLatM": 1.481,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.05,
+   "halfCosineMaxM": 0.313,
+   "useInterval": true,
+   "intervalDataset": "lizard-island-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/5976814a-cfcd-44b0-b06c-b0bafb0d5153/resource/eb7e3f1a-c7a4-44f5-8e19-4b342e0e64e6/download/p042002a_lizard-island_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/5976814a-cfcd-44b0-b06c-b0bafb0d5153/resource/01aa2441-4cad-409a-b665-df742f7708e5/download/p042002a_lizard-island_2027_10min.csv"
+   }
+  },
+  {
+   "id": "067001A",
+   "name": "Cape Flattery",
+   "lat": -14.95,
+   "lng": 145.3,
+   "reachKm": 15,
+   "dataset": "cape-flattery-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/a9bea6ec-1c26-4c3b-ba9e-a664aa0b4f83/resource/d6dcebf9-4eaf-4529-82fd-17a3a5225459/download/q067001a_cape-flattery_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/a9bea6ec-1c26-4c3b-ba9e-a664aa0b4f83/resource/bebf96c3-66b1-4301-b7f0-9ea33e6151c4/download/q067001a_cape-flattery_2027_hilo.csv"
+   },
+   "mslAboveLatM": 1.586,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.058,
+   "halfCosineMaxM": 0.34,
+   "useInterval": true,
+   "intervalDataset": "cape-flattery-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/621b70f3-3612-4f6f-9ae3-80b0f6418610/resource/46b71b50-6534-460c-80d0-183a07698dc5/download/p067001a_cape-flattery_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/621b70f3-3612-4f6f-9ae3-80b0f6418610/resource/9a121d8d-d4db-4a0d-be84-6683c8e956a9/download/p067001a_cape-flattery_2027_10min.csv"
+   }
+  },
+  {
+   "id": "066003A",
+   "name": "Cooktown",
+   "lat": -15.45,
+   "lng": 145.2333,
+   "reachKm": 15,
+   "dataset": "cooktown-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/924067db-e783-4aa8-921c-5c61abc53b19/resource/f1672073-ec1a-452a-b2a6-d32779efcaa8/download/q066003a_cooktown-storm-surge_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/924067db-e783-4aa8-921c-5c61abc53b19/resource/8bbde58f-2200-4375-906d-b5e27a70e51d/download/q066003a_cooktown-storm-surge_2027_hilo.csv"
+   },
+   "mslAboveLatM": 1.626,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.057,
+   "halfCosineMaxM": 0.326,
+   "useInterval": true,
+   "intervalDataset": "cooktown-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/c0bb6e72-7802-4f05-90bb-d52698bd5d97/resource/0296c911-7d8c-4d3a-a5a7-e0d55c8b1119/download/p066003a_cooktown-storm-surge_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/c0bb6e72-7802-4f05-90bb-d52698bd5d97/resource/21ab8650-8678-4db0-9d64-7c4fad4a75a8/download/p066003a_cooktown-storm-surge_2027_10min.csv"
+   }
+  },
+  {
+   "id": "041014A",
+   "name": "Mossman",
+   "lat": -16.4167,
+   "lng": 145.4,
+   "reachKm": 15,
+   "dataset": "mossman-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/f5659778-3452-4b3c-9005-b0adb353b672/resource/0d83ec56-8a27-4f5f-9197-89aade9bfcd0/download/q041014a_mossman-storm-surge_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/f5659778-3452-4b3c-9005-b0adb353b672/resource/027a1a2b-efb8-486f-8180-24898bf654e7/download/q041014a_mossman-storm-surge_2027_hilo.csv"
+   },
+   "mslAboveLatM": 1.418,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.138,
+   "halfCosineMaxM": 0.318,
+   "useInterval": true,
+   "intervalDataset": "mossman-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/74de5e72-08fb-40ae-97ad-e61c7a4a0423/resource/d177c49d-2d1e-4db7-9379-1af56cd4ec2b/download/p041014a_mossman-storm-surge_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/74de5e72-08fb-40ae-97ad-e61c7a4a0423/resource/39578a5a-658f-44c7-ad3b-1451ffd82d7d/download/p041014a_mossman-storm-surge_2027_10min.csv"
+   }
+  },
+  {
+   "id": "100923",
+   "name": "Port Douglas",
+   "lat": -16.4833,
+   "lng": 145.45,
+   "reachKm": 15,
+   "dataset": "port-douglas-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/e19a81a6-e3cb-4c02-a9fe-d8614d721ca6/resource/02504931-484f-4d44-9345-9f8553a772b6/download/q100923_port-douglas-storm-surge_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/e19a81a6-e3cb-4c02-a9fe-d8614d721ca6/resource/f79205b7-bb7f-49bb-872d-615cdc45d0b8/download/q100923_port-douglas-storm-surge_2027_hilo.csv"
+   },
+   "mslAboveLatM": 1.663,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.093,
+   "halfCosineMaxM": 0.347,
+   "useInterval": true,
+   "intervalDataset": "port-douglas-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/791ff69f-e821-4154-a0d9-81a6de4188ff/resource/e24c7ef4-038a-43ac-b37d-6f0eaccd3f21/download/p100923_port-douglas-storm-surge_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/791ff69f-e821-4154-a0d9-81a6de4188ff/resource/16f0e694-e5b6-49b1-a026-91a2ad288313/download/p100923_port-douglas-storm-surge_2027_10min.csv"
+   }
+  },
+  {
+   "id": "074011A",
+   "name": "Mornington Island",
+   "lat": -16.6667,
+   "lng": 139.1667,
+   "reachKm": 15,
+   "dataset": "mornington-island-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/2c045178-ef78-47e8-a2e8-261ef133e891/resource/a248342d-13bd-471b-89d5-c8ad31b4488a/download/q074011a_mornington-island_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/2c045178-ef78-47e8-a2e8-261ef133e891/resource/3ba3c84e-c335-4a4f-931c-790ee1586765/download/q074011a_mornington-island_2027_hilo.csv"
+   },
+   "mslAboveLatM": 2.176,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.435,
+   "halfCosineMaxM": 0.834,
+   "useInterval": true,
+   "intervalDataset": "mornington-island-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/ceecf313-5e06-43a6-9838-48c16cda7136/resource/ca944f67-1698-498e-b893-33a77d3a297f/download/p074011a_mornington-island_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/ceecf313-5e06-43a6-9838-48c16cda7136/resource/e4454dbc-1a61-45ba-92ab-f477be23ff1c/download/p074011a_mornington-island_2027_10min.csv"
+   }
+  },
+  {
+   "id": "101363",
+   "name": "Cairns Beacon C1",
+   "lat": -16.8167,
+   "lng": 145.8167,
+   "reachKm": 15,
+   "dataset": "cairns-beacon-c1-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/166ce5a6-22f9-4e73-8c3e-5cdd006cfd67/resource/a8b72baa-1192-4f87-a5fe-7de1ffe33f62/download/q101363_cairns-beacon-c1_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/166ce5a6-22f9-4e73-8c3e-5cdd006cfd67/resource/0a7402ee-0c76-4f9c-8543-48a4506709c1/download/q101363_cairns-beacon-c1_2027_hilo.csv"
+   },
+   "mslAboveLatM": 1.584,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.069,
+   "halfCosineMaxM": 0.329,
+   "useInterval": true,
+   "intervalDataset": "cairns-beacon-c1-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/26253283-44cc-4cb5-ba96-06ea54705191/resource/d2247aa1-3312-4ce3-b684-bfac26320c50/download/p101363_cairns-beacon-c1_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/26253283-44cc-4cb5-ba96-06ea54705191/resource/99da8da4-7c9e-4385-bd3b-17a39f20f86a/download/p101363_cairns-beacon-c1_2027_10min.csv"
+   }
+  },
+  {
+   "id": "100280",
+   "name": "Cairns",
+   "lat": -16.9167,
+   "lng": 145.7667,
+   "reachKm": 15,
+   "dataset": "cairns-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/ddff214a-5165-4727-bba9-8b24b584aada/resource/79eddebd-1fb2-45b9-bdbb-56a912f71657/download/q100280_cairns-storm-surge-no-7-wharf_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/ddff214a-5165-4727-bba9-8b24b584aada/resource/5910da5d-d512-4c00-85cd-7874c7355279/download/q100280_cairns-storm-surge_2027_hilo.csv"
+   },
+   "mslAboveLatM": 1.761,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.129,
+   "halfCosineMaxM": 0.238,
+   "useInterval": true,
+   "intervalDataset": "cairns-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/ee068749-999f-426b-be4a-dd5fcc0df9eb/resource/ea6826fc-4f7d-4dbc-8b8b-88344df3822f/download/p100280_cairns-storm-surge-no-7-wharf_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/ee068749-999f-426b-be4a-dd5fcc0df9eb/resource/f98feae0-c61d-4fc7-a063-e0c5431efa24/download/p100280_cairns-storm-surge_2027_10min.csv"
+   }
+  },
+  {
+   "id": "100036",
+   "name": "Inscription Point Sweers Island",
+   "lat": -17.1,
+   "lng": 139.5833,
+   "reachKm": 15,
+   "dataset": "inscription-point-sweers-island-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/b0b8d2bc-c859-49fc-8c51-2284f17b1f2a/resource/f6ce1365-dce2-448e-8adc-380019f48512/download/q100036_inscription-point-sweers-island_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/b0b8d2bc-c859-49fc-8c51-2284f17b1f2a/resource/a98922f1-d5eb-4ae9-be44-54cb142d47c2/download/q100036_inscription-point-sweers-island_2027_hilo.csv"
+   },
+   "mslAboveLatM": 2.256,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.249,
+   "halfCosineMaxM": 0.468,
+   "useInterval": true,
+   "intervalDataset": "inscription-point-sweers-island-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/3d4e6cb3-58db-4620-8127-f0ee0b3ce30c/resource/8714a162-a01e-429a-a2be-2caf9a2eb7a5/download/p100036_inscription-point-sweers-island_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/3d4e6cb3-58db-4620-8127-f0ee0b3ce30c/resource/f3692500-7df9-4fe0-8a65-33bdd46524fb/download/p100036_inscription-point-sweers-island_2027_10min.csv"
+   }
+  },
+  {
+   "id": "071007A",
+   "name": "Karumba Bar",
+   "lat": -17.4167,
+   "lng": 140.7167,
+   "reachKm": 15,
+   "dataset": "karumba-bar-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/4f3e1135-6859-4e6e-be57-5b5c28c08871/resource/a74967e2-2271-497f-9dd0-c8940785593e/download/q071007a_karumba-bar_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/4f3e1135-6859-4e6e-be57-5b5c28c08871/resource/afce639f-fb14-4642-be47-7eaba12832d2/download/q071007a_karumba-bar_2027_hilo.csv"
+   },
+   "mslAboveLatM": 2.047,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.35,
+   "halfCosineMaxM": 0.618,
+   "useInterval": true,
+   "intervalDataset": "karumba-bar-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/169638ae-2408-48a5-83bf-d966b1b45b18/resource/99f86bcf-d76a-429b-bee9-1ccc852fa07a/download/p071007a_karumba-bar_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/169638ae-2408-48a5-83bf-d966b1b45b18/resource/8a5ae7e9-85b2-4caf-a109-5ee62bc93fe2/download/p071007a_karumba-bar_2027_10min.csv"
+   }
+  },
+  {
+   "id": "071004A",
+   "name": "Karumba",
+   "lat": -17.4833,
+   "lng": 140.8333,
+   "reachKm": 8,
+   "dataset": "karumba-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/dbb13569-1d7e-47f7-b49a-18a521954274/resource/fb79c169-4613-4b75-a71f-112fe7457c41/download/q071004a_karumba-storm-surge_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/dbb13569-1d7e-47f7-b49a-18a521954274/resource/fd65253b-131f-4dad-8179-3ae45497f4dc/download/q071004a_karumba-storm-surge_2027_hilo.csv"
+   },
+   "mslAboveLatM": 2.187,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.363,
+   "halfCosineMaxM": 0.554,
+   "useInterval": true,
+   "intervalDataset": "karumba-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/a4b4879f-750f-4fc4-a588-ef801d6ebda6/resource/17938bc2-a7e5-4cc2-bf39-4a7a68954082/download/p071004a_karumba-storm-surge_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/a4b4879f-750f-4fc4-a588-ef801d6ebda6/resource/4f8f5503-8643-4266-8cad-0062cadf15e9/download/p071004a_karumba-storm-surge_2027_10min.csv"
+   }
+  },
+  {
+   "id": "063012A",
+   "name": "Mourilyan",
+   "lat": -17.5833,
+   "lng": 146.1167,
+   "reachKm": 15,
+   "dataset": "mourilyan-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/0999a34d-11e3-4662-9176-e4d3a4c7c1f7/resource/f351433f-60fc-450e-8cbc-b610140ee8ef/download/q063012a_mourilyan-storm-surge_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/0999a34d-11e3-4662-9176-e4d3a4c7c1f7/resource/39c59e72-8d26-425d-b311-00ef4a70b0d1/download/q063012a_mourilyan-storm-surge_2027_hilo.csv"
+   },
+   "mslAboveLatM": 1.82,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.053,
+   "halfCosineMaxM": 0.344,
+   "useInterval": true,
+   "intervalDataset": "mourilyan-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/0ba11428-ae8d-41ce-978a-a4f066f02142/resource/1ba3d2fd-e8d1-4504-9f42-85835a50f7a4/download/p063012a_mourilyan-storm-surge_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/0ba11428-ae8d-41ce-978a-a4f066f02142/resource/52a1f8d0-70d6-49fc-a1cf-d83d098c6951/download/p063012a_mourilyan-storm-surge_2027_10min.csv"
+   }
+  },
+  {
+   "id": "035002B",
+   "name": "Clump Point",
+   "lat": -17.85,
+   "lng": 146.1,
+   "reachKm": 15,
+   "dataset": "clump-point-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/7a649e1f-d2eb-4eba-b74a-6701dbaad02c/resource/6428d243-f37f-43b6-b542-867dfea6482f/download/q035002b_clump-point-storm-surge_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/7a649e1f-d2eb-4eba-b74a-6701dbaad02c/resource/3b2a8e20-d051-407c-953c-4b6d9cab5c45/download/q035002b_clump-point-storm-surge_2027_hilo.csv"
+   },
+   "mslAboveLatM": 1.821,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.063,
+   "halfCosineMaxM": 0.374,
+   "useInterval": true,
+   "intervalDataset": "clump-point-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/a14c7a14-5f7e-4b05-a298-7c282394577e/resource/45488b3b-dc28-4768-b89c-a87340aea18b/download/p035002b_clump-point-storm-surge_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/a14c7a14-5f7e-4b05-a298-7c282394577e/resource/5fc7fa7e-662d-4400-a47a-58f8e813da3c/download/p035002b_clump-point-storm-surge_2027_10min.csv"
+   }
+  },
+  {
+   "id": "035012A",
+   "name": "Cardwell",
+   "lat": -18.25,
+   "lng": 146.0167,
+   "reachKm": 15,
+   "dataset": "cardwell-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/8c9f68db-4f0b-441d-89f5-e2fdfce90f29/resource/89739b0f-bd81-47c6-94cb-b90e64f39773/download/q035012a_cardwell-storm-surge_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/8c9f68db-4f0b-441d-89f5-e2fdfce90f29/resource/e753aa9a-de8a-4ac8-97c7-f956a6e5144e/download/q035012a_cardwell-storm-surge_2027_hilo.csv"
+   },
+   "mslAboveLatM": 2.016,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.126,
+   "halfCosineMaxM": 0.278,
+   "useInterval": true,
+   "intervalDataset": "cardwell-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/ec29c0cf-677a-49ec-9941-5478d2695cad/resource/309b41ad-9f04-4a89-967b-866fa31bfc7d/download/p035012a_cardwell-storm-surge_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/ec29c0cf-677a-49ec-9941-5478d2695cad/resource/b5bb67bb-3ae1-4d84-b37c-ab9f03afa055/download/p035012a_cardwell-storm-surge_2027_10min.csv"
+   }
+  },
+  {
+   "id": "062006A",
+   "name": "Lucinda",
+   "lat": -18.5167,
+   "lng": 146.3833,
+   "reachKm": 15,
+   "dataset": "lucinda-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/65ce662a-487e-422e-be9d-8b8320ba3000/resource/d7dcc457-64de-4782-ad13-06c4ed553e8d/download/q062006a_offshore-lucinda-storm-surge_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/65ce662a-487e-422e-be9d-8b8320ba3000/resource/5d2ee683-51a4-4709-8f3f-7a31a46f9484/download/q062006a_offshore-lucinda-storm-surge_2027_hilo.csv"
+   },
+   "mslAboveLatM": 1.968,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.093,
+   "halfCosineMaxM": 0.421,
+   "useInterval": true,
+   "intervalDataset": "lucinda-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/4cdf7b71-7b8a-42a2-974b-d8eae807054c/resource/3fa0cd2d-589e-403c-aeed-144078e47fa7/download/p062006a_offshore-lucinda-storm-surge_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/4cdf7b71-7b8a-42a2-974b-d8eae807054c/resource/8bca1a7a-bb63-4f44-9cb8-fc11bb4c73d3/download/p062006a_offshore-lucinda-storm-surge_2027_10min.csv"
+   }
+  },
+  {
+   "id": "101343",
+   "name": "North Cardinal Beacon Townsville",
+   "lat": -19.1167,
+   "lng": 146.9,
+   "reachKm": 15,
+   "dataset": "north-cardinal-beacon-townsville-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/773d4a47-e4a7-4f85-aab8-e808782fc8fd/resource/c6a92e37-04eb-4760-ab2b-87f63f68a4a4/download/q101343_north-cardinal-beacon-townsville_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/773d4a47-e4a7-4f85-aab8-e808782fc8fd/resource/6bef51b4-b567-40b1-95a6-c05e0e9b8a86/download/q101343_north-cardinal-beacon-townsville_2027_hilo.csv"
+   },
+   "mslAboveLatM": 2.043,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.111,
+   "halfCosineMaxM": 0.317,
+   "useInterval": true,
+   "intervalDataset": "north-cardinal-beacon-townsville-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/6dcd3539-1efb-4147-ad8b-9da5a5febb25/resource/447cbb9d-ca0a-44aa-9eef-0109d0ea346c/download/p101343_north-cardinal-beacon-townsville_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/6dcd3539-1efb-4147-ad8b-9da5a5febb25/resource/86983419-2c44-4777-b9a5-ef2be8002646/download/p101343_north-cardinal-beacon-townsville_2027_10min.csv"
+   }
+  },
+  {
+   "id": "100447",
+   "name": "Townsville",
+   "lat": -19.2333,
+   "lng": 146.8333,
+   "reachKm": 15,
+   "dataset": "townsville-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/53545c23-c078-48e9-9c59-ff16f11552c9/resource/af1244df-96c1-426f-9e97-1c815e4922e9/download/q100447_townsville-berth-1-pumphouse_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/53545c23-c078-48e9-9c59-ff16f11552c9/resource/0972649c-8afd-4bbd-a1a9-60da1f93f2a5/download/q100447_townsville-berth-1-pumphouse_2027_hilo.csv"
+   },
+   "mslAboveLatM": 2.023,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.125,
+   "halfCosineMaxM": 0.293,
+   "useInterval": true,
+   "intervalDataset": "townsville-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/850b8e86-45bf-4970-a7fb-02da731a5181/resource/b79be69f-ad3a-476f-af92-553ef838cb2b/download/p100447_townsville-berth-1-pumphouse_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/850b8e86-45bf-4970-a7fb-02da731a5181/resource/f0dab22d-ac38-47f5-9654-8b1c0052cb8e/download/p100447_townsville-berth-1-pumphouse_2027_10min.csv"
+   }
+  },
+  {
+   "id": "033007A",
+   "name": "Cape Ferguson",
+   "lat": -19.2667,
+   "lng": 147.05,
+   "reachKm": 15,
+   "dataset": "cape-ferguson-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/80b97795-365c-4b9c-840a-74c8d9c54bce/resource/b1f18899-48da-4389-b9b1-8322bcceedc2/download/q033007a_cape-ferguson-storm-surge_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/80b97795-365c-4b9c-840a-74c8d9c54bce/resource/dcbd7018-b504-4878-9ded-59781e33c0ba/download/q033007a_cape-ferguson-storm-surge_2027_hilo.csv"
+   },
+   "mslAboveLatM": 1.877,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.092,
+   "halfCosineMaxM": 0.22
+  },
+  {
+   "id": "101584",
+   "name": "Abbot Point",
+   "lat": -19.85,
+   "lng": 148.0833,
+   "reachKm": 15,
+   "dataset": "abbot-point-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/1c7dc3a3-b5c6-4212-aa5c-82aae31fd9dd/resource/47e590ab-8624-4a4c-a32a-a598ff5e1419/download/q101584_abbot-point_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/1c7dc3a3-b5c6-4212-aa5c-82aae31fd9dd/resource/4fb76039-7cbd-47fc-a304-4237eb1d9f60/download/q101584_abbot-point-miros-gauge_2027_hilo.csv"
+   },
+   "mslAboveLatM": 1.738,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.061,
+   "halfCosineMaxM": 0.157
+  },
+  {
+   "id": "061007A",
+   "name": "Bowen",
+   "lat": -20.0167,
+   "lng": 148.25,
+   "reachKm": 15,
+   "dataset": "bowen-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/b7436d8f-8ab7-4dad-aaa1-dc6abfacf6da/resource/d4324ba3-322a-4d7c-b9d2-9b1703f96f76/download/q061007a_bowen-storm-surge_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/b7436d8f-8ab7-4dad-aaa1-dc6abfacf6da/resource/f98f4dd7-4d72-4ccf-bbdc-669e4c4f624b/download/q061007a_bowen-storm-surge_2027_hilo.csv"
+   },
+   "mslAboveLatM": 1.834,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.083,
+   "halfCosineMaxM": 0.177
+  },
+  {
+   "id": "030014A",
+   "name": "Bugatti Reef Outer",
+   "lat": -20.0833,
+   "lng": 150.3,
+   "reachKm": 15,
+   "dataset": "bugatti-reef-outer-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/862f528e-5cd1-4ed2-b64f-b1c565754ccd/resource/6f06762f-28d8-4ec3-b5af-86cdb86326e9/download/q030014a_bugatti-reef-outer_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/862f528e-5cd1-4ed2-b64f-b1c565754ccd/resource/6369e771-212b-4323-8a56-736c40f467d2/download/q030014a_bugatti-reef-outer_2027_hilo.csv"
+   },
+   "mslAboveLatM": 1.611,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.136,
+   "halfCosineMaxM": 0.323,
+   "useInterval": true,
+   "intervalDataset": "bugatti-reef-outer-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/402579b7-4af3-4429-93e6-a6383b12fb45/resource/e7a8d347-340c-483a-b783-02a03ef17436/download/p030014a_bugatti-reef-outer_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/402579b7-4af3-4429-93e6-a6383b12fb45/resource/1f70833a-b36a-45ec-acad-2e43d8d6a234/download/p030014a_bugatti-reef-outer_2027_10min.csv"
+   }
+  },
+  {
+   "id": "030003A",
+   "name": "Shute Harbour",
+   "lat": -20.2833,
+   "lng": 148.7833,
+   "reachKm": 15,
+   "dataset": "shute-harbour-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/aa427579-32c5-4573-b3f5-79e6c2afb72a/resource/35c2e31e-b648-4334-bcf9-b44a37c7b9ca/download/q030003a_shute-harbour-storm-surge_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/aa427579-32c5-4573-b3f5-79e6c2afb72a/resource/9a8da85f-2799-4668-b5a8-2953bfdce195/download/q030003a_shute-harbour-storm-surge_2027_hilo.csv"
+   },
+   "mslAboveLatM": 1.989,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.145,
+   "halfCosineMaxM": 0.304,
+   "useInterval": true,
+   "intervalDataset": "shute-harbour-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/7993f06a-f666-4231-8b9e-7f36ebaadae7/resource/0cde2f64-1684-4cc1-bbde-abe97871b862/download/p030003a_shute-harbour-storm-surge_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/7993f06a-f666-4231-8b9e-7f36ebaadae7/resource/c3a0e860-b87e-48ba-8ff5-087a1ccf7ce5/download/p030003a_shute-harbour-storm-surge_2027_10min.csv"
+   }
+  },
+  {
+   "id": "100826",
+   "name": "Mackay",
+   "lat": -21.1,
+   "lng": 149.2167,
+   "reachKm": 15,
+   "dataset": "mackay-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/ee9b9420-b798-488e-9447-908fdad9b087/resource/2cd8f3ed-7f9c-492f-ba3a-75081fb3bd2b/download/q100826_mackay-storm-tide_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/ee9b9420-b798-488e-9447-908fdad9b087/resource/72fe64d7-f482-4d40-b055-553b96ed33f3/download/q100826_mackay-storm-tide_2027_hilo.csv"
+   },
+   "mslAboveLatM": 3.09,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.127,
+   "halfCosineMaxM": 0.255,
+   "useInterval": true,
+   "intervalDataset": "mackay-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/98aec2f4-0be3-4d0c-b994-33402533dee3/resource/e01c6669-7c19-469c-8120-d02bfd0d01b7/download/p100826_mackay-storm-tide_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/98aec2f4-0be3-4d0c-b994-33402533dee3/resource/99853753-fb32-4e92-8ff1-7278822d2028/download/p100826_mackay-storm-tide_2027_10min.csv"
+   }
+  },
+  {
+   "id": "060008A",
+   "name": "Hay Point",
+   "lat": -21.2667,
+   "lng": 149.3,
+   "reachKm": 15,
+   "dataset": "hay-point-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/8c78eaf3-3923-4f41-b885-064276fa6ff7/resource/cf26e8ce-36ef-4e23-a16f-01014d9e76bf/download/q060008a_hay-point-storm-surge_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/8c78eaf3-3923-4f41-b885-064276fa6ff7/resource/279f3ac9-c987-432e-94cd-15d30b9f9736/download/q060008a_hay-point-storm-surge_2027_hilo.csv"
+   },
+   "mslAboveLatM": 3.449,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.136,
+   "halfCosineMaxM": 0.27,
+   "useInterval": true,
+   "intervalDataset": "hay-point-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/b539b21a-03b1-467a-8da0-a625ddf7fd88/resource/763174bc-52ea-4834-a585-191c4cb31aaf/download/p060008a_hay-point-storm-surge_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/b539b21a-03b1-467a-8da0-a625ddf7fd88/resource/7463f597-50e3-4225-8538-c6024fa3475b/download/p060008a_hay-point-storm-surge_2027_10min.csv"
+   }
+  },
+  {
+   "id": "060010A",
+   "name": "Half Tide Tug Harbour",
+   "lat": -21.2833,
+   "lng": 149.3,
+   "reachKm": 15,
+   "dataset": "half-tide-tug-harbour-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/c101dbb0-9cdc-4a2e-9f5c-26bb0ce54b9e/resource/6819fb2c-40e1-4718-9893-d835c01ccb4b/download/q060010a_half-tide-tug-harbour_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/c101dbb0-9cdc-4a2e-9f5c-26bb0ce54b9e/resource/56399b81-4fb3-4ca4-9c1c-0f2dfe199fc7/download/q060010a_half-tide-tug-harbour_2027_hilo.csv"
+   },
+   "mslAboveLatM": 3.449,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.136,
+   "halfCosineMaxM": 0.27,
+   "useInterval": true,
+   "intervalDataset": "half-tide-tug-harbour-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/ce8d3c73-209e-4342-a740-44264497a457/resource/d508ea2e-a773-45a1-a276-06798c84e5cc/download/p060010a_half-tide-tug-harbour_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/ce8d3c73-209e-4342-a740-44264497a457/resource/d293aef4-63b2-460e-a858-2ff1dc2a676f/download/p060010a_half-tide-tug-harbour_2027_10min.csv"
+   }
+  },
+  {
+   "id": "024011A",
+   "name": "Rosslyn Bay",
+   "lat": -23.15,
+   "lng": 150.7833,
+   "reachKm": 15,
+   "dataset": "rosslyn-bay-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/1561d4a6-cb9e-4815-b200-ab66b2d088e9/resource/14d386ed-e2f3-4210-a736-9cf10721e947/download/q024011a_rosslyn-bay_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/1561d4a6-cb9e-4815-b200-ab66b2d088e9/resource/4b0dc5be-c232-4461-a6a6-3550da605529/download/q024011a_rosslyn-bay_2027_hilo.csv"
+   },
+   "mslAboveLatM": 2.504,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.11,
+   "halfCosineMaxM": 0.227,
+   "useInterval": true,
+   "intervalDataset": "rosslyn-bay-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/10e3279a-c433-4625-98d2-c4e19e664ebe/resource/3d5d03fe-1e1f-436f-a73f-dc92b5362175/download/p024011a_rosslyn-bay_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/10e3279a-c433-4625-98d2-c4e19e664ebe/resource/93c93c59-088f-4803-9f15-7282e012451b/download/p024011a_rosslyn-bay_2027_10min.csv"
+   }
+  },
+  {
+   "id": "050008A",
+   "name": "Port Alma",
+   "lat": -23.5833,
+   "lng": 150.85,
+   "reachKm": 15,
+   "dataset": "port-alma-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/df11815d-2eac-4432-8d57-22f7d45c3a36/resource/f84c4c03-ea95-4564-9f8f-757e668967cf/download/q050008a_port-alma-storm-surge_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/df11815d-2eac-4432-8d57-22f7d45c3a36/resource/d4b966dc-6c06-4a06-b933-cc99dfefb629/download/q050008a_port-alma-storm-surge_2027_hilo.csv"
+   },
+   "mslAboveLatM": 2.976,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.155,
+   "halfCosineMaxM": 0.315,
+   "useInterval": true,
+   "intervalDataset": "port-alma-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/a653a858-3eaa-4f8f-855b-f854b5678c20/resource/59c68e0e-fef7-41f1-93fd-4d1330bc0df6/download/p050008a_port-alma-storm-surge_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/a653a858-3eaa-4f8f-855b-f854b5678c20/resource/3563815b-a558-45bc-a1ff-6acfb4f2ecd3/download/p050008a_port-alma-storm-surge_2027_10min.csv"
+   }
+  },
+  {
+   "id": "052003B",
+   "name": "Fisherman's Landing",
+   "lat": -23.7833,
+   "lng": 151.1667,
+   "reachKm": 15,
+   "dataset": "fisherman-s-landing-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/6ce68ee3-fa87-4f53-87be-791a7b3b9b5f/resource/991a869b-7345-4a77-8456-8a15e8ddff11/download/q052003b_fishermans-landing-wharf-qcl_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/6ce68ee3-fa87-4f53-87be-791a7b3b9b5f/resource/cc24a6e1-8d46-433b-843d-d2dd12eb2e71/download/q052003b_fishermans-landing-wharf-qcl_2027_hilo.csv"
+   },
+   "mslAboveLatM": 2.581,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.254,
+   "halfCosineMaxM": 0.489,
+   "useInterval": true,
+   "intervalDataset": "fisherman-s-landing-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/a2e68449-3e22-43ea-bf19-8333729a63e2/resource/fecbe55e-2da7-4712-9b85-edf6ed762634/download/p052003b_fishermans-landing-wharf-qcl_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/a2e68449-3e22-43ea-bf19-8333729a63e2/resource/cdcd0428-b481-4301-aa01-3174f1a70d64/download/p052003b_fishermans-landing-wharf-qcl_2027_10min.csv"
+   }
+  },
+  {
+   "id": "052027A",
+   "name": "Gladstone Auckland Point",
+   "lat": -23.8167,
+   "lng": 151.25,
+   "reachKm": 15,
+   "dataset": "gladstone-auckland-point-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/cefa0fda-65c4-4631-b3b6-3f1986a1a995/resource/58fee639-2d28-4bad-8ef7-4ff411ee11a5/download/q052027a_gladstone-auckland-point_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/cefa0fda-65c4-4631-b3b6-3f1986a1a995/resource/f5352b67-fc3a-4179-be81-dd1635ceba01/download/q052027a_gladstone-auckland-point_2027_hilo.csv"
+   },
+   "mslAboveLatM": 2.416,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.177,
+   "halfCosineMaxM": 0.35,
+   "useInterval": true,
+   "intervalDataset": "gladstone-auckland-point-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/cfdd9589-ecc8-44f4-8f65-63362133147c/resource/588d621e-b790-419f-855f-19f70106e7f6/download/p052027a_gladstone-auckland-point_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/cfdd9589-ecc8-44f4-8f65-63362133147c/resource/a0fffd00-8708-4f37-aa96-55edfec41385/download/p052027a_gladstone-auckland-point_2027_10min.csv"
+   }
+  },
+  {
+   "id": "052026A",
+   "name": "South Trees",
+   "lat": -23.85,
+   "lng": 151.3,
+   "reachKm": 15,
+   "dataset": "south-trees-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/8f98eeb0-07c6-4491-b848-50cf5afb86ce/resource/0669040b-75cb-46b1-9ee6-47c799eab252/download/q052026a_south-trees-storm-surge_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/8f98eeb0-07c6-4491-b848-50cf5afb86ce/resource/4cd5cf90-5aed-4a0e-86a0-503507592ae5/download/q052026a_south-trees-storm-surge_2027_hilo.csv"
+   },
+   "mslAboveLatM": 2.283,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.136,
+   "halfCosineMaxM": 0.24,
+   "useInterval": true,
+   "intervalDataset": "south-trees-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/9fa7bc3d-636a-4b41-ac70-208281b10bd7/resource/8deba73f-0c2b-46dc-89c2-ccae343f023c/download/p052026a_south-trees-storm-surge_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/9fa7bc3d-636a-4b41-ac70-208281b10bd7/resource/fdcfa285-48e9-459e-9956-9e8abc2b261f/download/p052026a_south-trees-storm-surge_2027_10min.csv"
+   }
+  },
+  {
+   "id": "100248",
+   "name": "Golding Channel, Gladstone",
+   "lat": -23.9333,
+   "lng": 151.45,
+   "reachKm": 15,
+   "dataset": "golding-reciprocal-f-l-gladstone-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/a230d957-03cc-4212-9991-a704b417ac17/resource/16149f17-7e14-4c5e-a7aa-c4679a207c9f/download/q100248_golding-reciprocal-fl-gladstone_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/a230d957-03cc-4212-9991-a704b417ac17/resource/13a9cddb-8596-43ee-bfbb-531bc3d893b9/download/q100248_golding-reciprocal_2027_hilo.csv"
+   },
+   "mslAboveLatM": 2.114,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.106,
+   "halfCosineMaxM": 0.186,
+   "useInterval": true,
+   "intervalDataset": "golding-reciprocal-f-l-gladstone-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/9ea5e554-bb63-4b88-93f0-df635ce67c70/resource/f9dd5ebf-a062-464d-a18e-5aeb091d9d40/download/p100248_golding-reciprocal-fl-gladstone_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/9ea5e554-bb63-4b88-93f0-df635ce67c70/resource/6ecc16a9-5fa9-4f2b-9c0e-0aaf31686d6f/download/p100248_golding-reciprocal_2027_10min.csv"
+   }
+  },
+  {
+   "id": "051010A",
+   "name": "Burnett Heads",
+   "lat": -24.75,
+   "lng": 152.4,
+   "reachKm": 15,
+   "dataset": "burnett-heads-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/77a12bb6-0d88-4e8a-9d39-f4ea44491747/resource/64f15daf-b8b3-474a-ae23-ec28a6b2f9b1/download/q051010a_burnett-heads-storm-surge_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/77a12bb6-0d88-4e8a-9d39-f4ea44491747/resource/5e6e51b1-580b-4515-bbc6-1e5e03f6aee6/download/q051010a_burnett-heads-storm-surge_2027_hilo.csv"
+   },
+   "mslAboveLatM": 1.807,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.07,
+   "halfCosineMaxM": 0.128
+  },
+  {
+   "id": "051011A",
+   "name": "Bundaberg",
+   "lat": -24.7667,
+   "lng": 152.3667,
+   "reachKm": 15,
+   "dataset": "bundaberg-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/46648c7f-3f52-47be-b6c0-8829733bdfcc/resource/8a7e3942-61b6-49e6-a0fb-72494fb019d1/download/q051011a_bundaberg-burnett-heads-port-gauge_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/46648c7f-3f52-47be-b6c0-8829733bdfcc/resource/8e8733ba-39ba-4ecf-a942-87ecabc8d841/download/q051011a_bundaberg-burnett-heads-port-gauge_2027_hilo.csv"
+   },
+   "mslAboveLatM": 1.803,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.099,
+   "halfCosineMaxM": 0.176
+  },
+  {
+   "id": "014004A",
+   "name": "Waddy Point K'gari",
+   "lat": -24.9667,
+   "lng": 153.35,
+   "reachKm": 15,
+   "dataset": "waddy-point-k-gari-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/01c5bd74-823c-4e6f-9747-4d916ddc5992/resource/e8defc9c-870b-47d8-8467-c40b37c4c448/download/q014004a_waddy-point-kgari_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/01c5bd74-823c-4e6f-9747-4d916ddc5992/resource/0492ad31-e659-41d7-8c76-a95285140730/download/q014004a_waddy-point-kgari_2027_hilo.csv"
+   },
+   "mslAboveLatM": 1.149,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.035,
+   "halfCosineMaxM": 0.085
+  },
+  {
+   "id": "100033",
+   "name": "Urangan Fairway Beacon",
+   "lat": -25.1333,
+   "lng": 152.8167,
+   "reachKm": 15,
+   "dataset": "urangan-fairway-beacon-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/746c6ba8-db48-45bc-9838-4dddb4539bec/resource/21500a3c-2394-454d-8845-5cfc8e4c0238/download/q100033_urangan-fairway-beacon_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/746c6ba8-db48-45bc-9838-4dddb4539bec/resource/8247f18d-de52-46f0-8612-3a8f281bb7ee/download/q100033_urangan-fairway-beacon_2027_hilo.csv"
+   },
+   "mslAboveLatM": 1.971,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.08,
+   "halfCosineMaxM": 0.176
+  },
+  {
+   "id": "058009B",
+   "name": "Urangan",
+   "lat": -25.2833,
+   "lng": 152.9,
+   "reachKm": 15,
+   "dataset": "urangan-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/a10af090-6894-435b-af22-141d3ad6e1c9/resource/3998fbdc-4e89-44b7-b544-904e64a12dd8/download/q058009b_urangan-storm-surge_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/a10af090-6894-435b-af22-141d3ad6e1c9/resource/a737e60e-8e17-4687-a1ec-7a459b87d29e/download/q058009b_urangan-storm-surge_2027_hilo.csv"
+   },
+   "mslAboveLatM": 2.158,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.117,
+   "halfCosineMaxM": 0.278,
+   "useInterval": true,
+   "intervalDataset": "urangan-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/560ac390-aa8f-4177-b1e1-b15d44ff2074/resource/5c91b1c1-41a8-42b5-9d88-72a12cf8e9a5/download/p058009b_urangan-storm-surge_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/560ac390-aa8f-4177-b1e1-b15d44ff2074/resource/d946eac2-201b-45a1-99c8-69c6856fbf93/download/p058009b_urangan-storm-surge_2027_10min.csv"
+   }
+  },
+  {
+   "id": "100074",
+   "name": "Kingfisher Bay Jetty",
+   "lat": -25.3833,
+   "lng": 153.0167,
+   "reachKm": 15,
+   "dataset": "kingfisher-bay-jetty-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/9b4388f1-becd-4b83-8fcb-7a66bd45f795/resource/41e891fb-33e3-47bb-874e-1336a5899030/download/q100074_kingfisher-bay-jetty_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/9b4388f1-becd-4b83-8fcb-7a66bd45f795/resource/344cfe86-83a1-4cba-b309-d9b756822f5e/download/q100074_kingfisher-bay-jetty_2027_hilo.csv"
+   },
+   "mslAboveLatM": 2.359,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.106,
+   "halfCosineMaxM": 0.26,
+   "useInterval": true,
+   "intervalDataset": "kingfisher-bay-jetty-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/bf204f49-cf34-430e-8abb-d1dcd70e16c5/resource/a39b4777-5922-4db6-8928-b3f2fe95b52e/download/p100074_kingfisher-bay-jetty_2026_10min.csv.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/bf204f49-cf34-430e-8abb-d1dcd70e16c5/resource/f14df581-5195-470e-aec9-ad3bad9901c0/download/p100074_kingfisher-bay-jetty_2027_10min.csv"
+   }
+  },
+  {
+   "id": "013003A",
+   "name": "Tin Can Bay Snapper Creek",
+   "lat": -25.9,
+   "lng": 153.0,
+   "reachKm": 15,
+   "dataset": "tin-can-bay-snapper-creek-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/c63b1951-8f63-4dcf-878b-b3e25851e21b/resource/949977d3-d128-4cea-9ce2-a832ee44955e/download/q013003a_tin-can-bay-snapper-creek_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/c63b1951-8f63-4dcf-878b-b3e25851e21b/resource/d8965d65-2392-40fc-a561-106390f5c9e9/download/q013003a_tin-can-bay-snapper-creek_2027_hilo.csv"
+   },
+   "mslAboveLatM": 1.392,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.123,
+   "halfCosineMaxM": 0.313,
+   "useInterval": true,
+   "intervalDataset": "tin-can-bay-snapper-creek-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/ce1807c9-8b38-430f-bafb-9c6bb189f7d6/resource/12d4b87c-2ed4-46e2-bac5-2c664dbf48b1/download/p013003a_tin-can-bay-snapper-creek_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/ce1807c9-8b38-430f-bafb-9c6bb189f7d6/resource/96731470-8e41-45cd-ab4c-186426321cb2/download/p013003a_tin-can-bay-snapper-creek_2027_10min.csv"
+   }
+  },
+  {
+   "id": "012023A",
+   "name": "Noosa Head",
+   "lat": -26.3667,
+   "lng": 153.1,
+   "reachKm": 15,
+   "dataset": "noosa-head-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/dca61f49-0a97-4999-9348-42f83417eacc/resource/1977d083-3119-41aa-8758-3980f3eb8a3f/download/q012023a_noosa-head_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/dca61f49-0a97-4999-9348-42f83417eacc/resource/46d20b05-c988-41e7-a4c8-c9bbaf777974/download/q012023a_noosa-head_2027_hilo.csv"
+   },
+   "mslAboveLatM": 1.161,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.022,
+   "halfCosineMaxM": 0.049
+  },
+  {
+   "id": "011008A",
+   "name": "Mooloolaba",
+   "lat": -26.6833,
+   "lng": 153.1333,
+   "reachKm": 15,
+   "dataset": "mooloolaba-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/fa4f1aca-3294-444a-ae7f-2a3fbfaf29ef/resource/58920636-0eb3-419f-bc28-68e1d0b88c82/download/q011008a_mooloolaba-storm-surge_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/fa4f1aca-3294-444a-ae7f-2a3fbfaf29ef/resource/3b846b9c-09b2-47f4-b1a8-07a8da59d355/download/q011008a_mooloolaba-storm-surge_2027_hilo.csv"
+   },
+   "mslAboveLatM": 1.022,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.034,
+   "halfCosineMaxM": 0.07
+  },
+  {
+   "id": "101023",
+   "name": "Tangalooma Jetty",
+   "lat": -27.1667,
+   "lng": 153.3667,
+   "reachKm": 15,
+   "dataset": "tangalooma-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/91aaa496-fa6a-4c9a-a92d-f3a3f55a5b28/resource/9d73ece4-551b-4474-9c4d-e8bd0812542c/download/q101023_tangalooma-jetty_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/91aaa496-fa6a-4c9a-a92d-f3a3f55a5b28/resource/42a47de7-1724-4092-adf5-e5921397965c/download/q101023_tangalooma-jetty_2027_hilo.csv"
+   },
+   "mslAboveLatM": 1.292,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.061,
+   "halfCosineMaxM": 0.122
+  },
+  {
+   "id": "048002B",
+   "name": "Scarborough",
+   "lat": -27.1833,
+   "lng": 153.1,
+   "reachKm": 15,
+   "dataset": "scarborough-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/3bf50e8a-a240-4349-99e0-45e6f8cec76e/resource/74d2b81f-2657-42dd-a193-7bc77fdb48b9/download/q048002b_scarborough-boat-harbour_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/3bf50e8a-a240-4349-99e0-45e6f8cec76e/resource/ed238d1b-080e-40e3-b15c-8ee74e854de3/download/q048002b_scarborough-boat-harbour_2027_hilo.csv"
+   },
+   "mslAboveLatM": 1.285,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.05,
+   "halfCosineMaxM": 0.097
+  },
+  {
+   "id": "008006A",
+   "name": "Deep Water Bend Pine River",
+   "lat": -27.2833,
+   "lng": 153.0333,
+   "reachKm": 8,
+   "dataset": "deep-water-bend-pine-river-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/aebc60b3-bda6-4b86-a2aa-0d70ee2b29c2/resource/26e0398b-bf3f-4fc3-8109-e12cdfe03e05/download/q008006a_deep-water-bend-pine-river_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/aebc60b3-bda6-4b86-a2aa-0d70ee2b29c2/resource/1cd9e408-b6cb-40ac-8674-18e687a0fa4d/download/q008006a_deep-water-bend-pine-river_2027_hilo.csv"
+   },
+   "mslAboveLatM": 1.326,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.108,
+   "halfCosineMaxM": 0.23,
+   "useInterval": true,
+   "intervalDataset": "deep-water-bend-pine-river-tide-gauge-predicted-interval-data",
+   "intervalYears": {
+    "2026": "https://www.data.qld.gov.au/dataset/c57cbd58-0668-4816-879f-89aeb71c5999/resource/ca40a4ee-0f85-465c-8df9-71b10b87c158/download/p008006a_deep-water-bend-pine-river_2026_10min.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/c57cbd58-0668-4816-879f-89aeb71c5999/resource/bacffdc8-5ca4-4abd-b7c3-1796315e17a7/download/p008006a_deep-water-bend-pine-river_2027_10min.csv"
+   }
+  },
+  {
+   "id": "100903",
+   "name": "Shorncliffe",
+   "lat": -27.3167,
+   "lng": 153.0833,
+   "reachKm": 15,
+   "dataset": "shorncliffe-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/595d3eb3-3412-4a5d-ad2f-5071657128e0/resource/a897ceff-80fd-40fa-9645-257f283e59b5/download/q100903_shorncliffe-pier-storm-surge_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/595d3eb3-3412-4a5d-ad2f-5071657128e0/resource/5da2f3ec-eff6-4a8f-9324-4b25238350c9/download/q100903_shorncliffe-pier-storm-surge_2027_hilo.csv"
+   },
+   "mslAboveLatM": 1.393,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.07,
+   "halfCosineMaxM": 0.137
+  },
+  {
+   "id": "046046A",
+   "name": "Brisbane Bar",
+   "lat": -27.4,
+   "lng": 153.15,
+   "reachKm": 15,
+   "dataset": "brisbane-bar-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/561afeb2-224f-496a-99f2-18fac416c8a2/resource/6a625dd1-7b8c-4689-92e3-9be4fd777709/download/q046046a_brisbane-bar_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/561afeb2-224f-496a-99f2-18fac416c8a2/resource/f950544c-f5c1-49d5-b366-af2607c5493c/download/q046046a_brisbane-bar_2027_hilo.csv"
+   },
+   "mslAboveLatM": 1.347,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.072,
+   "halfCosineMaxM": 0.141
+  },
+  {
+   "id": "046047A",
+   "name": "Pinkenba (Gateway Bridge)",
+   "lat": -27.4167,
+   "lng": 153.1167,
+   "reachKm": 8,
+   "dataset": "pinkenba-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/f1baf845-41b5-46bc-a010-ef01c341ec29/resource/29c17a5d-43d6-4026-b3f5-8037216bdefc/download/q046047a_gateway-bridge-brisbane-river_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/f1baf845-41b5-46bc-a010-ef01c341ec29/resource/0e1de4b4-9395-4243-854d-4fd461918e62/download/q046047a_gateway-bridge-brisbane-river_2027_hilo.csv"
+   },
+   "mslAboveLatM": 1.337,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.081,
+   "halfCosineMaxM": 0.15
+  },
+  {
+   "id": "046006I",
+   "name": "Port Office Brisbane River",
+   "lat": -27.4667,
+   "lng": 153.0167,
+   "reachKm": 8,
+   "dataset": "port-office-brisbane-river-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/15909562-b5d2-46c1-a74a-a8580e7410a0/resource/a1d748d5-3372-4cae-b792-d97b4bad9c0c/download/q046006i_port-office-brisbane-river_2026_hilo_lat.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/15909562-b5d2-46c1-a74a-a8580e7410a0/resource/231146b5-da3c-4d0d-9322-1ca263d5b896/download/q046006i_port-office-brisbane-river_2027_hilo_lat.csv"
+   },
+   "mslAboveLatM": 1.411,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.092,
+   "halfCosineMaxM": 0.159
+  },
+  {
+   "id": "045044A",
+   "name": "Gold Coast Seaway",
+   "lat": -27.9333,
+   "lng": 153.4167,
+   "reachKm": 15,
+   "dataset": "gold-coast-seaway-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/98e7afb8-e249-4c7d-aac7-b24dda7cc789/resource/94a28942-b589-4c41-849c-619bae60f2ba/download/q045044a_gold-coast-seaway_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/98e7afb8-e249-4c7d-aac7-b24dda7cc789/resource/784e567b-e780-490d-acea-919c52bbf274/download/q045044a_gold-coast-seaway_2027_hilo.csv"
+   },
+   "mslAboveLatM": 0.893,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.027,
+   "halfCosineMaxM": 0.055
+  },
+  {
+   "id": "100035",
+   "name": "Southport",
+   "lat": -27.9667,
+   "lng": 153.4167,
+   "reachKm": 15,
+   "dataset": "southport-tide-gauge-predicted-high-low-data",
+   "years": {
+    "2026": "https://www.data.qld.gov.au/dataset/e60af7ad-0f21-4988-9f77-79b7b51c5265/resource/6337d808-ff90-4889-9a52-b2c3f77dcccd/download/q100035_marine-operations-base-southport_2026_hilo.csv",
+    "2027": "https://www.data.qld.gov.au/dataset/e60af7ad-0f21-4988-9f77-79b7b51c5265/resource/c96e164a-3b5c-4e6c-bac5-a22ab53ddfad/download/q100035_marine-operations-base-southport_2027_hilo.csv"
+   },
+   "mslAboveLatM": 0.9,
+   "mslFrom": "mean of the 2026 10-minute predictions",
+   "halfCosineP95M": 0.03,
+   "halfCosineMaxM": 0.076
+  }
+ ]
+}

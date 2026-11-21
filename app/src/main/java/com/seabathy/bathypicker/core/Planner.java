@@ -66,6 +66,10 @@ public final class Planner {
         public String layerWord = "survey";
         /** Count, while building, which layer each finished pixel came from (Builder.layerPixels, basePixels). */
         public boolean countLayers;
+        /** The size limit the detail was chosen under, bytes. */
+        public double capBytes;
+        /** What changed after planning (a survey the warehouse didn't send, and the detail chosen again), for the user. */
+        public final List<String> notes = new ArrayList<>();
     }
 
     /** A bottom layer read through its own projection: GMRT under the overseas sources. */
@@ -208,6 +212,94 @@ public final class Planner {
         return String.format(Locale.ROOT, "%.1f TB", n);
     }
 
+    /** About how many compressed bytes a source tile holds per pixel (float32 depths, Deflate): 1 to 2.7 measured. */
+    static final double BYTES_PER_PX = 2.5;
+
+    /** Source tiles are read whole: a box w x h pixels reads up to (w + 512) x (h + 512). */
+    static double tileRound(double w, double h) {
+        return (w + 512) * (h + 512) / Math.max(1.0, w * h);
+    }
+
+    /**
+     * Rough download for a build at resM: each survey or park file's bytes inside the box, from
+     * the overview read at that detail, rounded out to whole tiles; the warehouse's coverages
+     * (saved at wcsSaved bytes, compressed on the way); and the IMAS zones, at no finer than
+     * their own detail, about one and a half boxes' worth (zones overlap at their depth limits).
+     */
+    static double downloadBytes(List<Surveys.Survey> chosen, double[] bbox, double resM, Double imasRes, double wcsSaved) {
+        double[] m = boxMetres(bbox);
+        double total = wcsSaved * BYTES_PER_PX / Warehouse.SAVED_BYTES_PER_PX;
+        for (Surveys.Survey s : chosen) {
+            if (Surveys.WCS.equals(s.kind)) continue;
+            for (Surveys.SFile f : s.files) {
+                double read = readResM(s.resM, resM, f.overviews);
+                double shrink = (s.resM / read) * (s.resM / read);
+                total += Surveys.readBytes(bbox, f) * shrink * tileRound(m[0] / read, m[1] / read);
+            }
+        }
+        if (imasRes != null) {
+            double px = readResM(imasRes, resM, -1);
+            total += 1.5 * (m[0] / px + 512) * (m[1] / px + 512) * BYTES_PER_PX;
+        }
+        return total;
+    }
+
+    /**
+     * The detail a file is read at for an output at resM: its overview just finer than that (each
+     * overview halves), or its own detail when it has no overviews (overviews 0; -1 is not known).
+     */
+    static double readResM(double ownM, double resM, int overviews) {
+        if (resM <= ownM || overviews == 0) return ownM;
+        double k = Math.floor(Math.log(resM / ownM) / Math.log(2) + 1e-9);
+        if (overviews > 0) k = Math.min(k, overviews);
+        return ownM * Math.pow(2, k);
+    }
+
+    /**
+     * After layers have dropped out of a checked plan (the warehouse didn't send one): when what's
+     * left is coarser than the detail chosen, chooses the detail again from it, as assess does, so
+     * the file isn't built far finer than its data. Returns true when the detail changed.
+     */
+    public static boolean replan(Plan plan) {
+        Double finestLeft = plan.order.isEmpty() ? null : plan.imasResM;
+        for (Surveys.Survey s : plan.chosen) finestLeft = finestLeft == null ? s.resM : Math.min(finestLeft, s.resM);
+        if (finestLeft == null || finestLeft <= plan.resM * 1.01) return false;
+        String mode = plan.p.resolution;
+        if (!mode.equals("auto") && !mode.equals("finest")) return false;   // a detail the user asked for stays
+        double[] bbox = plan.p.bbox();
+        double cap = plan.capBytes > 0 ? plan.capBytes : Double.MAX_VALUE;
+        double old = plan.resM;
+        Object[] ch = chooseResolution(bbox, finestLeft, plan.crs, mode, cap);
+        plan.resM = (Double) ch[0];
+        plan.finestM = Math.round(finestLeft * 1000) / 1000.0;
+        long[] px = outputPixels(bbox, plan.resM, plan.crs);
+        plan.estBytes = px[0] * px[1] * 4;
+        plan.blend = plan.p.blend && !plan.chosen.isEmpty() && !plan.order.isEmpty();
+        plan.bandM.clear();
+        if (plan.blend) for (Surveys.Survey s : plan.chosen) plan.bandM.put(s.id, Surveys.blendBandM(s, plan.resM));
+        plan.filename = makeFilename(bbox, plan.resM, plan.crs, plan.chosen.size());
+        if (plan.json != null) {
+            plan.json.put("res_m", plan.resM == Math.rint(plan.resM) ? (Object) (long) plan.resM : (Object) plan.resM);
+            plan.json.put("res_note", ch[1]);
+            plan.json.put("finest_res_m", plan.finestM);
+            plan.json.put("output_px", Arrays.asList(px[0], px[1]));
+            plan.json.put("est_bytes", plan.estBytes);
+            plan.json.put("blend", plan.blend);
+            plan.json.put("filename", plan.filename);
+        }
+        return plan.resM != old;
+    }
+
+    /** Some file of the survey has depths in the box, as far as its tile sizes tell (true when they can't). */
+    private static boolean anyData(Surveys.Survey s, Map<String, Object> heads, double[] bbox, Http.Cancel cancel) throws IOException {
+        if (Surveys.WCS.equals(s.kind)) return true;
+        for (Surveys.SFile f : s.files) {
+            Object h = heads.get(f.url);
+            if (!(h instanceof RemoteTiff) || Surveys.hasData((RemoteTiff) h, f.emptyTile, f.emptyFor, bbox, cancel)) return true;
+        }
+        return false;
+    }
+
     /** plan_surveys: rows for the page, and the chosen surveys top to bottom. */
     private static void planSurveys(Params p, Plan plan, Surveys cat, Catalog headers, double[] bbox, Double imasRes,
                                     List<Object> rows, List<String> warnings, Http.Cancel cancel) throws IOException {
@@ -221,18 +313,26 @@ public final class Planner {
             found.sort((a, b) -> Integer.compare(pos.getOrDefault(a.id, last), pos.getOrDefault(b.id, last)));
         }
         // The phone also needs to read each file's header: is it in a form this app can read?
+        // (A warehouse coverage has no file yet: Warehouse cuts it for the box when the build starts.)
         List<String> urls = new ArrayList<>();
-        for (Surveys.Survey s : found) for (Surveys.SFile f : s.files) if (f.proj != null) urls.add(f.url);
+        for (Surveys.Survey s : found) {
+            if (Surveys.WCS.equals(s.kind)) continue;
+            for (Surveys.SFile f : s.files) if (f.proj != null) urls.add(f.url);
+        }
         Map<String, Object> heads = urls.isEmpty() ? Collections.emptyMap() : headers.surveyHeaders(urls, cancel);
         for (Surveys.Survey s : found) {
             String why = null;
             for (Surveys.SFile f : s.files) {
+                if (Surveys.WCS.equals(s.kind)) continue;
                 if (f.proj == null) why = "Its coordinate system isn't one the phone knows. The computer version of BathyPicker can use it.";
                 else if (heads.get(f.url) instanceof String) why = (String) heads.get(f.url);
             }
             boolean usable = why == null;
-            boolean coarser = imasRes != null && s.resM >= imasRes * 0.99;
-            boolean defaultOn = !s.defaultOff && !coarser;
+            // A park mosaic's data cells are coarse: its tile sizes tell whether it really has depths in the box.
+            if (usable && !anyData(s, heads, bbox, cancel)) continue;
+            boolean coarser = Surveys.coarser(s, imasRes);
+            boolean tooBig = Warehouse.tooBig(s, bbox);
+            boolean defaultOn = !s.defaultOff && !coarser && !tooBig;
             boolean on = usable && p.surveyPrefs.getOrDefault(s.id, defaultOn);
             double extra = 0, cover = 0;
             List<Object> cells = new ArrayList<>();
@@ -261,10 +361,12 @@ public final class Planner {
             r.put("cover_pct", Math.min(100.0, Surveys.pyRound(100 * cover, 1)));
             r.put("read_bytes", (long) extra);
             r.put("coarser", coarser);
+            r.put("too_big", tooBig);
             rows.add(r);
+            if (tooBig) warnings.add(s.name + " is left out: the AusSeabed warehouse can only cut a smaller area of it. Draw a smaller box to include it.");
             if (on) {
                 plan.chosen.add(s);
-                for (Surveys.SFile f : s.files) plan.surveyTiffs.put(f.url, (RemoteTiff) heads.get(f.url));
+                if (!Surveys.WCS.equals(s.kind)) for (Surveys.SFile f : s.files) plan.surveyTiffs.put(f.url, (RemoteTiff) heads.get(f.url));
             }
             if (!usable) warnings.add(s.name + " can't be read on the phone, so it's left out. " + why);
         }
@@ -305,6 +407,7 @@ public final class Planner {
         Plan plan = new Plan();
         plan.p = p;
         plan.crs = p.crs;
+        plan.capBytes = cap;
         Map<String, Object> out = new LinkedHashMap<>();
         plan.json = out;
         Double imasRes = null;
@@ -374,8 +477,10 @@ public final class Planner {
             warnings.add("No coverage in this box for: " + sb + ".");
         }
         warnings.add("Only seafloor inside Australian waters has data. Land and other countries' waters stay empty (NoData).");
-        // Room for the file, its overviews and a margin; blending also keeps three working copies while it runs.
-        double need = est * 0.7 + (plan.blend ? 3.0 * est : 0);
+        // Room for the file, its overviews and a margin; blending also keeps three working copies while it runs,
+        // and the warehouse's coverages are saved while the build reads them.
+        double wcsBytes = Warehouse.savedBytes(plan.chosen, bbox, resM);
+        double need = est * 0.7 + (plan.blend ? 3.0 * est : 0) + wcsBytes;
         if (freeBytes >= 0) {
             if (freeBytes < need)
                 errors.add("Not enough free space on this phone (" + fmtBytes(freeBytes) + " free, roughly " + fmtBytes(need) + " needed"
@@ -413,6 +518,7 @@ public final class Planner {
         out.put("res_note", note);
         out.put("output_px", Arrays.asList(px[0], px[1]));
         out.put("est_bytes", est);
+        out.put("download_bytes", (long) downloadBytes(plan.chosen, bbox, resM, imasRes, wcsBytes));
         out.put("cap_bytes", cap);
         out.put("free_bytes", freeBytes);
         out.put("format", FORMAT);

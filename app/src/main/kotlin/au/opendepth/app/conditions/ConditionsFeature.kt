@@ -604,6 +604,12 @@ class ConditionsFeature(
         return list.map { it.spoken }
     }
 
+    /** Read only, for the drift planner: the saved area (on show, or round the spot) covering a point, or null. */
+    fun areaCovering(lat: Double, lng: Double): ConditionsArea? = listOfNotNull(area, spotArea).firstOrNull { it.contains(lat, lng) }
+
+    /** Read only, for the plotter export: the area on show, what its colours show, and the lines drawn over it (GeoJSON); null when hidden. */
+    fun shownForExport(): Triple<ConditionsArea, ColourChoice, String?>? = area?.takeIf { shown }?.let { Triple(it, colour, shownContours) }
+
     /** A GPS fix: the spot follows it when set to. */
     fun onLocation(lat: Double, lng: Double) {
         gpsFix = lat to lng
@@ -1107,6 +1113,10 @@ class ConditionsFeature(
                 val sat = (if (coastal) a.toShore(SatelliteKind.CHLOROPHYLL) else a.satellites[SatelliteKind.CHLOROPHYLL]) ?: return null
                 ConditionsPicture.Sampler { lat, lng -> if (coastal) sat.sampleToShore(lat, lng) else sat.sample(lat, lng) }
             }
+            ColourChoice.WATER_CLARITY -> {
+                val sat = (if (coastal) a.toShore(SatelliteKind.WATER_CLARITY) else a.satellites[SatelliteKind.WATER_CLARITY]) ?: return null
+                ConditionsPicture.Sampler { lat, lng -> WaterClarity.visibilityMetres(if (coastal) sat.sampleToShore(lat, lng) else sat.sample(lat, lng)) }
+            }
             // Coarse: with a finer coastline to hide the land, they reach the shore.
             ColourChoice.TEMP_BELOW, ColourChoice.SEA_LEVEL, ColourChoice.SALINITY -> {
                 val sat = a.satellites[choice.satellite] ?: return null
@@ -1272,6 +1282,7 @@ class ConditionsFeature(
                 else when (colour.satellite) {
                     SatelliteKind.SEA_TEMP -> "Satellite map for ${day(satellite.dateMillis)} (whole-day average)"
                     SatelliteKind.CHLOROPHYLL -> "Satellite map of the 5 days to ${day(satellite.dateMillis)}"
+                    SatelliteKind.WATER_CLARITY -> "Satellite estimate, 5 days to ${day(satellite.dateMillis)}"
                     else -> "Satellite map for ${day(satellite.dateMillis)}"
                 }
             else -> ""
@@ -1321,6 +1332,7 @@ class ConditionsFeature(
             ColourChoice.CHLOROPHYLL -> String.format(Locale.US, if (value < 1) "%.2f" else "%.1f", value) + " mg/m³"
             ColourChoice.SEA_LEVEL -> NavFormat(u).seaLevel(value)
             ColourChoice.SALINITY -> String.format(Locale.US, "%.1f PSU", value)
+            ColourChoice.WATER_CLARITY -> WaterClarity.text(value, NavFormat(u))
             ColourChoice.NONE -> ""
         }
     }
@@ -1659,7 +1671,7 @@ class ConditionsFeature(
         ColourChoice.SWELL -> "Swell"
         ColourChoice.SEA_TEMP_SATELLITE, ColourChoice.SEA_TEMP_BREAKS, ColourChoice.SEA_TEMP_FORECAST, ColourChoice.CHLOROPHYLL -> "Sea"
         ColourChoice.TEMP_BELOW -> "Depth"
-        ColourChoice.SEA_LEVEL, ColourChoice.SALINITY -> "Water"
+        ColourChoice.SEA_LEVEL, ColourChoice.SALINITY, ColourChoice.WATER_CLARITY -> "Water"
         ColourChoice.NONE -> null
     }
 
@@ -1679,6 +1691,7 @@ class ConditionsFeature(
         "Depth" -> ColourChoice.TEMP_BELOW
         "Water" -> if (rowNameOf(colour) == "Water" && a.satellites[colour.satellite] != null) colour else when {
             SatelliteKind.SEA_LEVEL in a.satellites -> ColourChoice.SEA_LEVEL
+            SatelliteKind.SALINITY !in a.satellites && SatelliteKind.WATER_CLARITY in a.satellites -> ColourChoice.WATER_CLARITY
             else -> ColourChoice.SALINITY
         }
         else -> null
@@ -1750,7 +1763,8 @@ class ConditionsFeature(
                 val now = System.currentTimeMillis()
                 ConditionsPolicy.toRemove(store.summaries(), SPOT_ID, now).onEach { (summary, reason) ->
                     store.delete(summary.id)
-                    preferences.edit().remove(KEY_SATELLITES_AT + summary.id).apply()
+                    preferences.edit().remove(KEY_SATELLITES_AT + summary.id)
+                        .remove(WeatherEngine.KEY_SATELLITES_TRIED + summary.id).apply()
                     DiagnosticLog.log(TAG, "removed ${summary.name}: " + if (reason == ConditionsPolicy.Reason.EXPIRED) "its forecast ran out" else "a newer download covers it")
                 }.also {
                     // The coastline goes with the last area that needed it.
@@ -2240,7 +2254,7 @@ class ConditionsFeature(
         body.removeAllViews()
         body.addView(panels.caption(
             "Wind, waves, swell and currents (tidal flow included) for up to 8 days, plus sea temperature and its " +
-                "breaks, chlorophyll, sea level and salinity from satellites, and temperature at depth from an ocean model. " +
+                "breaks, chlorophyll, sea level, salinity and water clarity from satellites, and temperature at depth from an ocean model. " +
                 "Worldwide, and saved on the phone for use offline.",
             topPaddingDp = 8
         ))
@@ -2403,7 +2417,7 @@ class ConditionsFeature(
                 refreshDialog()
             }
         })
-        panels.addRow(body, panels.row("Satellite sea maps", if (withSatellite) "Yes: sea temperature and breaks, chlorophyll, sea level, salinity (2 to 5 days old), and temperature at depth (model)" else "No: forecast only") {
+        panels.addRow(body, panels.row("Satellite sea maps", if (withSatellite) "Yes: sea temperature and breaks, chlorophyll, sea level, salinity, water clarity (2 to 10 days old), and temperature at depth (model)" else "No: forecast only") {
             withSatellite = !withSatellite
             preferences.edit().putBoolean(KEY_SATELLITE, withSatellite).apply()
             refreshDialog()
@@ -2892,7 +2906,7 @@ class ConditionsFeature(
         private val MAP_CHOICES = listOf(
             ColourChoice.WIND, ColourChoice.CURRENT, ColourChoice.WAVES, ColourChoice.SWELL,
             ColourChoice.SEA_TEMP_SATELLITE, ColourChoice.SEA_TEMP_BREAKS, ColourChoice.TEMP_BELOW,
-            ColourChoice.CHLOROPHYLL, ColourChoice.SEA_LEVEL, ColourChoice.SALINITY
+            ColourChoice.CHLOROPHYLL, ColourChoice.SEA_LEVEL, ColourChoice.SALINITY, ColourChoice.WATER_CLARITY
         )
         private const val OPEN_MARK = "▴"
 
@@ -3157,7 +3171,9 @@ class ConditionsFeature(
                 }
                 val surface = listOfNotNull(
                     coarse(SatelliteKind.SALINITY)?.let { String.format(Locale.US, "Salinity %.1f", it) },
-                    coarse(SatelliteKind.SEA_LEVEL)?.let { "sea level ${format.seaLevelVsAverage(it.toDouble())}" }
+                    coarse(SatelliteKind.SEA_LEVEL)?.let { "sea level ${format.seaLevelVsAverage(it.toDouble())}" },
+                    coarse(SatelliteKind.WATER_CLARITY)?.let { WaterClarity.visibilityMetres(it) }?.takeIf { it.isFinite() }
+                        ?.let { "visibility about ${WaterClarity.text(it.toDouble(), format)} (estimate)" }
                 )
                 if (surface.isNotEmpty()) out += Value(null, surface.joinToString(" · ").replaceFirstChar { it.uppercase() }, "Water")
             }

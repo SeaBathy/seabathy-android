@@ -15,7 +15,11 @@ public final class Surveys {
     public static final String URL = "https://raw.githubusercontent.com/SeaBathy/BathyPicker/main/catalogue/surveys.json";
     public static final String REPORT_URL = "https://github.com/SeaBathy/BathyPicker/issues/new";
     static final String HOST = "https://ausseabed-public-bathymetry.s3.ap-southeast-2.amazonaws.com/";
+    /** IMAS's Bathymetry of the Australian Marine Parks: one cloud-optimised GeoTIFF per park. */
+    public static final String PARK_HOST = "https://data.imas.utas.edu.au/attachments/AMP_bathymetry_derivatives/bathy/";
     static final double BLEND_MIN_M = 200.0, BLEND_MAX_M = 500.0;
+    /** Survey kinds: an original survey file read in place, a marine park mosaic, or a coverage the warehouse cuts for the box. */
+    public static final String SURVEY = "", PARK = "park", WCS = "wcs";
 
     public static final class SFile {
         public String url, crs;
@@ -24,6 +28,16 @@ public final class Surveys {
         public List<double[]> cells;
         public boolean tiled;
         public Proj proj;
+        /** Bytes of an all-NoData tile in this file (0 if not known), to tell from the tile sizes alone where it has depths. */
+        public long emptyTile;
+        /**
+         * The header emptyTile was measured on: compression, predictor, tile width and height,
+         * image width and height. A file republished differently has other empty tiles, so then
+         * the size isn't trusted. Null if not known.
+         */
+        public int[] emptyFor;
+        /** How many overviews the file has, -1 if not known: one without is read at full detail whatever the output. */
+        public int overviews = -1;
     }
 
     public static final class Survey {
@@ -34,12 +48,23 @@ public final class Surveys {
         public double[] bbox;
         public boolean defaultOff;
         public List<SFile> files;
+        /** SURVEY, PARK or WCS. */
+        public String kind = SURVEY;
+        /** WCS: the warehouse's coverage id. */
+        public String coverage;
+        /**
+         * The IMAS detail (metres) this layer is up against where it has data, when that's coarser
+         * than the box's finest IMAS: a park mosaic that lies mostly in deep water, where IMAS is
+         * 32 m or coarser. 0 for the usual comparison with the box's finest IMAS.
+         */
+        public double imasM;
 
-        Survey withFiles(List<SFile> f) {
+        public Survey withFiles(List<SFile> f) {
             Survey s = new Survey();
             s.id = id; s.name = name; s.statedDatum = statedDatum; s.verdict = verdict; s.updated = updated;
             s.credit = credit; s.source = source; s.licence = licence; s.note = note; s.year = year;
             s.resM = resM; s.shiftM = shiftM; s.stepM = stepM; s.sign = sign; s.bbox = bbox; s.defaultOff = defaultOff;
+            s.kind = kind; s.coverage = coverage; s.imasM = imasM;
             s.files = f;
             return s;
         }
@@ -96,16 +121,32 @@ public final class Surveys {
         return new double[]{num(l.get(0)), num(l.get(1)), num(l.get(2)), num(l.get(3))};
     }
 
-    /** clean_survey: keep an entry only if it is well-formed and points at the known public host. */
+    /**
+     * clean_survey: keep an entry only if it is well-formed and points at the known public host:
+     * AusSeabed's bucket for surveys, IMAS for park mosaics, and for a warehouse coverage only its
+     * id (Warehouse makes the request).
+     */
     @SuppressWarnings("unchecked")
     static Survey clean(Map<String, Object> s) {
         try {
+            String kind = s.get("kind") == null ? SURVEY : String.valueOf(s.get("kind"));
+            if (!kind.equals(SURVEY) && !kind.equals(PARK) && !kind.equals(WCS)) return null;
+            String coverage = null;
+            if (kind.equals(WCS)) {
+                coverage = String.valueOf(s.get("coverage"));
+                if (!coverage.matches("ausseabed__[A-Za-z0-9_\\-]{1,200}")) return null;
+            }
             List<SFile> files = new ArrayList<>();
             for (Object fo : (List<Object>) s.get("files")) {
                 Map<String, Object> f = (Map<String, Object>) fo;
-                String url = String.valueOf(f.get("url"));
-                if (!url.startsWith(HOST)) return null;
-                for (char ch : " \"<>\\?#&".toCharArray()) if (url.indexOf(ch) >= 0) return null;
+                String url;
+                if (kind.equals(WCS)) {
+                    url = Warehouse.pseudoUrl(coverage);
+                } else {
+                    url = String.valueOf(f.get("url"));
+                    if (!url.startsWith(kind.equals(PARK) ? PARK_HOST : HOST)) return null;
+                    for (char ch : " \"<>\\?#&".toCharArray()) if (url.indexOf(ch) >= 0) return null;
+                }
                 SFile sf = new SFile();
                 sf.url = url;
                 sf.bbox = box(f.get("bbox"));
@@ -123,11 +164,26 @@ public final class Surveys {
                 sf.bytes = Math.max(0, b == null ? 0 : (long) num(b));
                 Object t = f.get("tiled");
                 sf.tiled = t == null || Boolean.TRUE.equals(t);
-                sf.crs = f.get("crs") == null ? null : String.valueOf(f.get("crs"));
+                Object ov = f.get("overviews");
+                sf.overviews = ov == null ? -1 : (int) Math.max(0, Math.min(30, num(ov)));
+                Object empty = f.get("empty_tile_bytes");
+                sf.emptyTile = empty == null ? 0 : Math.max(0, (long) num(empty));
+                Object emptyFor = f.get("empty_tile_for");
+                if (emptyFor instanceof Map) {
+                    Map<String, Object> e = (Map<String, Object>) emptyFor;
+                    List<?> tile = (List<?>) e.get("tile"), size = (List<?>) e.get("size");
+                    sf.emptyFor = new int[]{(int) num(e.get("compression")), (int) num(e.get("predictor")),
+                            (int) num(tile.get(0)), (int) num(tile.get(1)), (int) num(size.get(0)), (int) num(size.get(1))};
+                }
+                sf.crs = kind.equals(WCS) ? "EPSG:4326" : f.get("crs") == null ? null : String.valueOf(f.get("crs"));
                 sf.proj = Proj.parse(sf.crs);
                 files.add(sf);
             }
             Survey c = new Survey();
+            c.kind = kind;
+            c.coverage = coverage;
+            Object imasM = s.get("imas_m");
+            c.imasM = imasM == null ? 0 : Math.max(0, Math.min(1000, num(imasM)));
             c.sign = s.get("sign") == null ? 1 : (int) num(s.get("sign"));
             c.shiftM = s.get("shift_m") == null ? 0 : num(s.get("shift_m"));
             c.resM = num(s.get("res_m"));
@@ -200,6 +256,86 @@ public final class Surveys {
             if (!files.isEmpty()) out.add(s.withFiles(files));
         }
         return out;
+    }
+
+    /**
+     * The catalogue with the app's own extra layers added (the IMAS marine park mosaics and the
+     * warehouse coverages, bundled with the app), so they're used whichever copy of the catalogue
+     * is newest. An extra whose id the catalogue already has is left out.
+     */
+    public static Surveys merge(Surveys base, Surveys extra) {
+        if (extra == null || extra.list.isEmpty()) return base;
+        if (base == null) return extra;
+        List<Survey> all = new ArrayList<>(base.list);
+        java.util.Set<String> ids = new java.util.HashSet<>();
+        for (Survey s : base.list) ids.add(s.id);
+        for (Survey s : extra.list) if (ids.add(s.id)) all.add(s);
+        return new Surveys(all, base.built, base.origin);
+    }
+
+    /**
+     * Too coarse to be ticked by default: no finer than the IMAS it would cover. That's the box's
+     * finest IMAS (10 m on the shelf), or for a layer lying mostly in deep water (imasM), the
+     * coarser IMAS there.
+     */
+    public static boolean coarser(Survey s, Double imasRes) {
+        if (imasRes == null) return false;
+        return s.resM >= Math.max(imasRes, s.imasM) * 0.99;
+    }
+
+    /**
+     * What's laid on the IMAS composite, for the line under the box: "the Solitary Islands marine
+     * park mosaic and 2 multibeam surveys on top". Empty when there's nothing.
+     */
+    public static String onTop(List<Survey> chosen) {
+        List<String> parks = new ArrayList<>();
+        int surveys = 0;
+        for (Survey s : chosen) {
+            if (PARK.equals(s.kind)) parks.add(s.name.replaceFirst(" marine park mosaic.*$", ""));
+            else surveys++;
+        }
+        List<String> parts = new ArrayList<>();
+        if (parks.size() == 1) parts.add("the " + parks.get(0) + " marine park mosaic");
+        else if (parks.size() > 1) parts.add(parks.size() + " marine park mosaics");
+        if (surveys > 0) parts.add(surveys + " multibeam survey" + (surveys == 1 ? "" : "s"));
+        return parts.isEmpty() ? "" : String.join(" and ", parts) + " on top";
+    }
+
+    /**
+     * Whether a tiled EPSG:4326 file has depths in the box, from its tile sizes alone (an empty
+     * tile compresses to emptyTile bytes, measured on the header emptyFor): the tile rows over the
+     * box are read at the level where the box spans at most 8 tiles each way. True when it can't
+     * tell, including when the file is no longer the one measured (republished, say, with other
+     * compression), so a park is never left out on a stale size.
+     */
+    static boolean hasData(RemoteTiff t, long emptyTile, int[] emptyFor, double[] box, Http.Cancel cancel) throws java.io.IOException {
+        if (emptyTile <= 0 || t.epsg != 4326 || !sameHeader(t, emptyFor)) return true;
+        int lv = 0;
+        for (int k = 0; k < t.levels.size(); k++) {
+            RemoteTiff.Level L = t.levels.get(k);
+            lv = k;
+            if ((box[2] - box[0]) / L.resX / L.tileW <= 8 && (box[3] - box[1]) / L.resY / L.tileH <= 8) break;
+        }
+        RemoteTiff.Level L = t.levels.get(lv);
+        int x0 = (int) Math.floor((box[0] - t.gt[0]) / L.resX), x1 = (int) Math.floor((box[2] - t.gt[0]) / L.resX);
+        int y0 = (int) Math.floor((t.gt[3] - box[3]) / L.resY), y1 = (int) Math.floor((t.gt[3] - box[1]) / L.resY);
+        x0 = Math.max(0, x0); y0 = Math.max(0, y0);
+        x1 = Math.min(L.width - 1, x1); y1 = Math.min(L.height - 1, y1);
+        if (x1 < x0 || y1 < y0) return false;
+        long floor = emptyTile * 3 / 2 + 256;
+        for (int ty = y0 / L.tileH; ty <= y1 / L.tileH; ty++) {
+            long[][] idx = t.tileRow(L, ty, cancel);
+            for (int tx = x0 / L.tileW; tx <= x1 / L.tileW; tx++) if (idx[1][tx] > floor) return true;
+        }
+        return false;
+    }
+
+    /** The file still has the header the empty-tile size was measured on (see SFile.emptyFor). */
+    static boolean sameHeader(RemoteTiff t, int[] f) {
+        if (f == null || f.length != 6) return false;
+        RemoteTiff.Level L = t.levels.get(0);
+        return L.compression == f[0] && L.predictor == f[1] && L.tileW == f[2] && L.tileH == f[3] && L.width == f[4] && L.height == f[5]
+                && !L.strip;
     }
 
     /** overlap_fraction: share of box a covered by box b. */

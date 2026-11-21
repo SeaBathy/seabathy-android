@@ -341,7 +341,8 @@ public final class World {
                     int code = con.getResponseCode();
                     String host = con.getURL().getHost();
                     if (code != 200) {
-                        last = new IOException("HTTP " + code + " from " + host);
+                        String why = reason(con);
+                        last = new IOException("HTTP " + code + " from " + host + (why.isEmpty() ? "" : " (" + why + ")"));
                         if (code >= 400 && code < 500 && code != 408 && code != 429) throw last;
                         continue;
                     }
@@ -388,9 +389,35 @@ public final class World {
         return con;
     }
 
+    /**
+     * What a server's error reply says, briefly: an OGC exception's code and text
+     * ("InvalidSubsetting: Empty intersection after subsetting"), or "" when it says nothing readable.
+     */
+    static String reason(HttpURLConnection con) {
+        try (InputStream in = con.getErrorStream()) {
+            if (in == null) return "";
+            byte[] buf = new byte[4096];
+            int n = 0, r;
+            while (n < buf.length && (r = in.read(buf, n, buf.length - n)) > 0) n += r;
+            return reason(new String(buf, 0, n, StandardCharsets.UTF_8));
+        } catch (IOException | RuntimeException e) {
+            return "";
+        }
+    }
+
+    private static final String EXCEPTION_TEXT = "ExceptionText>([^<]{1,200})<|\"message\"\\s*:\\s*\"([^\"]{1,200})\"";
+
+    static String reason(String text) {
+        java.util.regex.Matcher code = java.util.regex.Pattern.compile("exceptionCode=\"([A-Za-z]{1,60})\"").matcher(text);
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile(EXCEPTION_TEXT).matcher(text);
+        String why = m.find() ? (m.group(1) != null ? m.group(1) : m.group(2)).trim() : "";
+        String c = code.find() ? code.group(1) : "";
+        return c.isEmpty() ? why : why.isEmpty() ? c : c + ": " + why;
+    }
+
     /** A server that can't make the file answers with a message (XML or JSON) instead: say what it said. */
     static void checkTiff(File f, String host) throws IOException {
-        byte[] head = new byte[600];
+        byte[] head = new byte[2048];
         int n;
         try (InputStream in = new java.io.FileInputStream(f)) {
             n = Math.max(0, in.read(head));
@@ -398,9 +425,7 @@ public final class World {
         boolean tiff = n >= 4 && ((head[0] == 'I' && head[1] == 'I' && (head[2] == 42 || head[2] == 43) && head[3] == 0)
                 || (head[0] == 'M' && head[1] == 'M' && head[2] == 0 && (head[3] == 42 || head[3] == 43)));
         if (tiff) return;
-        String text = new String(head, 0, n, StandardCharsets.UTF_8);
-        java.util.regex.Matcher m = java.util.regex.Pattern.compile("ExceptionText>([^<]{1,200})<|\"message\"\\s*:\\s*\"([^\"]{1,200})\"").matcher(text);
-        String why = m.find() ? (m.group(1) != null ? m.group(1) : m.group(2)).trim() : "";
+        String why = reason(new String(head, 0, n, StandardCharsets.UTF_8));
         throw new IOException(host + " sent no depths for this area" + (why.isEmpty() ? "." : " (" + why + ")."));
     }
 

@@ -39,7 +39,7 @@ class CustomBasemapDialog(
             )
         )
 
-        XyzTilePresets.ALL.forEach { preset ->
+        XyzTilePresets.BASEMAPS.forEach { preset ->
             panels.addRow(
                 body,
                 tilePresetRow(context, palette, preset, actionLabel = "USE") {

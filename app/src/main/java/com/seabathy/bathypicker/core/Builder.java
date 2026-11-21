@@ -34,6 +34,8 @@ public final class Builder {
     static final int BLOCK_ROWS = 2;   // which matches the 512-pixel source tiles, so each is fetched about once
     static final float NODATA = 3.4e38f;
     static final float FAR = 1e9f;     // "further than we looked" in the distance files
+    /** The depths and heights a source pixel can hold, metres: anything outside is a fill value, not data. */
+    static final float MIN_Z = -12000f, MAX_Z = 9000f;
     /** NoData in the finished file (inside, empty pixels are always NODATA). */
     private float outNodata = NODATA;
     /** For tests: -1 picks overviews like gdalwarp; 0 always reads full resolution (gdalwarp -ovr NONE). */
@@ -218,12 +220,18 @@ public final class Builder {
         // Overview choice per IMAS zone, like gdalwarp's default -ovr AUTO.
         double midLat = Math.toRadians((b[1] + b[3]) / 2);
         double shrink = geographic ? Math.sqrt(2.0 / (1.0 + 1.0 / (Math.cos(midLat) * Math.cos(midLat)))) : 1.0;
+        // A park mosaic lying mostly in deep water (imasM) goes under IMAS's zones finer than it,
+        // which are taken out of the bottom layer and laid on top of it instead: so IMAS still wins on
+        // reef tops and slopes, and the park only where IMAS is coarser (in deep water).
+        double deepRes = deepParkRes(plan.chosen);
+        List<Layer> finer = new ArrayList<>();
         for (int i = 0; i < plan.order.size(); i++) {
             Layer L = new Layer();
             L.t = plan.orderInfo.get(i).tiff;
             L.level = pickLevel(L.t, plan.resM / plan.orderInfo.get(i).pxM * shrink);
             L.label = plan.order.get(i).file;
-            imas.add(L);
+            if (plan.orderInfo.get(i).pxM < deepRes * 0.99) finer.add(L);
+            else imas.add(L);
         }
         double cx = (b[0] + b[2]) / 2, cy = (b[1] + b[3]) / 2;
         // Bottom layers in their own projection (GMRT overseas), under everything else.
@@ -236,8 +244,17 @@ public final class Builder {
             imas.add(L);
         }
         // Surveys: the same rule, with the source pixels per output pixel measured at the box's middle.
+        // The deep-water parks first (bottom), then IMAS's finer zones, then the rest as listed.
         List<Surveys.Survey> bottomUp = new ArrayList<>(plan.chosen);
         Collections.reverse(bottomUp);
+        List<Surveys.Survey> deep = new ArrayList<>();
+        for (Surveys.Survey s : bottomUp) if (deepPark(s)) deep.add(s);
+        bottomUp.removeAll(deep);
+        if (!finer.isEmpty()) {
+            surveys.add(finer);
+            surveyOrder.add(finerImas(plan, finer));
+        }
+        bottomUp.addAll(0, deep);
         for (Surveys.Survey s : bottomUp) {
             List<Layer> files = new ArrayList<>();
             for (Surveys.SFile f : s.files) {
@@ -250,11 +267,50 @@ public final class Builder {
                 L.level = pickLevel(L.t, sourcePerOutput(L.t, f.proj, cx, cy) * shrink);
                 files.add(L);
             }
-            surveys.add(files);
-            surveyOrder.add(s);
+            int at = deep.contains(s) ? deep.indexOf(s) : surveys.size();
+            surveys.add(at, files);
+            surveyOrder.add(at, s);
         }
         for (Layer L : imas) scales(L);
         for (List<Layer> s : surveys) for (Layer L : s) scales(L);
+    }
+
+    /** A park mosaic measured against the coarser IMAS of deep water (Surveys.Survey.imasM). */
+    static boolean deepPark(Surveys.Survey s) {
+        return Surveys.PARK.equals(s.kind) && s.imasM > 0;
+    }
+
+    /** The finest deep-water park among the chosen (metres), or 0 when there's none: IMAS zones finer than it go on top of it. */
+    static double deepParkRes(List<Surveys.Survey> chosen) {
+        double r = Double.MAX_VALUE;
+        for (Surveys.Survey s : chosen) if (deepPark(s)) r = Math.min(r, s.resM);
+        return r == Double.MAX_VALUE ? 0 : r;
+    }
+
+    static final String FINER_IMAS = "imas-finer-zones";
+
+    /**
+     * IMAS's finer zones as one layer laid over the deep-water parks. Its edge (where those zones
+     * end, near 200 m deep) fades into the park over only two pixels, so on reef tops and walls
+     * the result is IMAS's own, as without the park.
+     */
+    private static Surveys.Survey finerImas(Planner.Plan plan, List<Layer> finer) {
+        Surveys.Survey g = new Surveys.Survey();
+        g.id = FINER_IMAS;
+        g.name = "IMAS composite, zones finer than the marine park mosaic";
+        g.kind = Surveys.SURVEY;
+        g.resM = Double.MAX_VALUE;
+        for (int i = 0; i < plan.order.size(); i++) g.resM = Math.min(g.resM, plan.orderInfo.get(i).pxM);
+        g.sign = 1;
+        g.files = new ArrayList<>();
+        return g;
+    }
+
+    /** How far a layer's edges fade into what's under it (metres): the plan's band, or two pixels for IMAS's lifted zones. */
+    private double bandM(Surveys.Survey s) {
+        if (FINER_IMAS.equals(s.id)) return 2 * plan.resM;
+        Double b = plan.bandM.get(s.id);
+        return b != null ? b : Surveys.blendBandM(s, plan.resM);
     }
 
     /** gdalwarp's -ovr AUTO: the overview just finer than the output (target = source pixels per output pixel). */
@@ -595,7 +651,9 @@ public final class Builder {
                         } else {
                             // A shifted or flipped survey (the desktop reads it through vrt:// with scale=):
                             // value * sign + shift in double, kept as float32, before resampling.
-                            win[dO + x] = scaled ? (float) (v * (double) Ly.sign + Ly.shift) : v;
+                            float d = scaled ? (float) (v * (double) Ly.sign + Ly.shift) : v;
+                            // Deeper than any sea or higher than any land: not a depth (a fill value).
+                            win[dO + x] = d > MIN_Z && d < MAX_Z ? d : Float.NaN;
                         }
                     }
                 }
@@ -780,7 +838,7 @@ public final class Builder {
                 job.progress(share * done[0] / steps, st);
                 toGrid(tw, S, surveys.get(i), share * (done[0] + 1) / steps, st);
                 done[0]++;
-                double bandPx = Math.max(1.0, plan.bandM.get(s.id) / plan.resM);
+                double bandPx = Math.max(1.0, bandM(s) / plan.resM);
                 double look = num(2 * bandPx);
                 job.progress(share * done[0] / steps, "Measuring distances in " + tag);
                 double inner = distances(C, S, D, look);

@@ -124,7 +124,8 @@ class NavMarksController(private val mapHolder: MapHolder) {
         const val NOT_FOR_NAVIGATION = "Positions may be old or wrong, and many marks are missing."
         private const val MARKS_SOURCE = "navmarks-src"
         private const val LINES_SOURCE = "navlines-src"
-        private const val MARKS = "navmarks"
+        /** The marks' own layer: other built-in points go under it, so buoys and beacons stay on top. */
+        const val MARKS = "navmarks"
         private const val PIPELINES = "navlines-pipelines"
         private const val CABLES = "navlines-cables"
         private const val AREA_FILL = "navlines-area-fill"

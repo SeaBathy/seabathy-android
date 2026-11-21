@@ -535,6 +535,14 @@ class ConditionsClient(
                     url(NOAA, "noaacwSMOSsssDaily", "sss", 0.25, altitude = true)
                 )
                 SatelliteKind.TEMP_BELOW -> emptyList()
+                // VIIRS S-NPP Kd490, 4 km, blended over days like chlorophyll as clouds leave gaps in each.
+                SatelliteKind.WATER_CLARITY -> {
+                    val days = "last-${BLEND_DAYS - 1}:1:last"
+                    listOfNotNull(
+                        url(NOAA, CLARITY_DATASET, "kd_490", 0.0375, days, altitude = true, northFirst = true, maxSide = MAX_BLEND_SIDE),
+                        url(POLARWATCH, CLARITY_DATASET, "kd_490", 0.0375, days, altitude = true, northFirst = true, maxSide = MAX_BLEND_SIDE)
+                    )
+                }
             }
         }
 
@@ -544,6 +552,8 @@ class ConditionsClient(
         /** NOAA PolarWatch: another door to [NOAA]'s datasets, which has answered when that one refused. */
         private const val POLARWATCH = "https://polarwatch.noaa.gov/erddap"
         private const val NOAA = "https://coastwatch.noaa.gov/erddap"
+        /** NOAA CoastWatch's near-real-time Kd490 (also served by PFEG as nesdisVHNkd490Daily, which redirects here). */
+        private const val CLARITY_DATASET = "noaacwNPPVIIRSkd490Daily"
         private const val HYCOM = "https://ncss.hycom.org/thredds/ncss/FMRC_ESPC-D-V02_t3z/FMRC_ESPC-D-V02_t3z_best.ncd"
         private const val HYCOM_STEP = 0.08
         /** HYCOM's server often fails at random for a moment ("No space left on device"), and has no backup. */
@@ -774,7 +784,7 @@ class ConditionsClient(
             val lngIndex = grid.lngs.withIndex().associate { it.value to it.index }
             val sums = DoubleArray(grid.size)
             val counts = IntArray(grid.size)
-            val blendLogs = kind == SatelliteKind.CHLOROPHYLL
+            val blendLogs = kind == SatelliteKind.CHLOROPHYLL || kind == SatelliteKind.WATER_CLARITY
             for ((lat, lng, value) in rows) {
                 if (!value.isFinite() || (blendLogs && value <= 0)) continue
                 val at = grid.index(latIndex.getValue(lat), lngIndex.getValue(lng))
@@ -786,7 +796,7 @@ class ConditionsClient(
                 if (counts[i] == 0) return@FloatArray Float.NaN
                 val mean = sums[i] / counts[i]
                 when (kind) {
-                    SatelliteKind.CHLOROPHYLL -> kotlin.math.exp(mean).toFloat()
+                    SatelliteKind.CHLOROPHYLL, SatelliteKind.WATER_CLARITY -> kotlin.math.exp(mean).toFloat()
                     SatelliteKind.SEA_LEVEL -> (mean * 100).toFloat()
                     else -> mean.toFloat()
                 }

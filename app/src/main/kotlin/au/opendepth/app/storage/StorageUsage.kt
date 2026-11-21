@@ -23,6 +23,8 @@ object StorageUsage {
         OFFLINE_MAPS,
         /** Sea conditions and tides saved for use offline. */
         CONDITIONS,
+        /** NSW reef outlines kept from looking at the coast with the layer on. */
+        REEF_OUTLINES,
         /** Waypoint photos. */
         PHOTOS,
         /** Recorded tracks. */
@@ -65,6 +67,7 @@ object StorageUsage {
         Group.SURVEY_TILES to listOf(OverlayLayerController.GEOTIFF_TILE_CACHE_DIR),
         // ConditionsStore and Coastline's folder, and TideStore's.
         Group.CONDITIONS to listOf("conditions", "tides"),
+        Group.REEF_OUTLINES to listOf(au.opendepth.app.map.NswReefStore.DIR),
         Group.PHOTOS to listOf(MainActivity.PHOTOS_DIR),
         // TrackRecorder's folder.
         Group.TRACKS to listOf("tracks")

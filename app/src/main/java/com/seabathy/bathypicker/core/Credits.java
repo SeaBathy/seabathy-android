@@ -23,7 +23,8 @@ public final class Credits {
             lines.add("");
         }
         if (!plan.chosen.isEmpty()) {
-            lines.add("Original surveys on top (first one wins where they overlap):");
+            lines.add(usesParks(plan) ? "Original surveys and marine park mosaics on top (first one wins where they overlap):"
+                    : "Original surveys on top (first one wins where they overlap):");
             if (plan.blend) {
                 double mx = 0;
                 for (Surveys.Survey s : plan.chosen) {
@@ -42,8 +43,17 @@ public final class Credits {
                 String credit = !s.credit.isEmpty() ? s.credit : s.source;
                 String lic = !s.licence.isEmpty() ? s.licence : "see source";
                 lines.add("    " + credit + (credit.contains(lic) ? "" : " Licence: " + lic + "."));
-                for (Surveys.SFile f : s.files) lines.add("    " + f.url);
+                if (Surveys.PARK.equals(s.kind) && !s.note.isEmpty()) lines.add("    " + s.note);
+                if (Builder.deepPark(s))
+                    lines.add("    Laid under the IMAS composite's zones finer than it, so it's used where IMAS is coarser (deep water).");
+                if (Surveys.WCS.equals(s.kind)) lines.add("    " + Warehouse.sourceLine(s));
+                else for (Surveys.SFile f : s.files) lines.add("    " + f.url);
             }
+            lines.add("");
+        }
+        if (!plan.notes.isEmpty()) {
+            lines.add("Notes:");
+            for (String note : plan.notes) lines.add("  " + note);
             lines.add("");
         }
         // What CC BY 4.0 asks for besides the credits themselves (the same text as the desktop's).
@@ -52,5 +62,14 @@ public final class Credits {
         lines.add("Licence for all data above: CC BY 4.0, https://creativecommons.org/licenses/by/4.0/");
         lines.add("");
         return String.join("\n", lines);
+    }
+
+    /** The short credit for IMAS's marine park mosaics, added after the composite's on the line under the chart when one is used. */
+    public static final String PARKS = "marine park bathymetry (Flukes & Monk 2026)";
+
+    /** Some chosen layer is an IMAS marine park mosaic. */
+    public static boolean usesParks(Planner.Plan plan) {
+        for (Surveys.Survey s : plan.chosen) if (Surveys.PARK.equals(s.kind)) return true;
+        return false;
     }
 }

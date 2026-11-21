@@ -441,7 +441,8 @@ class Terrain3DScreen(
      * fails only tiles already saved are tried for a while. They come at once.
      */
     private fun fetchTile(template: String, z: Int, x: Int, y: Int): ByteArray? {
-        val url = template.replace("{z}", z.toString()).replace("{x}", x.toString()).replace("{y}", y.toString())
+        // The same substitution as the offline downloader's, WMS links' {bbox-epsg-3857} too.
+        val url = au.opendepth.app.download.TileSampler.urlFor(template, z, x, y)
         val builder = Request.Builder().url(url).header("User-Agent", "SeaBathy/${BuildConfig.VERSION_NAME} (Android 3D view)")
         if (SystemClock.elapsedRealtime() - lastNoSignalAt < NO_SIGNAL_MS) builder.cacheControl(CacheControl.FORCE_CACHE)
         return try {

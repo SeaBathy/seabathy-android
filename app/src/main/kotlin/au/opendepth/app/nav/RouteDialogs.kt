@@ -145,7 +145,8 @@ class RouteDialogs(
         variation: (Double, Double) -> Double,
         departureMillis: Long,
         legDepths: List<RouteDepthCheck?>?,
-        tideM: Double?
+        tideM: Double?,
+        tideWindow: RouteTideWindow? = null
     ) {
         val body = panels.body()
         val f = NavFormat(settings.units)
@@ -209,7 +210,100 @@ class RouteDialogs(
             setTextColor(palette.primaryText)
             gravity = Gravity.START
         })
+        tideWindow?.let { tideWindowSection(body, it, settings, f) }
         panels.showPanel(title, body)
+    }
+
+    /**
+     * When the tide gives enough water over the route's shallowest charted point
+     * (draft + margin), today and tomorrow: a summary, a bar and the times.
+     */
+    private fun tideWindowSection(body: LinearLayout, w: RouteTideWindow, settings: NavSettings, f: NavFormat) {
+        body.addView(panels.sectionHeader("TIDE WINDOW"))
+        val minDepth = settings.minimumDepthM
+        val where = "Shallowest charted point: leg ${w.legNumber}, " +
+            (if (w.chartDepthM < 0) "dries ${f.depth(-w.chartDepthM)}" else f.depth(w.chartDepthM)) + "."
+        val tides = w.tides
+        val result = w.result
+        if (tides !is RouteTides.Known || result == null) {
+            body.addView(plainText("$where ${(tides as? RouteTides.Missing)?.reason ?: "The tides don't cover now here."}"))
+            return
+        }
+        val offset = tides.shownOffsetM
+        val needed = result.neededTideM + offset
+        val endLabel = if (result.knownUntilMillis >= w.untilMillis) "the end of tomorrow" else f.clock(result.knownUntilMillis, w.fromMillis)
+        val summary = if (result.alwaysClear) {
+            "$where Enough water for your ${f.depth(minDepth)} (draft + margin) at every tide until $endLabel."
+        } else {
+            "$where Your ${f.depth(minDepth)} (draft + margin) needs a tide of ${f.tideHeight(needed)} or more." +
+                if (!result.neverClear) "" else "\n⚠ Not enough water until $endLabel: the highest tide, " +
+                    "${f.tideHeight(result.highestTideM + offset)} at ${f.clock(result.highestAtMillis, w.fromMillis)}, " +
+                    "gives ${f.depth(w.chartDepthM + result.highestTideM)}."
+        }
+        body.addView(plainText(summary).apply { if (result.neverClear) setTextColor(0xFFFF6B6B.toInt()) })
+        body.addView(TideWindowBar(context).apply {
+            fromMillis = w.fromMillis
+            toMillis = w.untilMillis
+            knownUntilMillis = result.knownUntilMillis
+            periods = result.periods
+            markMillis = w.arrivalMillis
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = context.dp(8)
+            bottomMargin = context.dp(4)
+        })
+        if (!result.alwaysClear && !result.neverClear) body.addView(plainText(periodList(result, w, f), mono = true))
+        w.passage?.let { body.addView(passageText(it, w, f, minDepth)) }
+        body.addView(panels.caption(tides.source, topPaddingDp = 6))
+        val covered = if (w.coveredFraction < 0.98) "Only ${(w.coveredFraction * 100).toInt()}% of the route has charted depths: shallower water may be missed. " else ""
+        body.addView(
+            panels.caption(
+                covered + "A guide only: charted depths can be wrong or out of date, and the weather changes the real tide. Not for navigation.",
+                topPaddingDp = 0
+            )
+        )
+    }
+
+    /**
+     * Leaving now, the water at each leg's shallowest charted point as the boat gets
+     * there: the least of them, and every one short of draft + margin.
+     */
+    private fun passageText(p: TideWindow.Passage, w: RouteTideWindow, f: NavFormat, minDepth: Double): TextView {
+        val worst = p.worst
+        val unknown = if (p.unknownLegs.isEmpty()) "" else " No tides for leg${if (p.unknownLegs.size > 1) "s" else ""} ${p.unknownLegs.joinToString(", ")}."
+        val text = when {
+            worst == null -> "Leaving now: no tides for the legs' shallowest points, so the water as you pass them isn't checked."
+            p.short.isNotEmpty() -> {
+                val others = p.short.drop(1).map { it.legNumber }
+                "Leaving now, \u26a0 not enough water at leg ${worst.legNumber}'s shallowest point: about ${f.depth(worst.waterM)} " +
+                    "when you get there at ${f.clock(worst.arrivalMillis, w.fromMillis)}, under your ${f.depth(minDepth)}" +
+                    (if (others.isEmpty()) "." else "; short at leg${if (others.size > 1) "s" else ""} ${others.joinToString(", ")} too.") +
+                    unknown
+            }
+            else -> "Leaving now, each leg's shallowest charted point has at least ${f.depth(worst.waterM)} as you pass it " +
+                "(least at leg ${worst.legNumber}, about ${f.clock(worst.arrivalMillis, w.fromMillis)})." + unknown
+        }
+        return plainText(text).apply { if (worst == null || p.short.isNotEmpty()) setTextColor(0xFFFF6B6B.toInt()) }
+    }
+
+    /** "Today     10:20–15:45  from 22:30", a line a day. */
+    private fun periodList(result: TideWindow.Result, w: RouteTideWindow, f: NavFormat): String {
+        val day = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.US)
+        val today = day.format(java.util.Date(w.fromMillis))
+        return result.periods.groupBy { day.format(java.util.Date(it.startMillis)) }.entries.joinToString("\n") { (key, periods) ->
+            val label = if (key == today) "Today" else "Tomorrow"
+            label.padEnd(10) + periods.joinToString("  ") { p ->
+                val open = p.endMillis >= result.knownUntilMillis && result.knownUntilMillis >= w.untilMillis
+                if (open) "from " + f.clock(p.startMillis, p.startMillis) else f.clock(p.startMillis, p.startMillis) + "–" + f.clock(p.endMillis, p.startMillis)
+            }
+        }
+    }
+
+    private fun plainText(value: String, mono: Boolean = false) = TextView(context).apply {
+        text = value
+        textSize = if (mono) 13f else 14f
+        if (mono) typeface = Typeface.MONOSPACE
+        setTextColor(palette.primaryText)
+        setPadding(context.dp(2), context.dp(2), 0, context.dp(2))
     }
 
     private fun smallButton(label: String, primary: Boolean = false, destructive: Boolean = false, onClick: () -> Unit) =

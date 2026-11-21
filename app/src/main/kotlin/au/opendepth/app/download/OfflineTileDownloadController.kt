@@ -232,6 +232,9 @@ class OfflineTileDownloadController(
 
         /** Why [urlTemplate] can't be saved offline, or null when it can. */
         fun noOfflineReason(urlTemplate: String): String? {
+            au.opendepth.app.settings.XyzTilePresets.onlineOnly(urlTemplate)?.let { preset ->
+                return "${preset.label} is an online-only layer in SeaBathy: it isn't saved for offline use. Pick another map to save."
+            }
             val host = runCatching { java.net.URI(urlTemplate.replace("{", "").replace("}", "")).host }.getOrNull()?.lowercase()
                 ?: return null
             if (NO_OFFLINE_HOSTS.none { host == it || host.endsWith(".$it") }) return null

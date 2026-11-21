@@ -30,7 +30,9 @@ class LayerPanelBinder(
     /** Contour lines for a depth layer: on or off, and how far apart. */
     private val onEditContours: ((OverlayLayer) -> Unit)? = null,
     /** Tapping a layer's name goes to it on the map. */
-    private val onShowLayer: ((OverlayLayer) -> Unit)? = null
+    private val onShowLayer: ((OverlayLayer) -> Unit)? = null,
+    /** Looks for fishing structure in a depth layer's depths. */
+    private val onFindStructure: ((OverlayLayer) -> Unit)? = null
 ) {
     private val palette = AppTheme.palette
 
@@ -258,6 +260,13 @@ class LayerPanelBinder(
                     addView(wideChip(chip("3D VIEW", "Show ${layer.name} in 3D") { open(layer) }, last = true))
                 }
             })
+            onFindStructure?.let { find ->
+                addView(LinearLayout(context).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    setPadding(0, context.dp(6), 0, 0)
+                    addView(wideChip(chip("FIND STRUCTURE", "Find fishing structure in ${layer.name}") { find(layer) }, last = true))
+                })
+            }
         }
     }
 

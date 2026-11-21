@@ -198,6 +198,13 @@ class OverlayLayerController(
      */
     fun depthSourceFor(id: String): DepthSource? = depthSources[id]
 
+    /** The finest zoom a depth layer's tiles are drawn at (0 for one held in memory), for tools reading the depths on screen. */
+    fun depthTileZoom(id: String): Int {
+        val source = depthSources[id] as? GdalTileSource ?: return 0
+        val layer = layers.firstOrNull { it.id == id } ?: return 0
+        return gdalMaxTileZoom(layer, source.colourTileSize).toInt()
+    }
+
     /** Whether [layer] holds depths (so has colours, contour lines and a 3D view), known even while its file is closed. */
     fun isDepthLayer(layer: OverlayLayer): Boolean =
         depthSources.containsKey(layer.id) || (layer.id in asleep && LayerStack.holdsDepths(layer))

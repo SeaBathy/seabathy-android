@@ -122,6 +122,7 @@ class LayerImportCoordinator(
         val progress = importProgress.show("High-detail depths", "Starting…") { work?.cancel() }
         work = scope.launch {
             DiagnosticLog.log(TAG, "high-detail build: ${area.name}")
+            var note = ""
             val importer = GeoTiffImporter(context, File(filesDir, OverlayLayerController.GEOTIFF_TILE_CACHE_DIR))
             val result = try {
                 runCatchingCancellable {
@@ -130,6 +131,7 @@ class LayerImportCoordinator(
                             progress.update(if (pct > 0) "$pct%  $stage" else stage)
                         }
                     }
+                    note = built.note
                     val existing = overlays.layerWithSource(built.file.absolutePath)
                     if (existing != null) {
                         Triple(existing, null, built.credit)
@@ -149,7 +151,7 @@ class LayerImportCoordinator(
                 } else if (imported != null) {
                     // No camera move: the box was drawn where the user is looking.
                     overlays.addGeoTiff(imported, credit)
-                    onResult(describe(imported))
+                    onResult(describe(imported) + if (note.isEmpty()) "" else ". $note")
                 }
             }.onFailure { error ->
                 if (error is java.io.InterruptedIOException) {

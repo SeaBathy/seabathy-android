@@ -54,6 +54,7 @@ class StorageUsageTest {
         file(File(filesDir, "tides"), "follow.json", 20)
         file(File(filesDir, "photos"), "a.jpg", 40)
         file(File(filesDir, "tracks"), "t.csv", 10)
+        file(File(filesDir, "reefs-nsw"), "12_3767_2457.json.gz", 25)
         file(File(sharedDir, "OfflineDownloads"), "map.mbtiles", 500)
 
         val report = StorageUsage.measure(places())
@@ -64,9 +65,10 @@ class StorageUsageTest {
         assertEquals(55L, report[Group.CONDITIONS])
         assertEquals(40L, report[Group.PHOTOS])
         assertEquals(10L, report[Group.TRACKS])
+        assertEquals(25L, report[Group.REEF_OUTLINES])
         assertEquals(0L, report[Group.TEMPORARY])
         assertEquals(0L, report[Group.OTHER])
-        assertEquals(1025L, report.totalBytes)
+        assertEquals(1050L, report.totalBytes)
     }
 
     @Test

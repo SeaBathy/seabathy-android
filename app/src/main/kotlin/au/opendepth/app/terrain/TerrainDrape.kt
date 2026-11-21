@@ -28,9 +28,12 @@ class TerrainDrape(
     val isOffline: Boolean get() = readTile != null
 
     /**
-     * Whether "Save this area offline" is offered: any online map. What is
-     * saved, and from where, is the user's choice; following each provider's
-     * terms is up to them (see DATA_ATTRIBUTION.md).
+     * Whether "Save this area offline" is offered: any online map the offline
+     * downloader would save, so not one it refuses (OpenStreetMap's and
+     * OpenTopoMap's servers, an online-only layer). What is saved, and from
+     * where, is the user's choice; following each provider's terms is up to
+     * them (see DATA_ATTRIBUTION.md).
      */
-    val isSavable: Boolean get() = urlTemplate != null
+    val isSavable: Boolean
+        get() = urlTemplate != null && au.opendepth.app.download.OfflineTileDownloadController.noOfflineReason(urlTemplate) == null
 }

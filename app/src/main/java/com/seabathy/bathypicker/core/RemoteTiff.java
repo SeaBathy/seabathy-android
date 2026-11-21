@@ -255,8 +255,12 @@ public final class RemoteTiff {
         return new double[]{gt[0], gt[3] + gt[5] * b.height, gt[0] + gt[1] * b.width, gt[3]};
     }
 
+    /**
+     * NaN, the file's NoData, or a value no depth or height can be: anything beyond 1e30 is a
+     * NoData value (GDAL's 3.4e38) that a server's resampling has blended with real pixels.
+     */
     public boolean isNodata(float v) {
-        return Float.isNaN(v) || (hasNodata && v == nodata);
+        return Float.isNaN(v) || (hasNodata && v == nodata) || Math.abs(v) > 1e30f;
     }
 
     /** {offsets, byteCounts} for one row of tiles at a level. */

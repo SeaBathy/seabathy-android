@@ -170,6 +170,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var terrain3d: Terrain3DScreen
     private lateinit var scaleBar: au.opendepth.app.ui.ChartScaleBar
     private lateinit var creditsPanel: au.opendepth.app.ui.MapCreditsPanel
+    /** The structure finder, drift planner and chartplotter export. */
+    private lateinit var fishingTools: au.opendepth.app.fishing.FishingTools
 
     private var visual = VisualSettings()
     private var tool = ToolMode.NONE
@@ -455,6 +457,7 @@ class MainActivity : AppCompatActivity() {
                 terrain3d.updateBoat(location)
                 if (mobPending) markOverboard(location)
                 checkNoTake(location.latitude, location.longitude)
+                if (::fishingTools.isInitialized) fishingTools.onLocation(location)
             },
             followBearing = { location -> navFeature.chartBearing(location) }
         )
@@ -465,6 +468,7 @@ class MainActivity : AppCompatActivity() {
         // Always starts off: turning it on asks for the not-for-navigation tick again.
         navMarks = au.opendepth.app.map.NavMarksController(mapHolder)
         zones = au.opendepth.app.map.MarineZonesController(mapHolder, preferences)
+        fishing = au.opendepth.app.map.FishingLayersController(this, mapHolder, preferences)
 
         styleCoordinator = MapStyleCoordinator(
             graticule = graticule,
@@ -480,7 +484,8 @@ class MainActivity : AppCompatActivity() {
             extraAttributions = {
                 (if (::conditions.isInitialized) conditions.credits() else emptyList()) +
                     (if (::navMarks.isInitialized && navMarks.visible) listOf(au.opendepth.app.map.NavMarksController.CREDIT) else emptyList()) +
-                    zoneCredits()
+                    zoneCredits() +
+                    (if (::fishing.isInitialized) fishing.credits() else emptyList())
             }
         )
         watchConnectivity()
@@ -625,7 +630,8 @@ class MainActivity : AppCompatActivity() {
         dataSourceDialog = DataSourceDialog(this, panels)
         downloadZoneDialog = DownloadZoneDialog(this, panels)
         settingsPanel = SettingsPanel(this, panels, xyzDialog, dataSourceDialog)
-        storagePanel = au.opendepth.app.ui.StoragePanel(this, panels, scope, clear3dTiles = { terrain3d.clearSavedTiles() })
+        storagePanel = au.opendepth.app.ui.StoragePanel(this, panels, scope, clear3dTiles = { terrain3d.clearSavedTiles() },
+            clearReefOutlines = { fishing.clearReefOutlines() })
         customBasemapDialog = CustomBasemapDialog(this, panels)
         creditsPanel = au.opendepth.app.ui.MapCreditsPanel(panels)
         scaleBar = au.opendepth.app.ui.ChartScaleBar(
@@ -638,6 +644,27 @@ class MainActivity : AppCompatActivity() {
         )
         basemapSelector = BasemapSelector(this, views, styleCoordinator, customBasemapDialog)
 
+        fishingTools = au.opendepth.app.fishing.FishingTools(
+            activity = this, panels = panels, mapHolder = mapHolder, scope = scope, overlays = overlays,
+            waypoints = waypointStore, conditions = conditions, zones = zones, gpxExport = gpxExport,
+            callbacks = object : au.opendepth.app.fishing.FishingTools.Callbacks {
+                override fun units() = navFeature.settings.units
+                override fun variation(lat: Double, lng: Double) = navFeature.variation(lat, lng)
+                override fun mapCentre() = mapHolder.map?.cameraPosition?.target?.let { it.latitude to it.longitude }
+                override fun startGps() {
+                    if (gpsController.mode == GpsController.Mode.OFF) cycleGps()
+                }
+                override fun stopFollowing() {
+                    if (gpsController.releaseFollow()) updateGpsButton()
+                }
+                override fun closeSidePanel() = sidePanel.close()
+                override fun waypointsChanged() = refreshWaypoints()
+                override fun navigateTo(lat: Double, lng: Double, name: String) =
+                    navFeature.startNavigation(listOf(RoutePoint(lat, lng, name)), name)
+                override fun toast(message: String) = this@MainActivity.toastLong(message)
+            }
+        )
+
         layerPanel = LayerPanelBinder(
             context = this,
             container = views.layersList,
@@ -646,7 +673,8 @@ class MainActivity : AppCompatActivity() {
             onEditDepthColours = ::showDepthRampDialog,
             onOpen3d = ::open3d,
             onEditContours = ::showContourLinesDialog,
-            onShowLayer = ::showLayer
+            onShowLayer = ::showLayer,
+            onFindStructure = fishingTools.structure::find
         )
 
         waypointEditDialog = WaypointEditDialog(this, panels, coordinateEditor, java.io.File(filesDir, PHOTOS_DIR))
@@ -727,6 +755,7 @@ class MainActivity : AppCompatActivity() {
                     if (isDestroyed) return@runOnUiThread
                     styleCoordinator.onConnectivityRestored()
                     if (::conditions.isInitialized) conditions.onConnectivityRestored()
+                    if (::fishing.isInitialized) fishing.onConnectivityRestored()
                 }
             }
         }
@@ -812,8 +841,10 @@ class MainActivity : AppCompatActivity() {
     private fun onStyleInstalled() {
         // Waypoints go on last so they stay above imported rasters.
         waypointOverlay.install()
+        fishingTools.install()
         navFeature.onStyleInstalled()
         conditions.onStyleInstalled()
+        fishing.install()
         showPendingAlertPlace()
         // The new style starts with no boat on it: put back where the GPS last had it.
         gpsController.onStyleInstalled()
@@ -888,7 +919,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showNavMarkAt(lat: Double, lng: Double) {
-        if (!navMarks.visible && !zones.anyShown) return
+        if (!navMarks.visible && !zones.anyShown && !fishing.anyShown) return
         val map = mapHolder.map ?: return
         val point = map.projection.toScreenLocation(org.maplibre.android.geometry.LatLng(lat, lng))
         val info = navMarks.describeAt(point)?.let { (title, detail) ->
@@ -897,7 +928,10 @@ class MainActivity : AppCompatActivity() {
                 badge = "Nav mark", badgeColour = android.graphics.Color.parseColor("#F59E0B"), title = title,
                 paragraphs = lines, fine = au.opendepth.app.map.NavMarksController.NOT_FOR_NAVIGATION
             )
-        } ?: zones.describeAt(point) ?: return
+        } ?: fishing.describePointsAt(point)
+            // Ramps and marine park zones before fishing areas, which a zone's card names instead of hiding.
+            ?: zones.describeAt(point)?.let { fishing.withClosureAt(point, it) }
+            ?: fishing.describeAreasAt(point) ?: return
         if (isFinishing || isDestroyed) return
         showMapInfo(info)
     }
@@ -1084,8 +1118,11 @@ class MainActivity : AppCompatActivity() {
                     onPositionFormatChanged = ::setPositionFormat,
                     positionExample = { mapHolder.map?.cameraPosition?.target?.let { it.latitude to it.longitude } },
                     onStorage = { storagePanel.show() },
+                    onDriftPlanner = { sidePanel.close(); fishingTools.drift.show() },
+                    onPlotterExport = { sidePanel.close(); fishingTools.plotter.show() },
                     showNavMarks = { navMarks.visible },
                     zones = zones,
+                    fishing = fishing,
                     confirmZones = ::confirmZones,
                     onZonesChanged = ::zonesChanged,
                     onShowNavMarksChanged = { wanted, done ->
@@ -1617,6 +1654,8 @@ class MainActivity : AppCompatActivity() {
     // Marine park zones ------------------------------------------------------------
 
     private lateinit var zones: au.opendepth.app.map.MarineZonesController
+    /** Wrecks, artificial reefs, shark gear, fishing closures and NSW reefs (Settings → Australia). */
+    private lateinit var fishing: au.opendepth.app.map.FishingLayersController
     private var noTake: au.opendepth.app.map.NoTakeZones? = null
     private var noTakeLoading = false
     /** The no-take zone the boat was last in, so the warning comes once on the way in. */
@@ -2168,6 +2207,8 @@ class MainActivity : AppCompatActivity() {
         }
         networkCallback = null
         navFeature.onDestroy()
+        if (::fishingTools.isInitialized) fishingTools.release()
+        if (::fishing.isInitialized) fishing.release()
         conditions.release()
         terrain3d.close()
         gpsController.stop()

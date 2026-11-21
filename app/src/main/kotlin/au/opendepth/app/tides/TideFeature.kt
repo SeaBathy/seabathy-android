@@ -16,6 +16,7 @@ import androidx.coordinatorlayout.widget.CoordinatorLayout
 import au.opendepth.app.diagnostics.DiagnosticLog
 import au.opendepth.app.nav.NavFormat
 import au.opendepth.app.nav.NavUnits
+import au.opendepth.app.nav.RouteTides
 import au.opendepth.app.ui.AppTheme
 import au.opendepth.app.ui.PanelDialogs
 import au.opendepth.app.ui.applyPrimaryStyle
@@ -76,6 +77,11 @@ class TideFeature(
     private var saving = false
     private var lastError: String? = null
     private var lastFailedAt = 0L
+    /** Official Queensland predictions: checking or downloading them, and the last failure. */
+    private var officialJob: Job? = null
+    private var fetchingOfficial = false
+    private var officialFailedAt = 0L
+    private var officialError: String? = null
     /** "Follow me" was chosen before a GPS fix arrived: fetch on the first one. */
     private var waitingForFix = false
 
@@ -168,10 +174,17 @@ class TideFeature(
             }
         }
         scope.launch {
-            store.load(key)
+            loadTides()
             refreshChip()
             refreshIfNeeded()
         }
+    }
+
+    /** Reads the saved tides for where they're wanted: the model's, and the official ones if a station is near. */
+    private suspend fun loadTides() {
+        store.load(key)
+        val (lat, lng) = position() ?: return
+        if (settings.mode == TideMode.MODEL) store.useOfficial(key, lat, lng)
     }
 
     fun onResume() {
@@ -207,11 +220,15 @@ class TideFeature(
      */
     fun tideNear(lat: Double, lng: Double): Double? = tideNow()?.takeIf { coversPoint(lat, lng) }
 
-    /** True when [lat]/[lng] is close enough to the tide spot for its tides to hold. */
+    /**
+     * True when the tide spot's tides hold at [lat]/[lng]: close enough to it, and for
+     * official predictions only where their own station applies (not near another
+     * station, nor in waters with tides of their own).
+     */
     fun coversPoint(lat: Double, lng: Double): Boolean {
         if (settings.mode != TideMode.MODEL) return true
         val f = forecast ?: return false
-        return au.opendepth.app.nav.NavGeo.distanceM(lat, lng, f.requestLat, f.requestLng) <= TIDE_REACH_M
+        return f.holdsAt(lat, lng, store.officialStationAt(lat, lng))
     }
 
     /** The tide now as a tide table gives it (above chart datum), for showing. */
@@ -234,16 +251,19 @@ class TideFeature(
                 settings = settings,
                 placeName = place?.name,
                 forecast = forecast,
-                loading = refreshJob?.isActive == true,
+                loading = refreshJob?.isActive == true || fetchingOfficial,
                 saving = saving,
                 error = lastError,
                 savedUntilMillis = store.savedUntil(key),
                 noFix = place == null && lastFix == null,
-                noPosition = place == null && position() == null
+                noPosition = place == null && position() == null,
+                officialStation = position()?.let { (lat, lng) -> store.officialStationAt(lat, lng)?.name }
+                    ?.takeIf { settings.mode == TideMode.MODEL },
+                officialError = officialError
             ),
             object : TideDialog.MainActions {
                 override fun changeLocation() = showLocationPicker()
-                override fun refresh() = this@TideFeature.refresh(manual = true)
+                override fun refresh() = manualRefresh()
                 override fun saveOffline(period: SavePeriod) = this@TideFeature.saveOffline(period)
                 override fun deleteSaved() {
                     store.deleteSaved(key)
@@ -259,7 +279,8 @@ class TideFeature(
                 }
                 override fun settings() {
                     dialog.closeMain()
-                    dialog.showSettings(settings, forecast?.lowestTideM?.let { -it }) { updated ->
+                    val officialName = forecast?.station?.name?.takeIf { settings.mode == TideMode.MODEL }
+                    dialog.showSettings(settings, forecast?.lowestTideM?.let { -it }, officialName) { updated ->
                         val modeChanged = updated.mode != settings.mode
                         update(updated)
                         callbacks.tidesChanged()
@@ -274,7 +295,8 @@ class TideFeature(
 
     private fun showLocationPicker() {
         dialog.closeMain()
-        dialog.showLocationPicker(places.all, settings.placeId, { store.savedUntil(it.id) }, object : TideDialog.LocationActions {
+        val savedUntil = { p: TidePlace -> listOfNotNull(store.savedUntil(p.id), store.officialSavedUntil(p.lat, p.lng)).maxOrNull() }
+        dialog.showLocationPicker(places.all, settings.placeId, savedUntil, object : TideDialog.LocationActions {
             override fun followMe() {
                 select(null)
                 if (lastFix == null) {
@@ -385,8 +407,9 @@ class TideFeature(
         // Choosing a place means wanting its forecast, whatever the source was before.
         update(settings.copy(placeId = placeId, locationChosen = true, mode = TideMode.MODEL))
         lastError = null
+        officialError = null
         scope.launch {
-            store.load(key)
+            loadTides()
             callbacks.tidesChanged()
             refreshChip()
             showMain()
@@ -407,9 +430,83 @@ class TideFeature(
     private fun refreshIfNeeded(force: Boolean = false) {
         if (settings.mode != TideMode.MODEL) return
         val (lat, lng) = position() ?: return
+        val station = store.officialStationAt(lat, lng)
+        if (station == null) {
+            store.dropOfficial(key)
+            officialError = null
+            refreshModelIfNeeded(force)
+            return
+        }
+        val chosenHere = store.usesOfficial(key, station, lat, lng)
+        // A failed download isn't tried again on every GPS fix.
+        val downloadDue = chosenHere && store.officialNeedsDownload(station) && System.currentTimeMillis() - officialFailedAt >= RETRY_MS
+        when (OfficialTides.actionOnUpdate(chosenHere, chosenHere && store.hasOfficial(key), downloadDue, force)) {
+            // On this station's saved predictions already.
+            UpdateAction.NOTHING -> Unit
+            // Saved but not for now, or their download failed lately: the model fills in.
+            UpdateAction.USE_MODEL -> refreshModelIfNeeded(force = false)
+            UpdateAction.REFRESH -> refreshOfficial(station, lat, lng, manual = false, force = force)
+        }
+    }
+
+    /** The tide model's forecast, downloaded when missing, far away or old. */
+    private fun refreshModelIfNeeded(force: Boolean) {
+        val (lat, lng) = position() ?: return
         // Don't retry a failing download on every GPS fix.
         if (!force && System.currentTimeMillis() - lastFailedAt < RETRY_MS) return
         if (force || store.needsRefresh(key, lat, lng)) refresh(manual = false) else ensureLowest()
+    }
+
+    /** Refresh button: the official predictions near a Queensland station, the model elsewhere. */
+    private fun manualRefresh() {
+        val (lat, lng) = position() ?: return refresh(manual = true)
+        val station = store.officialStationAt(lat, lng).takeIf { settings.mode == TideMode.MODEL }
+        if (station != null) refreshOfficial(station, lat, lng, manual = true, force = true) else refresh(manual = true)
+    }
+
+    /**
+     * Near a Maritime Safety Queensland station: its official predictions, downloaded
+     * from data.qld.gov.au once a year if they aren't saved. Until they are (no
+     * connection the first time), the tide model fills in.
+     */
+    private fun refreshOfficial(station: MsqStation, lat: Double, lng: Double, manual: Boolean, force: Boolean) {
+        if (officialJob?.isActive == true) return
+        val forKey = key
+        officialJob = scope.launch {
+            val before = store.officialStationFor(forKey)?.id to store.hasOfficial(forKey)
+            store.useOfficial(forKey, lat, lng)
+            val now = System.currentTimeMillis()
+            val wanted = store.officialNeedsDownload(station, ignoreWait = manual)
+            var tried = false
+            // A failed download isn't tried again on every GPS fix.
+            if (wanted && (force || now - officialFailedAt >= RETRY_MS)) {
+                tried = true
+                fetchingOfficial = true
+                if (dialog.isShowing && forecast == null) showMain()
+                runCatching { store.downloadOfficial(station) }
+                    .onSuccess {
+                        officialError = null
+                        if (manual) callbacks.toast("Official tides updated")
+                    }
+                    .onFailure { error ->
+                        officialFailedAt = now
+                        officialError = error.message ?: "Couldn't download the official tides"
+                        if (manual) callbacks.toast(officialError.orEmpty())
+                        DiagnosticLog.log(TAG, "official tides failed: ${error.javaClass.simpleName}: ${error.message}")
+                    }
+                fetchingOfficial = false
+            } else if (manual) {
+                val until = forecast?.takeIf { it.station != null }?.curve?.endMillis
+                callbacks.toast(until?.let { "Official tides saved to ${SimpleDateFormat("d MMM yyyy", Locale.US).format(Date(it))}" } ?: "Couldn't download the official tides")
+            }
+            if (forKey != key) return@launch
+            refreshChip()
+            callbacks.tidesChanged()
+            // The open tide screen is redrawn only when something it shows changed.
+            val changed = tried || before != (store.officialStationFor(forKey)?.id to store.hasOfficial(forKey))
+            if (manual || (dialog.isShowing && changed)) showMain()
+            if (!store.hasOfficial(forKey)) refreshModelIfNeeded(force)
+        }
     }
 
     /**
@@ -462,6 +559,45 @@ class TideFeature(
             callbacks.tidesChanged()
             if (dialog.isShowing || manual) showMain()
             ensureLowest()
+        }
+    }
+
+    /**
+     * Tides for a route's tide window at [lat]/[lng] (its shallowest point), read only:
+     * the official prediction of a Queensland station near it if saved, else the tides
+     * on the tide screen if they reach there. Heights are above the survey's datum,
+     * like the tide added to depths.
+     */
+    suspend fun routeTides(lat: Double, lng: Double): RouteTides {
+        val s = settings
+        when (s.mode) {
+            TideMode.OFF -> return RouteTides.Missing("Tides are off. Turn them on in Tides → Settings for a tide window.")
+            TideMode.MANUAL -> return RouteTides.Missing("Tides are set by hand: a tide window needs predicted tides.")
+            TideMode.MODEL -> Unit
+        }
+        val now = System.currentTimeMillis()
+        val there = store.officialStationAt(lat, lng)
+        // The station that applies there, if saved; else the tide screen's tides, where they hold.
+        val f = store.officialAt(lat, lng) ?: forecast?.takeIf { it.holdsAt(lat, lng, there) && it.curve.covers(now) }
+            ?: return RouteTides.Missing(routeTidesMissing(lat, lng, there))
+        val aboveDatum = s.heightAboveDatum(f, now)
+            ?: return RouteTides.Missing("The lowest tide (chart datum) isn't known here yet: open Tides once with a connection.")
+        val shown = s.shownHeight(f, now) ?: aboveDatum
+        val source = f.station?.let { "Official prediction: ${it.name} (Maritime Safety Queensland)" }
+            ?: "Modelled tide (Open-Meteo), not an official prediction"
+        return RouteTides.Known(source, shown - aboveDatum) { t -> s.heightAboveDatum(f, t) }
+    }
+
+    /** Why a route point has no tides: [there] is the Queensland station that applies at it, if any. */
+    private fun routeTidesMissing(lat: Double, lng: Double, there: MsqStation?): String {
+        val shownStation = forecast?.station
+        val area = store.separateAreaAt(lat, lng)
+        return when {
+            there != null -> "${there.name}'s official prediction applies here but isn't downloaded yet: choose a tide spot near the route in Tides to get it."
+            area != null && shownStation != null ->
+                "This point is in $area, which has tides of its own: ${shownStation.name}'s prediction doesn't hold there. Choose a tide spot there in Tides for modelled tides."
+            shownStation != null -> "${shownStation.name}'s official prediction doesn't reach this point: choose a tide spot near it in Tides."
+            else -> "No tides for this area yet: choose a tide spot near the route in Tides."
         }
     }
 
@@ -526,9 +662,6 @@ class TideFeature(
     }
 
     private companion object {
-        /** How far a place's tides are used: beyond this the tide is someone else's, metres. */
-        const val TIDE_REACH_M = 50_000.0
-
         const val TAG = "TideFeature"
         const val TICK_MS = 60_000L
         const val RETRY_MS = 5 * 60_000L

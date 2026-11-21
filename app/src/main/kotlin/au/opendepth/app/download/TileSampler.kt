@@ -45,11 +45,31 @@ class TileSampler(private val fetch: (url: String) -> ByteArray?) {
             return (0 until n).map { i -> candidates[(i * candidates.size) / n] }
         }
 
-        /** Substitutes `{z}`/`{x}`/`{y}` by token, not position — correct regardless of the template's own placeholder order (e.g. EOX's `{z}/{y}/{x}`). */
-        internal fun urlFor(urlTemplate: String, z: Int, x: Int, y: Int): String =
-            urlTemplate
+        /**
+         * Substitutes `{z}`/`{x}`/`{y}` by token, not position — correct regardless of the template's own
+         * placeholder order (e.g. EOX's `{z}/{y}/{x}`) — and a WMS link's `{bbox-epsg-3857}` with the tile's
+         * corners in web-mercator metres, as MapLibre does.
+         */
+        internal fun urlFor(urlTemplate: String, z: Int, x: Int, y: Int): String {
+            val url = urlTemplate
                 .replace("{z}", z.toString())
                 .replace("{x}", x.toString())
                 .replace("{y}", y.toString())
+            return if (url.contains(BBOX)) url.replace(BBOX, bbox3857(z, x, y)) else url
+        }
+
+        private const val BBOX = "{bbox-epsg-3857}"
+
+        /** Half the width of the web-mercator world, in metres. */
+        private const val ORIGIN_SHIFT = 20037508.342789244
+
+        /** A tile's west, south, east and north in web-mercator metres, as a WMS BBOX. */
+        internal fun bbox3857(z: Int, x: Int, y: Int): String {
+            val size = 2 * ORIGIN_SHIFT / (1 shl z)
+            val west = -ORIGIN_SHIFT + x * size
+            val north = ORIGIN_SHIFT - y * size
+            fun f(v: Double) = String.format(java.util.Locale.US, "%.6f", v).trimEnd('0').trimEnd('.')
+            return "${f(west)},${f(north - size)},${f(west + size)},${f(north)}"
+        }
     }
 }

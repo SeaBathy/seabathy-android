@@ -1,5 +1,34 @@
 # Changelog
 
+## 1.4.2 — 2026-11-22
+
+Sharper Australian depths, official Queensland tides, fishing layers and fishing tools, all free.
+
+- **Sharper depths in the marine parks.** High detail now uses IMAS's new depth mosaics of the
+  Commonwealth marine parks (data to November 2026), as fine as 1 to 2 m (Solitary Islands,
+  Freycinet, Beagle and others), and seven more AusSeabed surveys fetched for the drawn area only
+  (Sydney Harbour 2 m, Crowdy Head, Port Phillip Bay, Portsea Hole, the southern Gulf of
+  Carpentaria). Deep-water park mosaics fill only where IMAS is coarser.
+- **Official Queensland tides.** Near any of 77 Maritime Safety Queensland tide gauges, tides are
+  the official predictions, saved offline to the end of next year; in the north and along the reef
+  coast they are drawn from MSQ's 10-minute predictions. Elsewhere the tide model is used as before.
+- **Tide window for a route.** The route's legs show when your draft and safety margin clear each
+  leg's shallowest charted point today and tomorrow, and whether you'd have enough water leaving
+  now.
+- **Fishing layers (Settings → Australia).** About 5,700 shipwrecks; artificial reefs; Queensland
+  shark nets and drumlines; fishing closures, no-anchoring and fish habitat areas (Queensland, WA and
+  the Great Barrier Reef); and NSW's mapped seabed reef, loaded as you zoom in and kept offline.
+- **Find structure.** On a depth layer, marks pinnacles, ledges and holes from the chart depths,
+  ranked, with a tap to go there or save a waypoint.
+- **Drift planner.** A short test drift measures how the boat drifts and shows where to start so the
+  drift carries you over a mark; or estimate it from the forecast.
+- **Export for a chartplotter.** Waypoints, structure marks, depth contours, temperature lines and
+  no-take edges on screen as one GPX file for a plotter's SD card.
+- **Water clarity.** A satellite estimate of how far you can see in the water, in Sea conditions.
+- **New map layers.** The Australian coast at low and high tide (Geoscience Australia, 10 m), and
+  satellite-estimated shallow depths along coasts worldwide (Copernicus Marine, online only).
+- A satellite map new in an update now comes with the next update of the area.
+
 ## 1.4.1 — 2026-11-21
 
 Clearer sea conditions, and good-weather alerts that download far less.

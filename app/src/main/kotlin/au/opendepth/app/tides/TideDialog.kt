@@ -48,7 +48,11 @@ data class TideView(
     /** Following the boat with no GPS fix yet: the last known position is used. */
     val noFix: Boolean = false,
     /** Following the boat, and no position at all yet. */
-    val noPosition: Boolean = false
+    val noPosition: Boolean = false,
+    /** The Queensland tide gauge whose official prediction applies here, if one does. */
+    val officialStation: String? = null,
+    /** Why its prediction couldn't be downloaded, the last time it was tried. */
+    val officialError: String? = null
 )
 
 /**
@@ -109,6 +113,7 @@ class TideDialog(
         where.addView(whereText, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         where.addView(button("Change") { actions.changeLocation() })
         panels.addRow(body, where)
+        if (s.mode == TideMode.MODEL) sourceLine(view)?.let { body.addView(panels.caption(it, topPaddingDp = 0)) }
 
         when {
             s.mode == TideMode.OFF -> body.addView(panels.caption("Tides are off. Turn them on in Settings."))
@@ -134,7 +139,7 @@ class TideDialog(
                 nowCard(body, format.tideHeight(h), trend, next)
                 // With tides saved offline, a failed forecast update (no signal at sea) doesn't matter.
                 val savedAhead = (view.savedUntilMillis ?: 0L) > now
-                if (view.error != null && !savedAhead) body.addView(panels.caption("Couldn't update: ${view.error}"))
+                if (view.error != null && !savedAhead && forecast.station == null) body.addView(panels.caption("Couldn't update: ${view.error}"))
                 chartSection(body, forecast, offset, now)
             }
         }
@@ -153,10 +158,20 @@ class TideDialog(
         })
         body.addView(
             panels.caption(
-                (if (s.showsChartDatum(forecast)) "Heights above the lowest tide (chart datum, LAT), like a tide table. "
-                else "Heights from mean sea level — lows read below zero until the lowest tide here is worked out (needs a connection, once). ") +
-                    "Modelled tides, worked out from Open-Meteo data (CC BY 4.0, E.U. Copernicus Marine Service). " +
-                    "Not an official tide table."
+                if (s.mode == TideMode.MODEL && forecast?.station != null && forecast.tenMinute) {
+                    "Heights above the lowest tide (chart datum, LAT), as published: Maritime Safety Queensland's official " +
+                        "predictions every 10 minutes, and its highs and lows. Weather can make the real tide higher or lower. " +
+                        "Tide predictions © State of Queensland (Department of Transport and Main Roads), CC BY 4.0."
+                } else if (s.mode == TideMode.MODEL && forecast?.station != null) {
+                    "Heights above the lowest tide (chart datum, LAT), as published. Highs and lows are Maritime Safety " +
+                        "Queensland's official predictions; the curve between them is drawn from them. Weather can make the " +
+                        "real tide higher or lower. Tide predictions © State of Queensland (Department of Transport and Main Roads), CC BY 4.0."
+                } else {
+                    (if (s.showsChartDatum(forecast)) "Heights above the lowest tide (chart datum, LAT), like a tide table. "
+                    else "Heights from mean sea level — lows read below zero until the lowest tide here is worked out (needs a connection, once). ") +
+                        "Modelled tides, worked out from Open-Meteo data (CC BY 4.0, E.U. Copernicus Marine Service). " +
+                        "Not an official tide table."
+                }
             )
         )
         // The old panel's dismiss runs after this one is shown: only clear [main] if it is still this panel.
@@ -165,7 +180,22 @@ class TideDialog(
         main = shown
     }
 
-    /** "Tide point 10.8 km NE of Cairns · updated 21:41" */
+    /**
+     * Which tides these are: "Official prediction: Townsville (Maritime Safety Queensland)",
+     * or the model (and why, near a gauge). Null before there are any.
+     */
+    private fun sourceLine(view: TideView): String? {
+        view.forecast?.station?.let { return "Official prediction: ${it.name} (Maritime Safety Queensland)" }
+        val model = "Modelled tide (Open-Meteo), not an official prediction"
+        val station = view.officialStation ?: return model.takeIf { view.forecast != null }
+        return when {
+            view.loading -> "Getting the official prediction for $station…"
+            view.officialError != null -> "$model. The official prediction for $station couldn't be downloaded: ${view.officialError}"
+            else -> "$model, until the official prediction for $station is downloaded."
+        }
+    }
+
+    /** "Tide point 10.8 km NE of Cairns · updated 21:41", or "Tide gauge 3.2 km E of Airlie Beach" for official tides. */
     private fun whereLine(view: TideView, now: Long): String {
         val s = view.settings
         if (s.mode == TideMode.MANUAL) return "Manual tide from your tide table"
@@ -178,6 +208,13 @@ class TideDialog(
         val here = if (view.noFix) "your last position" else "you"
         val of = view.placeName ?: here
         val km = f.modelDistanceM / 1000
+        if (f.station != null) {
+            return if (km < 1) {
+                "Tide gauge at ${view.placeName ?: if (view.noFix) "your last position" else "your position"}"
+            } else {
+                String.format(Locale.US, "Tide gauge %.1f km %s of %s", km, compass(NavGeo.bearing(f.requestLat, f.requestLng, f.modelLat, f.modelLng)), of)
+            }
+        }
         val point = if (km < 1) {
             "Tide point at ${view.placeName ?: if (view.noFix) "your last position" else "your position"}"
         } else {
@@ -299,6 +336,21 @@ class TideDialog(
         val now = System.currentTimeMillis()
         val date = SimpleDateFormat("d MMM yyyy", Locale.US)
         val f = view.forecast
+        if (f?.station != null) {
+            // Official predictions come a year at a time and are all kept: nothing to choose.
+            val end = f.curve.endMillis ?: now
+            val nextYear = if (OfficialTides.yearAt(end) <= OfficialTides.yearAt(now)) " Next year's are added once they're out (around September)." else ""
+            // Where the 10-minute predictions are used, say what they cost to download.
+            val source = when {
+                f.tenMinute -> " Drawn from MSQ's 10-minute predictions: about 1.9 MB a year to download, stored smaller."
+                f.station.useInterval -> " The 10-minute predictions for here (about 1.9 MB a year) aren't downloaded yet, so the curve between highs and lows is estimated."
+                else -> ""
+            }
+            body.addView(text("Official tides saved offline to ${date.format(Date(end))} · ${size(f.storedBytes)}.$source$nextYear", 14f).apply {
+                setPadding(context.dp(2), 0, 0, context.dp(6))
+            })
+            return
+        }
         val until = view.savedUntilMillis
         val bytes = f?.storedBytes ?: 0L
         val forecastEnd = f?.curve?.endMillis?.takeIf { until == null || until < now }
@@ -368,7 +420,13 @@ class TideDialog(
     fun showLocationPicker(places: List<TidePlace>, selectedId: String?, savedUntil: (TidePlace) -> Long?, actions: LocationActions) {
         val body = panels.body()
         lateinit var dialog: Dialog
-        body.addView(panels.caption("Tides use the nearest ocean point to where you choose.", topPaddingDp = 0))
+        body.addView(
+            panels.caption(
+                "Near a Queensland tide gauge, tides are its official prediction (Maritime Safety Queensland); " +
+                    "elsewhere they come from the tide model's nearest ocean point.",
+                topPaddingDp = 0
+            )
+        )
 
         panels.addRow(body, option(R.drawable.ic_follow_me, "Follow me", "Where the boat is, as you travel", selectedId == null) {
             dialog.dismiss(); actions.followMe()
@@ -474,8 +532,11 @@ class TideDialog(
         input.requestFocus()
     }
 
-    /** Tide settings; [autoChartDatumM] is chart datum below mean sea level as worked out here, if it is. */
-    fun showSettings(settings: TideSettings, autoChartDatumM: Double?, onSave: (TideSettings) -> Unit) {
+    /**
+     * Tide settings; [autoChartDatumM] is chart datum below mean sea level as worked out
+     * here, if it is, and [officialStation] the gauge whose official prediction is in use.
+     */
+    fun showSettings(settings: TideSettings, autoChartDatumM: Double?, officialStation: String? = null, onSave: (TideSettings) -> Unit) {
         val body = panels.body()
         var mode = settings.mode
         var datum = settings.datum
@@ -509,6 +570,9 @@ class TideDialog(
         val datumShown = datumOffset.text.toString()
         panels.addRow(body, datumOffset)
         body.addView(panels.caption("Leave empty to work it out from the tide model. Type your tide table's value (0–${if (height == HeightUnit.FEET) "32" else "10"} ${height.label}) to use that instead.", topPaddingDp = 0))
+        officialStation?.let {
+            body.addView(panels.caption("With Forecast, $it's official prediction is used here. It is already above chart datum (LAT), so a typed value counts only for modelled tides and for a manual height.", topPaddingDp = 0))
+        }
         body.addView(panels.caption("Manual tide height, from a tide table (${height.label})", topPaddingDp = 2))
         val manual = numberInput(height.of(settings.manualHeightM), signed = true)
         val manualShown = manual.text.toString()

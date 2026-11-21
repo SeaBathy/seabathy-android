@@ -686,6 +686,9 @@ class WeatherEngine(
             log("satellite pictures ${fresh.keys.joinToString { it.name }} in ${(System.nanoTime() - t0) / 1_000_000} ms")
             kv.put(KEY_SATELLITES_AT + id, clock().toString())
             kv.put(KEY_SATELLITES_RETRY + id, again.joinToString(",").ifEmpty { null })
+            val triedBefore = kv.get(KEY_SATELLITES_TRIED + id)?.split(',').orEmpty()
+            kv.put(KEY_SATELLITES_TRIED + id, (triedBefore + kinds.map { it.name } + area.satellites.keys.map { it.name })
+                .filter { it.isNotEmpty() }.distinct().joinToString(","))
             if (fresh.isNotEmpty()) {
                 area = area.copyWith(satellites = area.satellites + fresh)
                 if (area.forecast != null || area.satellites.isNotEmpty()) {
@@ -764,7 +767,13 @@ class WeatherEngine(
         if (age > SATELLITE_EVERY_MS) return all
         // Sooner: the main ones that are missing, and any whose server failed last time.
         val again = kv.get(KEY_SATELLITES_RETRY + area.id)?.split(',').orEmpty()
-        return all.filter { it !in area.satellites && (it.required || it.name in again) && age > SATELLITE_RETRY_MS }
+        // Never asked for here (a kind new in this version): straight away. Areas saved before this was
+        // kept count what they hold, and any whose server failed, as tried.
+        val tried = kv.get(KEY_SATELLITES_TRIED + area.id)?.split(',')?.toSet()
+            ?: (area.satellites.keys.map { it.name } + again).toSet()
+        return all.filter {
+            it !in area.satellites && (it.name !in tried || ((it.required || it.name in again) && age > SATELLITE_RETRY_MS))
+        }
     }
 
     private fun origin(): Pair<Double, Double>? =
@@ -787,6 +796,8 @@ class WeatherEngine(
         const val KEY_SATELLITES_AT = "conditions_sat_at_"
         /** The pictures whose server failed at the last try, by area. */
         const val KEY_SATELLITES_RETRY = "conditions_sat_retry_"
+        /** The satellite kinds asked for at least once for an area, so one new in an update is fetched soon. */
+        const val KEY_SATELLITES_TRIED = "conditions_sat_tried_"
         /** The newest forecast run there was when an area's forecast was downloaded, by area. */
         const val KEY_RUN_AT = "conditions_run_at_"
         const val HOUR_MS = 3_600_000L

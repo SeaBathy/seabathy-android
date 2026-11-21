@@ -446,16 +446,58 @@ class NavigationFeature(
                 plan.legs.map { leg -> RouteDepthCheck.compute(listOf(leg.from, leg.to)) { lat, lng -> runCatching { sampler(lat, lng) }.getOrNull() } }
             }
             val anySurvey = depths.any { it != null }
+            val departure = System.currentTimeMillis()
             routeDialogs.showLegs(
                 title = routes.savedName ?: "Route legs",
                 plan = plan,
                 speedKn = speed,
                 settings = settings,
                 variation = ::variation,
-                departureMillis = System.currentTimeMillis(),
+                departureMillis = departure,
                 legDepths = if (anySurvey) depths else null,
-                tideM = tides.tideNear(points.first().lat, points.first().lng)
+                tideM = tides.tideNear(points.first().lat, points.first().lng),
+                tideWindow = tideWindow(plan, depths, speed, departure)
             )
+        }
+    }
+
+    /**
+     * The route's tide window: over its shallowest charted point, when the tide gives
+     * the boat's draft + margin, from now to the end of tomorrow. Null with no charted depths.
+     */
+    private suspend fun tideWindow(plan: RoutePlan, depths: List<RouteDepthCheck?>, speedKn: Double, departure: Long): RouteTideWindow? {
+        val index = depths.indices.filter { depths[it] != null }.maxByOrNull { depths[it]!!.shallowestMetres } ?: return null
+        val worst = depths[index]!!
+        val leg = plan.legs[index]
+        val chartDepth = -worst.shallowestMetres
+        val zone = java.time.ZoneId.systemDefault()
+        val until = java.time.Instant.ofEpochMilli(departure).atZone(zone).toLocalDate().plusDays(2).atStartOfDay(zone).toInstant().toEpochMilli()
+        val routeTides = tides.routeTides(worst.latitude, worst.longitude)
+        val result = (routeTides as? RouteTides.Known)?.let { known ->
+            withContext(Dispatchers.Default) { TideWindow.compute(chartDepth, settings.minimumDepthM, departure, until, tideAt = known.aboveDatum) }
+        }
+        val arrival = arrivalAt(leg, worst, speedKn, departure)
+        // Leaving now, every leg's shallowest point at its own time, with the tides that hold there.
+        val passage = if (speedKn <= 0) null else {
+            val points = plan.legs.indices.mapNotNull { i ->
+                val d = depths[i] ?: return@mapNotNull null
+                val at = arrivalAt(plan.legs[i], d, speedKn, departure) ?: return@mapNotNull null
+                val tide = if (i == index) routeTides else tides.routeTides(d.latitude, d.longitude)
+                TideWindow.PassPoint(plan.legs[i].number, -d.shallowestMetres, at, (tide as? RouteTides.Known)?.aboveDatum)
+            }
+            TideWindow.passage(points, settings.minimumDepthM)
+        }
+        val totalNm = plan.legs.sumOf { it.distanceNm }
+        val covered = if (totalNm <= 0) 0.0 else plan.legs.indices.sumOf { (depths[it]?.coveredFraction ?: 0.0) * plan.legs[it].distanceNm } / totalNm
+        return RouteTideWindow(routeTides, result, leg.number, chartDepth, covered, arrival, passage, departure, until)
+    }
+
+    /** Leaving at [departure], about when the boat reaches [point] on [leg]; null without a speed. */
+    private fun arrivalAt(leg: PlanLeg, point: RouteDepthCheck, speedKn: Double, departure: Long): Long? {
+        if (speedKn <= 0) return null
+        return leg.cumulativeHours?.let { total ->
+            val alongNm = NavGeo.distanceM(leg.from.lat, leg.from.lng, point.latitude, point.longitude) / NavFormat.METRES_PER_NM
+            departure + ((total - (leg.hours ?: 0.0) + alongNm / speedKn) * RoutePlan.HOUR_MS).toLong()
         }
     }
 

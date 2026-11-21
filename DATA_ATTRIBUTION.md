@@ -31,11 +31,15 @@ on the chart and in the 3D view.
 | USGS Imagery | USGS The National Map | Allowed (US public domain) |
 | OpenSeaMap seamarks | © OpenSeaMap contributors | Shown online only |
 | Sentinel-2 cloudless 2024 (EOX), the built-in offline source (also in 3D) | EOxCloudless https://cloudless.eox.at by EOX IT Services GmbH (Contains modified Copernicus Sentinel data 2024) | Allowed under [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/): non-commercial use, keep the credit, share packs under the same licence |
+| Coast at low tide / high tide (DEA Tidal Composites, 2024, Geoscience Australia's WMS) | DEA Tidal Composites © Commonwealth of Australia (Geoscience Australia), CC BY 4.0, doi:10.26186/150381; contains modified Copernicus Sentinel data | Allowed: [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), and the service lists no fees or access constraints. Cite: Newey, V., Bishop-Taylor, R., Phillips, C., Sagar, S. (2025). Digital Earth Australia Tidal Composites. Geoscience Australia, Canberra. https://doi.org/10.26186/150381. Offshore Great Barrier Reef reefs are not in it |
+| Satellite-estimated shallow depths (Copernicus Marine, BATHYMETRY_GLO_PHY_COASTAL_L4_MY_016_001, released November 2025; map tiles from its WMTS, not the raw data) | Generated using E.U. Copernicus Marine Service Information; https://doi.org/10.48670/mds-00364 | Shown online only: the app doesn't save it offline. An estimate from satellite pictures, about 100 m, 0 to 40 m: not for navigation |
 
 The apps' built-in offline download source is Sentinel-2 cloudless, whose
 licence allows offline copies. "Save this area offline" (also in the 3D view)
-works with any online map, including ones whose terms don't allow offline
-copies: whether to save one is the user's choice.
+works with the online maps you add, except the ones whose providers ask for no
+offline or bulk copies (OpenStreetMap, OpenTopoMap) and the online-only
+Copernicus depths. For a link you add yourself, whether its terms allow
+saving it is your choice.
 
 Some map services need an account or licence for use in apps, so they are not
 built in. You can still add a map link of your own with "Add a map link" if its
@@ -56,10 +60,13 @@ any custom tile link or download source you add yourself.
 | Data | Source | Terms |
 | --- | --- | --- |
 | Tide heights | Open-Meteo Marine API (`sea_level_height_msl`), with E.U. Copernicus Marine Service Information. The apps fit tide harmonics to this data to work offline | CC BY 4.0; free for non-commercial use |
+| Official tide predictions, Queensland (Android app) | Maritime Safety Queensland predicted high and low tides for 77 stations, from [data.qld.gov.au](https://www.data.qld.gov.au/) (one dataset a station, e.g. `townsville-tide-gauge-predicted-high-low-data`). The app keeps a list of the stations, with each one's mean sea level (the mean of a year of its 10-minute predictions, same source), and downloads each year's CSV straight from data.qld.gov.au when a tide spot is near one. At the 60 stations where a curve drawn through the highs and lows is a poor fit, it also downloads that year's 10-minute predictions (about 1.8 MB) and draws the tide from them | CC BY 4.0, © State of Queensland (Department of Transport and Main Roads); credited on the tide screen while shown |
 | Place search | Open-Meteo Geocoding API (GeoNames data) | CC BY 4.0 |
 | Place name at a point | OpenStreetMap Nominatim | ODbL; © OpenStreetMap contributors, credited beside the suggested name; only when you name a spot, one request at a time, per the [usage policy](https://operations.osmfoundation.org/policies/nominatim/) |
 
-Tides are modelled, not an official tide table. The apps say so where they show them.
+Tides are modelled, not an official tide table, except near a Maritime Safety
+Queensland station in the Android app, which uses its official predictions. The
+apps say which they show.
 
 ## Sea conditions
 
@@ -75,10 +82,13 @@ phone or PC only. SeaBathy shows their credit on the map while they're shown.
 | Satellite chlorophyll | NOAA-20 VIIRS daily, via NOAA CoastWatch; backup Copernicus Sentinel-3A OLCI | Free to use and redistribute. Sentinel data must carry "Contains modified Copernicus Sentinel data" |
 | Sea level anomaly | NOAA CoastWatch blended altimetry (Sentinel-3, CryoSat-2, Jason, SARAL), generated using AVISO+ products | Free to use and redistribute with this credit: "Data courtesy of NOAA; Sentinel data courtesy of Copernicus Program; Generated using AVISO+ products" |
 | Salinity | NOAA CoastWatch SMAP, then SMOS, daily | Free to use and redistribute |
+| Water clarity (shown as a rough visibility, about 1.7 / Kd490 metres: an estimate) | NOAA CoastWatch VIIRS S-NPP Kd490, near-real-time, daily, 4 km (ERDDAP dataset noaacwNPPVIIRSkd490Daily, also listed as nesdisVHNkd490Daily), the last 5 days blended | U.S. Government data, public domain: free to use and redistribute. Credited "NOAA CoastWatch" on the map while shown |
 | Temperature at depth | HYCOM Consortium (ESPC-D-V02 ocean model) | Public release; demonstration product with no guarantee of availability |
 | Latest true colour | NASA Global Imagery Browse Services (GIBS), VIIRS | NASA data, no restriction on use; credit requested |
 | Seabed depths | GMRT, Global Multi-Resolution Topography (Ryan et al. 2009, doi:10.1029/2008GC002332); also fills the gaps in the high-detail depths outside Australia | CC BY 4.0; not to be used for navigation |
 | High-detail depths (Australia) | Flukes, E. (2026), Multi-resolution bathymetry composite surface for Australian waters (EEZ), IMAS, doi:10.25959/Y9VF-V723; AusSeabed surveys, © Commonwealth of Australia (Geoscience Australia), and state surveys, each credited in the _sources.txt saved beside the file | CC BY 4.0; not to be used for navigation |
+| High-detail depths (Australian Marine Parks) | Flukes, E. & Monk, J. (2026), Bathymetry of the Australian Marine Parks, Institute for Marine and Antarctic Studies (IMAS), University of Tasmania (Seamap Australia, with Our Marine Parks grant funding), https://metadata.imas.utas.edu.au/geonetwork/srv/eng/catalog.search#/metadata/fb451be4-9de1-4bc2-8fd6-0f285f90916f; one mosaic per park, read in place from IMAS's public files for the parks finer than the composite | CC BY 4.0; not to be used for navigation. Credited "IMAS composite (Flukes 2026) and marine park bathymetry (Flukes & Monk 2026)" on the chart when a build uses one |
+| High-detail depths (AusSeabed warehouse) | Surveys AusSeabed serves only from its data warehouse (warehouse.ausseabed.gov.au), cut for the drawn box: Sydney Harbour 2004 (Coastal CRC); Crowdy Head Offshore 2021; Port Phillip Bay tie lines 2021, drift algae 2018 and Portsea Hole 2018 (Deakin University Marine Mapping); Southern Gulf of Carpentaria (GA0276); all © Commonwealth of Australia (Geoscience Australia) | CC BY 4.0 (each checked in GA eCat); not to be used for navigation |
 | High-detail depths (USA) | NOAA NCEI coastal DEMs, from NOAA's DEM global mosaic (gis.ngdc.noaa.gov), made for the drawn box; the DEMs used are named in the sources file | US public domain. Credited "Depths: NOAA NCEI coastal DEMs (public domain)" |
 | High-detail depths (Canada) | Canadian Hydrographic Service NONNA-10 non-navigational bathymetry, from CHS's coverage service (nonna-geoserver.data.chs-shc.ca) | Open Government Licence - Canada; not for navigation. Credited "Contains information licensed under the Open Government Licence - Canada (CHS NONNA, not for navigation)" |
 | High-detail depths (Europe) | EMODnet Bathymetry Consortium (2024), EMODnet Digital Bathymetry (DTM 2024), from EMODnet's coverage service (ows.emodnet-bathymetry.eu) | CC BY 4.0 |
@@ -136,6 +146,59 @@ these free datasets:
 - Boat ramps: © OpenStreetMap contributors (ODbL), slipways not marked private.
 
 A guide only: zones change, and the official zoning map and rules for each park are the law.
+Not for navigation.
+
+## Fishing tools
+
+The structure finder, drift planner and chartplotter export download nothing of their own:
+
+- Find structure works on the phone from the depth layers already loaded. Its method follows NOAA's
+  Benthic Terrain Modeler (bathymetric position index at two scales, and slope; Walbridge, S., Slocum, N.,
+  Pobuda, M. and Wright, D. J. (2018), Unified Geomorphological Analysis Workflows with Benthic Terrain
+  Modeler, Geosciences 8(3), 94). Its marks are an automatic guess from those depths, and say so.
+- The drift planner uses the phone's GPS, and for its forecast estimate the sea conditions already saved
+  (credited above).
+- The chartplotter export writes what is on screen (waypoints, structure marks, contours traced from the
+  depth layer, the sea conditions' lines, no-take zone edges) to a GPX file shared from the phone. Each
+  source keeps its own terms above; the file says it is not for navigation.
+
+## Shipwrecks, artificial reefs, shark gear, fishing closures, NSW seabed reefs
+
+Each is off until turned on (Settings → Australia). The first four are built into the app by
+tools/fishing_layers/build_fishing_layers.py (licences checked at each primary source on
+2026-11-21); the NSW reefs are fetched from the NSW Government's own map service for the area on
+the chart and kept on the phone. This project doesn't host or proxy any of them.
+
+- Shipwrecks (about 5,700): Australian National Shipwrecks, from the Australasian Underwater
+  Cultural Heritage Database, © Commonwealth of Australia (Department of Climate Change, Energy,
+  the Environment and Water), CC BY 3.0 AU (data.gov.au), fetched through IMAS Seamap Australia's
+  WFS; Shipwrecks (WAM-002), © Western Australian Museum, CC BY 4.0 (data.wa.gov.au); Shipwrecks,
+  © Government of South Australia (Department for Environment and Water), CC BY 4.0
+  (data.sa.gov.au). The WA and SA records replace the national record of the same wreck (same
+  name, close enough for how rough the national position is, years agreeing); wrecks in New
+  Zealand and national positions given only to the whole degree are left out. Positions are often
+  approximate; the tap card says how each was found.
+- Artificial reefs: Artificial reef sites - Queensland, © State of Queensland (Department of the
+  Environment, Tourism, Science and Innovation), CC BY 4.0; Artificial Reefs (Narrowneck), City of
+  Gold Coast, CC BY 3.0 AU (data.gov.au). Port Phillip Bay's reefs (DataVic) are not included yet:
+  the DataVic record didn't resolve and Victoria's open-data service timed out when this was built.
+- Shark control gear: Queensland Shark Control Program equipment locations (April 2024), © State
+  of Queensland, CC BY 4.0 (publications.qld.gov.au). Gear is moved and changed.
+- Fishing closures and management areas: Great Barrier Reef Marine Park Special Management Areas
+  (seasonal closure, restricted access, public appreciation, maritime cultural heritage and
+  natural resources conservation areas; the dugong, netting and dory areas, which bind commercial
+  fishers, are left out), Whitsundays and Hinchinbrook Plan of Management no-anchoring areas,
+  © Great Barrier Reef Marine Park Authority, CC BY 4.0; Fish habitat areas - Queensland, © State
+  of Queensland, CC BY 4.0; Fisheries Guide - Consolidated Notices and Orders (DPIRD-061), WA
+  Department of Primary Industries and Regional Development, CC BY 4.0: the closed waters, wreck
+  sites, species and gear rules that bind recreational fishers and that the marine park zones
+  don't already show (commercial-only orders and whole-coast orders are left out). Outlines are
+  simplified to between about 2 m and 150 m by size. A guide only, not the law.
+- NSW seabed reefs: NSW seabed reef extent 2023 ("Reef" outlines only), © State of NSW (NSW
+  Department of Climate Change, Energy, the Environment and Water), CC BY 4.0 (SEED), fetched
+  from mapprod3.environment.nsw.gov.au by map tile when the layer is on and the chart is zoomed
+  in over the NSW coast.
+
 Not for navigation.
 
 ## Not for navigation

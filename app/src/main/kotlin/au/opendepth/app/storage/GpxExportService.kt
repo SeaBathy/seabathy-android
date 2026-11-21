@@ -33,6 +33,12 @@ class GpxExportService(private val context: Context) {
         return share("seabathy_track_$fileName.gpx", GpxExporter.buildTrack(name, points))
     }
 
+    /** A file made for a chartplotter (see au.opendepth.app.fishing.PlotterExport). */
+    fun buildPlotterShareIntent(gpx: String): Intent {
+        val stamp = java.text.SimpleDateFormat("yyyy-MM-dd_HHmm", java.util.Locale.US).format(java.util.Date())
+        return share("seabathy_plotter_$stamp.gpx", gpx)
+    }
+
     private fun share(fileName: String, gpx: String): Intent {
         val exportDir = File(context.filesDir, EXPORT_DIR).apply { mkdirs() }
         // Earlier exports have already been handed to the share sheet; without

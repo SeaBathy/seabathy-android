@@ -292,6 +292,9 @@ class NoTakeZones private constructor(private val zones: List<Zone>) {
 
     class Zone(val name: String, val type: String, val west: Double, val south: Double, val east: Double, val north: Double, val polygons: List<List<DoubleArray>>)
 
+    /** Every no-take zone, for writing their edges to a plotter file. */
+    val all: List<Zone> get() = zones
+
     /** The no-take zone containing the point, or null. */
     fun at(lat: Double, lng: Double): Zone? = zones.firstOrNull { z ->
         lat >= z.south && lat <= z.north && lng >= z.west && lng <= z.east && z.polygons.any { rings -> inside(rings, lng, lat) }

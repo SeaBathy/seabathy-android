@@ -200,5 +200,5 @@ class DataSourceDialog(
     /** Deliberately shallow — see the "ADD A SOURCE" caption for why a deeper check is not this dialog's job. */
     private fun isPlausibleTileTemplate(url: String): Boolean =
         (url.startsWith("http://") || url.startsWith("https://")) &&
-            listOf("{z}", "{x}", "{y}").all { it in url }
+            au.opendepth.app.settings.XyzTilePresets.hasTileTokens(url)
 }

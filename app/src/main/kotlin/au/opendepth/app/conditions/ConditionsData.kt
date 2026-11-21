@@ -290,7 +290,9 @@ enum class SatelliteKind(val label: String, val unit: String, val required: Bool
     /** Height of the sea against its long-term average: eddies stand out. Stored in cm. */
     SEA_LEVEL("Sea level", "cm"),
     SALINITY("Salinity", "PSU"),
-    TEMP_BELOW("Temperature at depth", "°C")
+    TEMP_BELOW("Temperature at depth", "°C"),
+    /** Kd490, how fast light fades with depth, per metre: shown as a rough visibility ([WaterClarity]). */
+    WATER_CLARITY("Water clarity", "m⁻¹")
 }
 
 class SatelliteGrid(val kind: SatelliteKind, val grid: GeoGrid, val dateMillis: Long, val values: FloatArray) {
@@ -389,7 +391,7 @@ class ConditionsArea(
      * into the blanks beside them. The satellites leave out the cells along the shore, which left
      * the colours stopping short of it in steps; bigger gaps (cloud) stay empty. Worked out once.
      */
-    fun toShore(kind: SatelliteKind): SatelliteGrid? = satellites[kind]?.let { shoreward.getOrPut(kind.name) { filled(it, if (kind == SatelliteKind.CHLOROPHYLL) 1 else SHORE_FILL_CELLS) } }
+    fun toShore(kind: SatelliteKind): SatelliteGrid? = satellites[kind]?.let { shoreward.getOrPut(kind.name) { filled(it, if (kind == SatelliteKind.CHLOROPHYLL || kind == SatelliteKind.WATER_CLARITY) 1 else SHORE_FILL_CELLS) } }
 
     /** [breaks], carried to the shore the same way. */
     val breaksToShore: SatelliteGrid? get() = breaks?.let { shoreward.getOrPut("breaks") { filled(it, SHORE_FILL_CELLS) } }
