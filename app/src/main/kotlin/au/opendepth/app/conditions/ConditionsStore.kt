@@ -181,6 +181,8 @@ class ConditionsStore(private val dir: File) {
                 // After everything, so files from before these were kept still read.
                 out.writeInt(area.belowDepthM)
                 out.writeInt(area.source)
+                // The source says outright whether the wind is the backup's (files before this: guessed when read).
+                out.writeBoolean(true)
             }
         }
 
@@ -221,7 +223,12 @@ class ConditionsStore(private val dir: File) {
                     satellites[kind] = SatelliteGrid(kind, grid, date, readFloats(input))
                 }
                 val belowDepth = runCatching { input.readInt() }.getOrDefault(ConditionsArea.DEFAULT_BELOW_DEPTH_M)
-                val source = runCatching { input.readInt() }.getOrDefault(ConditionsArea.SOURCE_MAIN)
+                var source = runCatching { input.readInt() }.getOrDefault(ConditionsArea.SOURCE_MAIN)
+                val windSaid = runCatching { input.readBoolean() }.getOrDefault(false)
+                // Saved before the backup's wind was marked: the main service's wind always has gusts, the backup's never.
+                if (!windSaid && source == ConditionsArea.SOURCE_MAIN && forecast != null &&
+                    forecast.has(ForecastField.WIND_U) && !forecast.has(ForecastField.GUST)
+                ) source = ConditionsArea.SOURCE_BACKUP_WIND
                 ConditionsArea(id, name, south, west, north, east, fetched, forecast, satellites, belowDepth, source)
             }
 

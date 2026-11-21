@@ -320,5 +320,29 @@ class ForecastRequestTest {
         assertEquals(-3f, forecast.sample(ForecastField.WIND_V, -20.0, 150.0, start), 0.001f)
         // The backup has no gusts.
         assertFalse(forecast.has(ForecastField.GUST))
+        // And it says so, so it isn't saved as the main forecast.
+        assertTrue(forecast.windFromBackup)
+        assertTrue(ConditionsArea("a", "a", -20.0, 150.0, -19.5, 151.0, start, forecast, emptyMap()).windFromBackup)
+    }
+
+    @Test
+    fun `the usual wind is not marked as the backup's`() {
+        val forecast = client(::answer).forecast(grid, 2)
+        assertFalse(forecast.windFromBackup)
+        assertFalse(ConditionsArea("a", "a", -20.0, 150.0, -19.5, 151.0, start, forecast, emptyMap()).wantsMainAgain)
+    }
+
+    @Test
+    fun `a whole forecast is counted against both services together before it starts`() {
+        // The sea service has most of the automatic total spent (tides and all): each service's
+        // own share has room, both together don't.
+        repeat(57) {
+            budget.count(100, CallBudget.MARINE)
+            now.addAndGet(10 * 60_000L)
+        }
+        val big = GeoGrid(DoubleArray(16) { -20.0 + it * 0.1 }, DoubleArray(16) { 150.0 + it * 0.1 })
+        val c = client(::answer)
+        assertTrue(runCatching { c.forecast(big, 2) }.exceptionOrNull() is LimitReachedException)
+        assertEquals(0, asked.size)
     }
 }

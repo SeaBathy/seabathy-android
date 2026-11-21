@@ -277,7 +277,12 @@ object Contours {
      * GeoJSON for the map: lines carry "kind" and "label"; eddy middles are
      * points with kind "warm" or "cold".
      */
-    fun geoJson(lines: List<Pair<ContourLine, Pair<String, String>>>, eddies: List<EddyCentre> = emptyList()): String {
+    fun geoJson(
+        lines: List<Pair<ContourLine, Pair<String, String>>>,
+        eddies: List<EddyCentre> = emptyList(),
+        /** An eddy centre's sea level, as its label words it after the W or C. */
+        eddyAmount: (EddyCentre) -> String = { String.format(Locale.US, "%+.0f", it.valueCm) }
+    ): String {
         val sb = StringBuilder("""{"type":"FeatureCollection","features":[""")
         var first = true
         for ((line, meta) in lines) {
@@ -294,8 +299,8 @@ object Contours {
         for (e in eddies) {
             if (!first) sb.append(',')
             first = false
-            sb.append(String.format(Locale.US, """{"type":"Feature","properties":{"kind":"%s","label":"%s %+.0f"},"geometry":{"type":"Point","coordinates":[%.4f,%.4f]}}""",
-                if (e.warm) "warm" else "cold", if (e.warm) "W" else "C", e.valueCm, e.lng, e.lat))
+            sb.append(String.format(Locale.US, """{"type":"Feature","properties":{"kind":"%s","label":"%s %s"},"geometry":{"type":"Point","coordinates":[%.4f,%.4f]}}""",
+                if (e.warm) "warm" else "cold", if (e.warm) "W" else "C", eddyAmount(e).replace("\"", ""), e.lng, e.lat))
         }
         return sb.append("]}").toString()
     }

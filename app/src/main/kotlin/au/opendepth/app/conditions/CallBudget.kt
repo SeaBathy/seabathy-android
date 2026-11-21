@@ -12,10 +12,12 @@ enum class LimitKind { MINUTE, HOUR, DAY }
 
 /**
  * Keeps the app inside the free forecast service's limits, so it can never use them up by
- * itself. Open-Meteo allows each internet address 600 calls a minute, 5,000 an hour and 10,000
- * a day, and every point of a request is a call (an area is up to 256 for the sea and the same
- * for the wind). The sea forecast and the wind are two services there, each counted on its own
- * ([MARINE], [WEATHER]): one can be at its limit while the other still answers.
+ * itself. Open-Meteo's free terms allow each internet address under 600 calls a minute, 5,000
+ * an hour and 10,000 a day, and every point of a request is a call (an area is up to 256 for
+ * the sea and the same for the wind). The sea forecast and the wind are two services there
+ * ([MARINE], [WEATHER]), each kept in a ledger of its own: one can be at its limit while the
+ * other still answers. The terms don't say the two are counted apart, so both together are
+ * also kept under the free limits ([TOTAL_DAY_CAP] and the rest), tides and all.
  *
  * - Every request is counted here first ([reserve]); when the minute is full it says how long
  *   to wait, so downloads follow one another instead of being refused.
@@ -49,6 +51,13 @@ class CallBudget(private val clock: () -> Long = System::currentTimeMillis) {
         return of(api).spent.sumOf { if (it[0] > from) it[1].toInt() else 0 }
     }
 
+    /** Calls spent in the last [windowMs] on both services together. */
+    @Synchronized
+    fun usedTotal(windowMs: Long): Int {
+        val from = clock() - windowMs
+        return ledgers.values.sumOf { l -> l.spent.sumOf { if (it[0] > from) it[1].toInt() else 0 } }
+    }
+
     /** When the sea forecast's limit has passed (0 when none was hit). */
     val blockedUntilMillis: Long get() = blockedUntil(MARINE)
 
@@ -62,17 +71,34 @@ class CallBudget(private val clock: () -> Long = System::currentTimeMillis) {
      * nothing: [reserve] does, request by request.
      */
     @Synchronized
-    fun check(calls: Int, userAsked: Boolean, api: String = MARINE) {
+    fun check(calls: Int, userAsked: Boolean, api: String = MARINE) = check(mapOf(api to calls), userAsked)
+
+    /**
+     * As above, for a download of [calls] on each service at once (the sea forecast and the wind
+     * together): each service's own share, and both together under the total caps.
+     */
+    @Synchronized
+    fun check(calls: Map<String, Int>, userAsked: Boolean) {
         val now = clock()
-        val ledger = of(api)
-        prune(ledger, now)
-        if (now < ledger.blockedUntil) throw LimitReachedException(ledger.blockedUntil, text(ledger.blockedKind ?: LimitKind.HOUR))
-        val day = used(DAY_MS, api)
-        val dayCap = if (userAsked) DAY_CAP else DAY_AUTO_CAP
-        if (day + calls > dayCap) throw LimitReachedException(freeAt(ledger, DAY_MS, day + calls - dayCap, now), text(LimitKind.DAY))
-        val hour = used(HOUR_MS, api)
-        val hourCap = if (userAsked) HOUR_CAP else HOUR_AUTO_CAP
-        if (hour + calls > hourCap) throw LimitReachedException(freeAt(ledger, HOUR_MS, hour + calls - hourCap, now), text(LimitKind.HOUR))
+        for ((api, n) in calls) {
+            val ledger = of(api)
+            prune(ledger, now)
+            if (now < ledger.blockedUntil) throw LimitReachedException(ledger.blockedUntil, text(ledger.blockedKind ?: LimitKind.HOUR))
+            val day = used(DAY_MS, api)
+            val dayCap = if (userAsked) DAY_CAP else DAY_AUTO_CAP
+            if (day + n > dayCap) throw LimitReachedException(freeAt(ledger.spent, DAY_MS, day + n - dayCap, now), text(LimitKind.DAY))
+            val hour = used(HOUR_MS, api)
+            val hourCap = if (userAsked) HOUR_CAP else HOUR_AUTO_CAP
+            if (hour + n > hourCap) throw LimitReachedException(freeAt(ledger.spent, HOUR_MS, hour + n - hourCap, now), text(LimitKind.HOUR))
+        }
+        // Both services together: the free terms' limits are the address's, whichever is asked.
+        val all = calls.values.sum()
+        val day = usedTotal(DAY_MS)
+        val dayCap = if (userAsked) TOTAL_DAY_CAP else TOTAL_DAY_AUTO_CAP
+        if (day + all > dayCap) throw LimitReachedException(freeAt(allSpent(), DAY_MS, day + all - dayCap, now), text(LimitKind.DAY))
+        val hour = usedTotal(HOUR_MS)
+        val hourCap = if (userAsked) TOTAL_HOUR_CAP else TOTAL_HOUR_AUTO_CAP
+        if (hour + all > hourCap) throw LimitReachedException(freeAt(allSpent(), HOUR_MS, hour + all - hourCap, now), text(LimitKind.HOUR))
     }
 
     /**
@@ -89,7 +115,9 @@ class CallBudget(private val clock: () -> Long = System::currentTimeMillis) {
             throw LimitReachedException(ledger.blockedUntil, text(ledger.blockedKind ?: LimitKind.HOUR))
         }
         val minute = used(MINUTE_MS, api)
-        if (minute > 0 && minute + calls > MINUTE_CAP) return (freeAt(ledger, MINUTE_MS, minute + calls - MINUTE_CAP, now) - now).coerceAtLeast(1L)
+        if (minute > 0 && minute + calls > MINUTE_CAP) return (freeAt(ledger.spent, MINUTE_MS, minute + calls - MINUTE_CAP, now) - now).coerceAtLeast(1L)
+        val total = usedTotal(MINUTE_MS)
+        if (total > 0 && total + calls > TOTAL_MINUTE_CAP) return (freeAt(allSpent(), MINUTE_MS, total + calls - TOTAL_MINUTE_CAP, now) - now).coerceAtLeast(1L)
         count(ledger, calls, now)
         return 0L
     }
@@ -166,16 +194,19 @@ class CallBudget(private val clock: () -> Long = System::currentTimeMillis) {
         while (ledger.spent.isNotEmpty() && now - ledger.spent.first()[0] > DAY_MS) ledger.spent.removeFirst()
     }
 
-    /** When [excess] calls of the last [windowMs] will have passed out of it. */
-    private fun freeAt(ledger: Ledger, windowMs: Long, excess: Int, now: Long): Long {
+    /** When [excess] calls of the last [windowMs] in [spent] (oldest first) will have passed out of it. */
+    private fun freeAt(spent: Iterable<LongArray>, windowMs: Long, excess: Int, now: Long): Long {
         var freed = 0L
-        for (entry in ledger.spent) {
+        for (entry in spent) {
             if (entry[0] <= now - windowMs) continue
             freed += entry[1]
             if (freed >= excess) return entry[0] + windowMs + 1_000L
         }
         return now + windowMs
     }
+
+    /** Both services' spending, oldest first. */
+    private fun allSpent(): List<LongArray> = ledgers.values.flatMap { it.spent }.sortedBy { it[0] }
 
     companion object {
         /** The sea forecast (waves, swell, currents, sea temperature) and the wind: two services, each with its own limits. */
@@ -184,14 +215,23 @@ class CallBudget(private val clock: () -> Long = System::currentTimeMillis) {
         const val MINUTE_MS = 60_000L
         const val HOUR_MS = 3_600_000L
         const val DAY_MS = 24 * HOUR_MS
-        /** Of the service's 600 a minute. */
+        /** Of the service's 600 a minute: each service's share. */
         const val MINUTE_CAP = 480
-        /** Of the service's 5,000 an hour: all use, and automatic updates alone. */
+        /** Of the service's 5,000 an hour: all use, and automatic updates alone (each service's share). */
         const val HOUR_CAP = 4_200
         const val HOUR_AUTO_CAP = 2_400
-        /** Of the service's 10,000 a day: all use, and automatic updates alone. */
+        /** Of the service's 10,000 a day: all use, and automatic updates alone (each service's share). */
         const val DAY_CAP = 9_000
         const val DAY_AUTO_CAP = 6_000
+        /**
+         * Both services together, under the free terms' 600 a minute, 5,000 an hour and 10,000 a
+         * day (and so 300,000 a month). A minute holds one whole area (256 sea and 256 wind calls).
+         */
+        const val TOTAL_MINUTE_CAP = 540
+        const val TOTAL_HOUR_CAP = 4_200
+        const val TOTAL_HOUR_AUTO_CAP = 2_400
+        const val TOTAL_DAY_CAP = 9_000
+        const val TOTAL_DAY_AUTO_CAP = 6_000
         /** A limit the service named is asked about again at least this often. */
         const val HOUR_RETRY_MS = 20 * MINUTE_MS
         const val DAY_RETRY_MS = 2 * HOUR_MS

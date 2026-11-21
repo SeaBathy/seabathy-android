@@ -177,7 +177,10 @@ class ConditionsTest {
     @Test
     fun `flow lines follow the map layer unless set`() {
         assertEquals(ArrowChoice.WIND, ArrowChoice.SAME.resolve(ColourChoice.WIND))
-        assertEquals(ArrowChoice.CURRENT, ArrowChoice.SAME.resolve(ColourChoice.SEA_TEMP_SATELLITE))
+        assertEquals(ArrowChoice.NONE, ArrowChoice.SAME.resolve(ColourChoice.SEA_TEMP_SATELLITE))
+        assertEquals(ArrowChoice.NONE, ArrowChoice.SAME.resolve(ColourChoice.CHLOROPHYLL))
+        assertEquals(ArrowChoice.CURRENT, ArrowChoice.SAME.resolve(ColourChoice.SEA_TEMP_FORECAST))
+        assertEquals(ArrowChoice.CURRENT, ArrowChoice.SAME.resolve(ColourChoice.CURRENT))
         assertEquals(ArrowChoice.SWELL, ArrowChoice.SAME.resolve(ColourChoice.SWELL))
         assertEquals(ArrowChoice.WIND, ArrowChoice.WIND.resolve(ColourChoice.CURRENT))
         assertNull(ArrowChoice.SAME.fields)

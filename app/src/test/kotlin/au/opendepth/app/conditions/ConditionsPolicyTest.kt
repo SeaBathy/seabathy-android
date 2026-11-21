@@ -33,9 +33,48 @@ class ConditionsPolicyTest {
         // With the service saying "nothing newer", it still isn't left for more than a day.
         assertFalse(ConditionsPolicy.needsUpdate(now - 23 * hour, now - 30 * hour, now))
         assertTrue(ConditionsPolicy.needsUpdate(now - 25 * hour, now - 30 * hour, now))
-        // Run unknown (status couldn't be read): only by age.
-        assertFalse(ConditionsPolicy.needsUpdate(now - 11 * hour, null, now))
-        assertTrue(ConditionsPolicy.needsUpdate(now - 13 * hour, null, now))
+        // Run unknown (status couldn't be read): only by age, six hours as the spot's downloads go.
+        assertFalse(ConditionsPolicy.needsUpdate(now - 5 * hour, null, now))
+        assertTrue(ConditionsPolicy.needsUpdate(now - 7 * hour, null, now))
+    }
+
+    @Test
+    fun `the dot turns red exactly when the app would download by itself`() {
+        val minute = 60_000L
+        val grid = GeoGrid(doubleArrayOf(-21.0, -19.0), doubleArrayOf(149.0, 151.0))
+        fun saved(fetched: Long, end: Long, source: Int) =
+            ConditionsArea(ConditionsFeature.SPOT_ID, "spot", -21.0, 149.0, -19.0, 151.0, fetched,
+                ForecastGrid(grid, longArrayOf(fetched, end), emptyMap()), emptyMap(), source = source)
+        val ages = listOf(-20 * minute, 0L, 5 * minute, 11 * minute, 59 * minute, 2 * hour, 3 * hour, 5 * hour, 7 * hour, 13 * hour, 25 * hour)
+        val left = listOf(-hour, 2 * hour, 11 * hour, 13 * hour, 48 * hour)
+        val runs = listOf<Long?>(null, now - 30 * hour, now - hour)
+        val sources = listOf(ConditionsArea.SOURCE_MAIN, ConditionsArea.SOURCE_BACKUP, ConditionsArea.SOURCE_BACKUP_WIND)
+        var checked = 0
+        for (age in ages) for (end in left) for (run in runs) for (source in sources) {
+            val a = saved(now - age, now + end, source)
+            val dot = ConditionsPolicy.freshness(a, run, now, downloading = false, runSeenMillis = null)
+            // The boat in the middle of its area: only the forecast's age, end, runs and source count.
+            val download = SpotRules.needs(-20.0 to 150.0, a, -20.0 to 150.0, run, now, null)
+            assertEquals("age $age, left $end, run $run, source $source", download != null, dot == ConditionsPolicy.Freshness.OUT_OF_DATE)
+            checked++
+        }
+        assertEquals(ages.size * left.size * runs.size * sources.size, checked)
+
+        fun dot(age: Long, end: Long, run: Long?, source: Int = ConditionsArea.SOURCE_MAIN) =
+            ConditionsPolicy.freshness(saved(now - age, now + end, source), run, now, downloading = false, runSeenMillis = null)
+        // No word on new runs: red at six hours, as the downloads go (it waited for twelve before).
+        assertEquals(ConditionsPolicy.Freshness.CURRENT, dot(5 * hour, 48 * hour, null))
+        assertEquals(ConditionsPolicy.Freshness.OUT_OF_DATE, dot(7 * hour, 48 * hour, null))
+        // Running out: under twelve hours left, as the downloads go (it waited for six before).
+        assertEquals(ConditionsPolicy.Freshness.OUT_OF_DATE, dot(2 * hour, 11 * hour, now - 30 * hour))
+        assertEquals(ConditionsPolicy.Freshness.CURRENT, dot(2 * hour, 13 * hour, now - 30 * hour))
+        // The backup's forecast or wind on show: red once the main one would be tried again.
+        assertEquals(ConditionsPolicy.Freshness.CURRENT, dot(5 * minute, 48 * hour, now - 30 * hour, ConditionsArea.SOURCE_BACKUP_WIND))
+        assertEquals(ConditionsPolicy.Freshness.OUT_OF_DATE, dot(11 * minute, 48 * hour, now - 30 * hour, ConditionsArea.SOURCE_BACKUP_WIND))
+        assertEquals(ConditionsPolicy.Freshness.OUT_OF_DATE, dot(11 * minute, 48 * hour, now - 30 * hour, ConditionsArea.SOURCE_BACKUP))
+        // Downloading this area: amber, whatever else.
+        assertEquals(ConditionsPolicy.Freshness.UPDATING,
+            ConditionsPolicy.freshness(saved(now - 7 * hour, now + 48 * hour, ConditionsArea.SOURCE_MAIN), null, now, downloading = true, runSeenMillis = null))
     }
 
     @Test
@@ -97,9 +136,10 @@ class ConditionsPolicyTest {
             "waves" to """{"last_run_availability_time":3000}""",
             "wind" to "not json"
         )
-        var asked = 0
+        // Counted from the client's threads: the status files are asked side by side.
+        val asked = java.util.concurrent.atomic.AtomicInteger()
         val client = ConditionsClient(http = { url ->
-            asked++
+            asked.incrementAndGet()
             when {
                 "currents" in url -> bodies.getValue("currents")
                 "meteofrance_wave" in url -> bodies.getValue("waves")
@@ -107,6 +147,6 @@ class ConditionsPolicyTest {
             }
         })
         assertEquals(3_000_000L, client.latestRunMillis())
-        assertEquals(5, asked)
+        assertEquals(5, asked.get())
     }
 }

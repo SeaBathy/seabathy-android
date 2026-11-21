@@ -50,13 +50,20 @@ class WeatherEngineTest {
         var coastLng = -1000.0
         /** The hours ahead of now the service gives, whatever was asked (null: what was asked). */
         var hoursAhead: Int? = null
+        /** The whole forecast comes with the backup's wind, as the app's does when the main service's wind fails. */
+        var backupWind = false
+        /** Which area the engine said it was downloading the forecast of, as each request came. */
+        val workingAtForecast = mutableListOf<String?>()
+        val workingAtSea = mutableListOf<String?>()
+        val workingAtSatellite = mutableListOf<String?>()
 
         override fun forecast(south: Double, west: Double, north: Double, east: Double, days: Int, userAsked: Boolean, keepSea: ForecastGrid?, onProgress: (Double) -> Unit): ForecastGrid {
             forecasts++
+            workingAtForecast += engine.workingOnId
             fail?.let { throw it() }
             if (keepSea != null) windOnlyFail?.let { throw it() }
             val fresh = answer(south, west, north, east, hoursAhead ?: (days * 24 + 1))
-            if (keepSea == null) return fresh
+            if (keepSea == null) return if (backupWind) ForecastGrid(fresh.grid, fresh.times, fresh.fields, windFromBackup = true) else fresh
             // As the app's does: the wind alone, laid over the sea values kept, to their last hour.
             windOnly++
             return fresh.withSeaFrom(keepSea)
@@ -81,6 +88,7 @@ class WeatherEngineTest {
 
         override fun satellite(kind: SatelliteKind, south: Double, west: Double, north: Double, east: Double, depthM: Int): SatelliteGrid {
             satellites++
+            workingAtSatellite += engine.workingOnId
             fail?.let { throw it() }
             satelliteFail?.invoke(kind)?.let { throw it }
             val grid = GeoGrid(doubleArrayOf(south, north), doubleArrayOf(west, east))
@@ -89,6 +97,7 @@ class WeatherEngineTest {
 
         override fun seaAt(points: List<Pair<Double, Double>>): List<Pair<Double, Double>?> {
             seaQueries++
+            workingAtSea += engine.workingOnId
             return points.map { if (it.second > coastLng) it else null }
         }
 
@@ -637,6 +646,97 @@ class WeatherEngineTest {
         online = true
         assertNull(engine.evaluate(userAsked = true))
         assertNotNull(engine.spotArea)
+    }
+
+    /** The spot downloaded with the backup's wind (the main service's wind failed), nothing newer out for the sea. */
+    private fun spotWithBackupWind(): ConditionsArea {
+        net.hoursAhead = 2 * 24 + 13
+        net.run = now - hour
+        engine.checkRun(force = true)
+        net.backupWind = true
+        engine.setSpot(atSea)
+        net.backupWind = false
+        assertEquals(1, net.forecasts)
+        return engine.spotArea!!
+    }
+
+    @Test
+    fun theBackupsWindIsSavedAsSuchNotPassedOffAsTheMainForecast() {
+        val a = spotWithBackupWind()
+        assertTrue(a.windFromBackup)
+        assertFalse(a.isBackup)
+        // In the file too, so it's known after a restart.
+        assertTrue(ConditionsStore(dir).load(ConditionsFeature.SPOT_ID)!!.windFromBackup)
+        // The user is told, and the engine means to try the usual wind again.
+        assertTrue(said.last().toString(), said.last().any { "backup's" in it })
+        val waiting = engine.state as WeatherState.Waiting
+        assertTrue(waiting.reason, "backup wind" in waiting.reason)
+        // Asked for by hand with no newer run out: not "already the latest". The usual wind is
+        // fetched, alone, over the sea values that are still the newest.
+        advance(2 * 60_000L)
+        assertNull(engine.evaluate(userAsked = true))
+        assertEquals(2, net.forecasts)
+        assertEquals(1, net.windOnly)
+        assertFalse(latestFlags.last())
+        assertFalse(engine.spotArea!!.windFromBackup)
+        assertEquals(WeatherState.Idle, engine.state)
+        // Now it is the latest: asked again, nothing is downloaded.
+        advance(20 * 60_000L)
+        assertNull(engine.evaluate(userAsked = true))
+        assertEquals(2, net.forecasts)
+        assertTrue(latestFlags.last())
+    }
+
+    @Test
+    fun withTheBackupsWindOnShowTheUsualWindIsTriedAgainBeforeLong() {
+        spotWithBackupWind()
+        // A few minutes: left alone.
+        repeat(30) { advance(10_000L); engine.setSpot(atSea) }
+        assertEquals(1, net.forecasts)
+        // Then the wind alone, by itself; and once it's in, quiet.
+        sail(2)
+        assertEquals(2, net.forecasts)
+        assertEquals(1, net.windOnly)
+        assertFalse(engine.spotArea!!.windFromBackup)
+        assertEquals(WeatherState.Idle, engine.state)
+    }
+
+    @Test
+    fun aWindThatStillFailsDoesNotDownloadTheSameSeaForecastAgain() {
+        val a = spotWithBackupWind()
+        net.windOnlyFail = { IOException("the wind service is down") }
+        advance(11 * 60_000L)
+        engine.setSpot(atSea)
+        // The wind alone was tried; not the whole forecast, whose sea values would be the same.
+        assertEquals(2, net.forecasts)
+        assertEquals(0, net.windOnly)
+        assertEquals(a.fetchedMillis, engine.spotArea!!.fetchedMillis)
+        assertTrue(engine.spotArea!!.windFromBackup)
+        assertTrue((engine.state as WeatherState.Waiting).reason.contains("backup wind"))
+        // And it's tried no oftener than the backup's rules allow.
+        sail(1)
+        assertTrue("${net.forecasts} tries in an hour", net.forecasts <= 2 + WeatherEngine.MAX_AUTO_PER_HOUR)
+    }
+
+    @Test
+    fun onlyTheAreaWhoseForecastIsDownloadingShowsUpdating() {
+        engine.setSpot(atSea)
+        // While the spot's sea was looked for and its forecast came: the spot's, no other's.
+        assertTrue(net.workingAtSea.isNotEmpty() && net.workingAtSea.all { it == ConditionsFeature.SPOT_ID })
+        assertEquals(listOf<String?>(ConditionsFeature.SPOT_ID), net.workingAtForecast)
+        // While its pictures followed, the forecast saved: nobody's.
+        assertTrue(net.workingAtSatellite.isNotEmpty() && net.workingAtSatellite.all { it == null })
+        assertFalse(engine.isWorkingOn(ConditionsFeature.SPOT_ID))
+        // Another area: its own id while its forecast comes, not the spot's.
+        assertNull(engine.downloadArea(-30.0, 150.0, -29.0, 151.0, "other", userAsked = true))
+        assertEquals("other", net.workingAtForecast.last())
+        // The temperature at depth for the spot: not its forecast, so not "Updating".
+        net.workingAtSatellite.clear()
+        settings = settings.copy(depthM = 50)
+        engine.downloadDepth(ConditionsFeature.SPOT_ID)
+        assertEquals(listOf<String?>(null), net.workingAtSatellite)
+        assertNull(engine.workingOnId)
+        assertFalse(engine.isWorkingOn("other"))
     }
 
     @Test

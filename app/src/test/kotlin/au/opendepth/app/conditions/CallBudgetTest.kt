@@ -142,6 +142,99 @@ class CallBudgetTest {
         assertEquals(0L, later.blockedUntilMillis)
     }
 
+    /** A whole area as the app downloads it: 256 sea and 256 wind calls in requests of 48, each waiting for room. */
+    private fun bothServices(): Long {
+        var waited = 0L
+        for (api in listOf(CallBudget.MARINE, CallBudget.WEATHER)) {
+            var left = 256
+            while (left > 0) {
+                val calls = minOf(48, left)
+                var wait = budget.reserve(calls, api)
+                while (wait > 0) {
+                    now += wait
+                    waited += wait
+                    wait = budget.reserve(calls, api)
+                }
+                left -= calls
+            }
+        }
+        return waited
+    }
+
+    private val area = mapOf(CallBudget.MARINE to 256, CallBudget.WEATHER to 256)
+
+    @Test
+    fun `both services together stay under the free day's limit`() {
+        var automatic = 0
+        while (limitOf { budget.check(area, userAsked = false) } == null) {
+            bothServices()
+            automatic++
+            now += 30 * minute
+        }
+        // Each service alone would have let twice as many through: 12,000 a day between them.
+        assertTrue("$automatic automatic downloads", automatic in 6..CallBudget.TOTAL_DAY_AUTO_CAP / 512)
+        assertTrue(budget.usedTotal(CallBudget.DAY_MS) <= CallBudget.TOTAL_DAY_AUTO_CAP)
+        // The user's own taps still go, up to the total cap and no further.
+        assertEquals(null, limitOf { budget.check(area, userAsked = true) })
+        while (limitOf { budget.check(area, userAsked = true) } == null) {
+            bothServices()
+            now += 30 * minute
+        }
+        assertTrue(budget.usedTotal(CallBudget.DAY_MS) <= CallBudget.TOTAL_DAY_CAP)
+        assertTrue(budget.usedTotal(CallBudget.DAY_MS) < 10_000)
+    }
+
+    @Test
+    fun `a download that fits each service's share but not both together is not started`() {
+        // Spent on the sea service (tides count there too), within its own share.
+        repeat(57) {
+            budget.count(100, CallBudget.MARINE)
+            now += 10 * minute
+        }
+        assertEquals(null, limitOf { budget.check(256, userAsked = false, api = CallBudget.MARINE) })
+        assertEquals(null, limitOf { budget.check(256, userAsked = false, api = CallBudget.WEATHER) })
+        // Both at once: 5,700 + 512 is past the automatic total.
+        val refused = limitOf { budget.check(area, userAsked = false) }
+        assertTrue(refused != null && refused.untilMillis > now)
+        // The user's tap has the rest of the day's total.
+        assertEquals(null, limitOf { budget.check(area, userAsked = true) })
+    }
+
+    @Test
+    fun `the hour's total over both services is kept too`() {
+        while (limitOf { budget.check(area, userAsked = false) } == null) {
+            bothServices()
+            now += 2 * minute
+        }
+        assertTrue(budget.usedTotal(hour) <= CallBudget.TOTAL_HOUR_AUTO_CAP)
+        val until = limitOf { budget.check(area, userAsked = false) }!!.untilMillis
+        assertTrue(until > now && until <= now + hour + minute)
+    }
+
+    @Test
+    fun `a minute holds one whole area over both services and no more`() {
+        assertEquals(0L, bothServices())
+        assertEquals(512, budget.usedTotal(minute))
+        // The sea service alone has room in its own minute, but both together don't.
+        assertTrue(budget.used(minute, CallBudget.MARINE) + 48 <= CallBudget.MINUTE_CAP)
+        assertTrue(budget.reserve(48, CallBudget.MARINE) > 0)
+        // Areas back to back never pass the free 600 a minute between them.
+        var most = 0
+        repeat(3) {
+            bothServices()
+            most = maxOf(most, budget.usedTotal(minute))
+        }
+        assertTrue("$most in a minute", most <= CallBudget.TOTAL_MINUTE_CAP)
+    }
+
+    @Test
+    fun `the total caps sit under the free terms' limits`() {
+        assertTrue(CallBudget.TOTAL_MINUTE_CAP < 600 && CallBudget.TOTAL_HOUR_CAP < 5_000 && CallBudget.TOTAL_DAY_CAP < 10_000)
+        assertTrue(CallBudget.TOTAL_HOUR_AUTO_CAP < CallBudget.TOTAL_HOUR_CAP && CallBudget.TOTAL_DAY_AUTO_CAP < CallBudget.TOTAL_DAY_CAP)
+        // A whole area (256 sea and 256 wind) still goes in one minute.
+        assertTrue(CallBudget.TOTAL_MINUTE_CAP >= 512)
+    }
+
     @Test
     fun `a saved count that makes no sense is ignored`() {
         budget.restore("rubbish")

@@ -255,8 +255,12 @@ class ConditionsFeature(
     private var drawJob: Job? = null
     /** A download is under way (the engine's). */
     private val downloading: Boolean get() = engine.busy
-    /** What's downloading now, for the settings sheet. */
-    private val status: String? get() = (engine.state as? WeatherState.Working)?.what
+    /** What's downloading now, or why a download waits (the free limit, a retry), for the settings sheet. */
+    private val status: String? get() = when (val st = engine.state) {
+        is WeatherState.Working -> st.what
+        is WeatherState.Waiting -> st.reason.replaceFirstChar { it.uppercase() }
+        else -> null
+    }
     private var dialog: Dialog? = null
     private var dialogBody: LinearLayout? = null
     private var cameraListening = false
@@ -471,7 +475,19 @@ class ConditionsFeature(
             view.background = if (on) activity.roundedBackground(0x3319C6B3, palette.accent, 8) else null
             text.setTextColor(if (on) palette.accent else palette.primaryText)
         }
+
+        /** What the picture shows: the arrow, or a sun or moon by its [SkyIcon.key]. */
+        private var iconKey: String? = null
+
+        fun showIcon(icon: SkyIcon?) {
+            val key = icon?.key ?: ARROW_ICON
+            if (key == iconKey) return
+            iconKey = key
+            if (icon == null) arrow.setImageBitmap(arrowImage) else arrow.setImageDrawable(icon.drawable(activity.dp(18)))
+        }
     }
+
+    private val arrowImage: Bitmap by lazy { arrowBitmap() }
 
     /**
      * The box's line was tapped: show that on the map, from the area [from]
@@ -534,7 +550,7 @@ class ConditionsFeature(
             marginStart = activity.dp(8)
             marginEnd = activity.dp(8)
         })
-        boxRows.forEach { it.arrow.setImageBitmap(arrowBitmap()) }
+        boxRows.forEach { it.showIcon(null) }
         // Sit above the route, measure or hint card when one is up, rather than behind it.
         root.viewTreeObserver.addOnGlobalLayoutListener {
             val rootHeight = root.height
@@ -585,7 +601,7 @@ class ConditionsFeature(
         var list = if (a != null) values(a, lat, lng, now, format) else skyValues(lat, lng, now)
         // The satellite layers are of today: not for an older photo.
         if (!withSatellite) list = list.filter { it.row !in SATELLITE_ROWS }
-        return list.map { it.text }
+        return list.map { it.spoken }
     }
 
     /** A GPS fix: the spot follows it when set to. */
@@ -727,10 +743,11 @@ class ConditionsFeature(
         if (!shown) return emptyList()
         val sources = buildList {
             val f = a.forecast
-            // The main service: all of the forecast, or under the backup its wind alone (the one with gusts).
+            // The main service: all of the forecast, its sea alone under the backup's wind, or under the backup its wind alone (the one with gusts).
             if (f != null && (!a.isBackup || f.has(ForecastField.GUST))) add("Open-Meteo (CC BY 4.0): Copernicus Marine, Météo-France, ECMWF, DWD, NOAA")
-            // The backup forecast, or its wind standing in for the main one's (it has no gusts).
-            if (f != null && (a.isBackup || (f.has(ForecastField.WIND_U) && !f.has(ForecastField.GUST)))) add("NOAA GFS and WaveWatch III (PacIOOS)")
+            // The backup forecast, or its wind standing in for the main one's.
+            if (f != null && a.isBackup) add("NOAA GFS and WaveWatch III (PacIOOS)")
+            else if (f != null && a.windFromBackup) add("NOAA GFS (PacIOOS)")
             if (a.satellites.keys.any { it != SatelliteKind.TEMP_BELOW }) add("NOAA CoastWatch")
             if (SatelliteKind.SEA_TEMP in a.satellites) add("NASA JPL MUR")
             if (SatelliteKind.SEA_LEVEL in a.satellites || SatelliteKind.CHLOROPHYLL in a.satellites) add("contains modified Copernicus Sentinel data")
@@ -825,7 +842,7 @@ class ConditionsFeature(
                     }
                 }
             }
-            val arrowJson = if (directionStyle.arrows) withContext(work) { arrowGeoJson(a, arrowChoice, time) } else MapLayerIds.EMPTY_GEOJSON
+            val arrowJson = if (directionStyle.arrows) withContext(work) { arrowGeoJson(a, arrowChoice, time, region) } else MapLayerIds.EMPTY_GEOJSON
             // The lines don't change with the forecast time: worked out once per area and settings.
             val linesKey = "${a.id}:${a.fetchedMillis}:$choice:$contourKey"
             val contourJson = contourCache?.takeIf { it.first == linesKey }?.second ?: withContext(work) {
@@ -1144,7 +1161,9 @@ class ConditionsFeature(
             ArrowChoice.SWELL -> ForecastField.SWELL_HEIGHT
             else -> null
         }
-        val key = "${a.id}:${a.fetchedMillis}:$choice:$time"
+        // Following the clock, worked out afresh every 10 minutes (the forecast is hourly), not on every redraw.
+        val at = if (live) time / PICTURE_STEP_MS * PICTURE_STEP_MS else time
+        val key = "${a.id}:${a.fetchedMillis}:$choice:$at"
         if (key == flowGridKey) return
         flowGridKey = key
         flowGridJob?.cancel()
@@ -1157,13 +1176,13 @@ class ConditionsFeature(
                 val masked = sea != null || a.satellites.containsKey(SatelliteKind.SEA_TEMP)
                 FlowGrid.build(a.south, a.west, a.north, a.east, FLOW_GRID_SIDE) { lat, lng, out ->
                     if ((sea?.isSea(lat, lng) ?: a.isSea(lat, lng)) == false) return@build false
-                    val east = f.sample(u, lat, lng, time, coastal = masked)
-                    val north = f.sample(v, lat, lng, time, coastal = masked)
+                    val east = f.sample(u, lat, lng, at, coastal = masked)
+                    val north = f.sample(v, lat, lng, at, coastal = masked)
                     if (east.isNaN() || north.isNaN()) return@build false
                     // Waves and swell store a direction only: their height sets the speed.
                     var scale = 1f
                     if (heightField != null) {
-                        scale = f.sample(heightField, lat, lng, time, coastal = masked)
+                        scale = f.sample(heightField, lat, lng, at, coastal = masked)
                         if (scale.isNaN()) return@build false
                     }
                     out[0] = east.toDouble() * scale
@@ -1186,17 +1205,25 @@ class ConditionsFeature(
     private var flowGridKey: String? = null
     private var flowGridJob: kotlinx.coroutines.Job? = null
 
-    private fun arrowGeoJson(a: ConditionsArea, choice: ArrowChoice, time: Long): String {
+    /** About a dozen arrows across [region] (the part of the area being drawn), each where there's flow at [time]. */
+    private fun arrowGeoJson(a: ConditionsArea, choice: ArrowChoice, time: Long, region: DoubleArray): String {
         val f = a.forecast ?: return MapLayerIds.EMPTY_GEOJSON
         val (u, v) = choice.fields ?: return MapLayerIds.EMPTY_GEOJSON
         val reference = choice.reference
         val sb = StringBuilder("""{"type":"FeatureCollection","features":[""")
         var first = true
-        // No more than about a dozen arrows across: the flow lines show the detail.
-        val stride = max(1, (max(f.grid.rows, f.grid.cols) + MAX_ARROWS_PER_SIDE - 1) / MAX_ARROWS_PER_SIDE)
-        for (r in 0 until f.grid.rows step stride) for (c in 0 until f.grid.cols step stride) {
-            val lat = f.grid.lats[r]
-            val lng = f.grid.lngs[c]
+        // Evenly over what's drawn, not on the forecast's own points: zoomed in, those can all be off the screen.
+        // No more than about a dozen across: the flow lines show the detail.
+        val kmLng = KM_PER_DEGREE * max(0.01, kotlin.math.cos(Math.toRadians((region[0] + region[2]) / 2)))
+        val tallKm = (region[2] - region[0]) * KM_PER_DEGREE
+        val wideKm = (region[3] - region[1]) * kmLng
+        val spacingKm = max(tallKm, wideKm) / MAX_ARROWS_PER_SIDE
+        if (spacingKm <= 0) return MapLayerIds.EMPTY_GEOJSON
+        val rows = max(1, (tallKm / spacingKm).roundToInt())
+        val cols = max(1, (wideKm / spacingKm).roundToInt())
+        for (r in 0 until rows) for (c in 0 until cols) {
+            val lat = region[0] + (r + 0.5) * (region[2] - region[0]) / rows
+            val lng = region[1] + (c + 0.5) * (region[3] - region[1]) / cols
             if (seaAt(a, lat, lng) == false) continue
             val flow = f.vector(u, v, lat, lng, time) ?: continue
             val strength = when (choice) {
@@ -1218,8 +1245,13 @@ class ConditionsFeature(
     private fun refreshCard(a: ConditionsArea) {
         card.visibility = View.VISIBLE
         val forecast = a.forecast
-        val time = timeMillis
         val usesForecast = (colour.forecast || (directionStyle != DirectionStyle.NONE && flow != ArrowChoice.NONE)) && forecast != null
+        // No slider with this layer: back to the time now, not an hour picked earlier that couldn't be changed here.
+        if (!usesForecast && !live) {
+            setPlaying(false)
+            live = true
+        }
+        val time = timeMillis
         // "Wind speed", not "Wind speed · wind flow": the lines are the layer's own.
         val ownFlow = colour in OWN_FLOW && flow == ArrowChoice.SAME.resolve(colour)
         val layerName = if (colour == ColourChoice.TEMP_BELOW) "Temperature ${NavFormat(units()).depth(a.belowDepthM.toDouble())} down (model)" else colour.label
@@ -1230,11 +1262,18 @@ class ConditionsFeature(
         val satellite = colour.satellite?.let { a.satellites[it] }
         val source = if (colour == ColourChoice.TEMP_BELOW) "model" else "satellite"
         val whenText = when {
-            colour.satellite != null && satellite == null -> "No ${colour.satellite?.label?.lowercase(Locale.US)} saved here: update the area"
+            colour.satellite != null && satellite == null ->
+                if (withSatellite) "No ${colour.satellite?.label?.lowercase(Locale.US)} saved here: update the area"
+                else "Satellite sea maps are off: turn them on in ⚙, then update"
             colour.forecast && forecast == null -> "No forecast saved for this area"
             usesForecast && time > forecast.endMillis + ForecastGrid.HOUR_MS -> "The forecast ran out ${day(forecast.endMillis)}: update it"
             usesForecast -> clock(time) + (if (live) " (now)" else "") + (satellite?.let { " · $source ${day(it.dateMillis)}" } ?: "")
-            satellite != null -> "$source, ${day(satellite.dateMillis)}"
+            satellite != null -> if (colour == ColourChoice.TEMP_BELOW) "Ocean model's estimate for ${day(satellite.dateMillis)}"
+                else when (colour.satellite) {
+                    SatelliteKind.SEA_TEMP -> "Satellite map for ${day(satellite.dateMillis)} (whole-day average)"
+                    SatelliteKind.CHLOROPHYLL -> "Satellite map of the 5 days to ${day(satellite.dateMillis)}"
+                    else -> "Satellite map for ${day(satellite.dateMillis)}"
+                }
             else -> ""
         }
         title.text = if (whenText.isEmpty()) "$what — ${a.name}" else "$what\n$whenText"
@@ -1352,7 +1391,7 @@ class ConditionsFeature(
         // with values to show.
         val hasSea = { a: ConditionsArea, lat: Double, lng: Double ->
             val sea = coastline.isSea(lat, lng)
-            sea != false && values(a, lat, lng, time, format, sea).isNotEmpty()
+            sea != false && values(a, lat, lng, time, format, sea).any { it.row !in SKY_ROWS }
         }
         val boat = spot()
         // The map layer on, the crosshair over sea with data: everything there. Otherwise the boat (or
@@ -1408,11 +1447,16 @@ class ConditionsFeature(
             }
             row.view.visibility = View.VISIBLE
             row.text.text = value.text
-            row.view.contentDescription = value.text + if (layerOfRow(value.row, a) != null) ". Tap to show it on the map" else ""
             row.layer = layerOfRow(value.row, a)
+            row.view.contentDescription = value.spoken + if (row.layer != null) ". Tap to show it on the map" else ""
             row.from = a
-            row.highlight(shown && row.layer != null && (row.layer == colour || (colour == ColourChoice.CHLOROPHYLL && row.layer?.satellite != null)))
-            if (value.towardsDegrees == null) {
+            // The showing layer's own line (chlorophyll and the temperature breaks are the Sea line's).
+            row.highlight(shown && row.layer != null && value.row == rowNameOf(colour))
+            row.showIcon(value.icon)
+            if (value.icon != null) {
+                row.arrow.visibility = View.VISIBLE
+                row.arrow.rotation = 0f
+            } else if (value.towardsDegrees == null) {
                 row.arrow.visibility = View.INVISIBLE
             } else {
                 row.arrow.visibility = View.VISIBLE
@@ -1565,12 +1609,17 @@ class ConditionsFeature(
     private fun showWarning(view: TextView, a: ConditionsArea) {
         val note = listOfNotNull(
             when {
+                // The sea forecast is the usual one; the wind is the backup's.
+                a.windFromBackup -> "Backup wind: coarser, with no gusts"
                 !a.isBackup -> null
                 // The wind is the usual one; the waves are the backup's.
                 a.forecast?.has(ForecastField.GUST) == true -> "Backup waves and swell: coarser, and no currents"
                 else -> "Backup forecast: coarser, with no gusts or currents"
             },
-            staleNote(a.fetchedMillis, System.currentTimeMillis(), online())
+            staleNote(a.fetchedMillis, System.currentTimeMillis(), online()),
+            // Why the spot's update waits (the free limit, a failed download) while its saved data shows.
+            (engine.state as? WeatherState.Waiting)?.takeIf { it.untilMillis > 0 && a.id == SPOT_ID && !a.wantsMainAgain && online() }
+                ?.reason?.replaceFirstChar { it.uppercase() }
         ).joinToString("\n").ifEmpty { null }
         view.text = note.orEmpty()
         view.visibility = if (note == null) View.GONE else View.VISIBLE
@@ -1620,7 +1669,12 @@ class ConditionsFeature(
         "Current" -> ColourChoice.CURRENT
         "Waves" -> ColourChoice.WAVES
         "Swell" -> ColourChoice.SWELL
-        "Sea" -> if (SatelliteKind.SEA_TEMP in a.satellites) ColourChoice.SEA_TEMP_SATELLITE else ColourChoice.SEA_TEMP_FORECAST
+        "Sea" -> when {
+            SatelliteKind.SEA_TEMP in a.satellites -> ColourChoice.SEA_TEMP_SATELLITE
+            a.forecast?.has(ForecastField.SEA_TEMP) == true -> ColourChoice.SEA_TEMP_FORECAST
+            SatelliteKind.CHLOROPHYLL in a.satellites -> ColourChoice.CHLOROPHYLL
+            else -> null
+        }
         // Keeps the layer showing when it's one of this line's.
         "Depth" -> ColourChoice.TEMP_BELOW
         "Water" -> if (rowNameOf(colour) == "Water" && a.satellites[colour.satellite] != null) colour else when {
@@ -1635,7 +1689,7 @@ class ConditionsFeature(
      * it's older than the update interval, or the spot has moved out of its middle.
      */
     private fun freshnessOf(a: ConditionsArea): ConditionsPolicy.Freshness = ConditionsPolicy.freshness(
-        a.fetchedMillis, a.forecast?.endMillis, engine.latestRun, System.currentTimeMillis(), engine.busy, engine.runSeen(a.id)
+        a, engine.latestRun, System.currentTimeMillis(), engine.isWorkingOn(a.id), engine.runSeen(a.id)
     )
 
     /** The box's dot for [a]: green, amber or red; hidden with nothing on show. */
@@ -1904,6 +1958,17 @@ class ConditionsFeature(
                 "the phone, so it works offline."
         )
         part(
+            "SATELLITE MAPS",
+            "Sea temperature, its breaks, chlorophyll, sea level and salinity are measured by satellites: one picture a day, " +
+                "usually 2 to 5 days old by the time it's published. They don't change with the forecast, so the time slider is hidden while " +
+                "one shows; the card says which day it is of. Temperature at depth is an ocean model's estimate for today."
+        )
+        part(
+            "DIRECTION",
+            "The moving lines and arrows show where the wind or water is going. The values box says where the wind and " +
+                "waves come from, as marine forecasts do."
+        )
+        part(
             "THE FREE LIMIT",
             "The free service allows each internet connection a set number of requests a day. Normal use takes a small " +
                 "part of it. If it's ever reached, a backup forecast from NOAA (coarser, and without currents) fills in " +
@@ -1981,12 +2046,12 @@ class ConditionsFeature(
 
         body.addView(panels.sectionHeader("GOOD MEANS"))
         panels.addRow(body, panels.row("Wind at most", u.wind.format(r.windMaxKn)) {
-            val choices = listOf(5.0, 8.0, 10.0, 12.0, 15.0, 18.0, 20.0, 25.0)
-            panels.showChoicePanel("Wind at most", choices.map { u.wind.format(it) }, choices.indexOf(r.windMaxKn)) { i -> update(r.copy(windMaxKn = choices[i])) }
+            val choices = if (u.wind == SeaSpeedUnit.BEAUFORT) BEAUFORT_WIND_LIMITS else listOf(5.0, 8.0, 10.0, 12.0, 15.0, 18.0, 20.0, 25.0)
+            panels.showChoicePanel("Wind at most", choices.map { u.wind.format(it) }, tick(choices, r.windMaxKn, u)) { i -> update(r.copy(windMaxKn = choices[i])) }
         })
         panels.addRow(body, panels.row("Gusts at most", if (r.gustMaxKn > 0) u.wind.format(r.gustMaxKn) else "Any") {
-            val choices = listOf(0.0, 10.0, 12.0, 15.0, 18.0, 20.0, 25.0, 30.0)
-            panels.showChoicePanel("Gusts at most", choices.map { if (it > 0) u.wind.format(it) else "Any (no gust limit)" }, choices.indexOf(r.gustMaxKn)) { i ->
+            val choices = listOf(0.0) + if (u.wind == SeaSpeedUnit.BEAUFORT) BEAUFORT_GUST_LIMITS else listOf(10.0, 12.0, 15.0, 18.0, 20.0, 25.0, 30.0)
+            panels.showChoicePanel("Gusts at most", choices.map { if (it > 0) u.wind.format(it) else "Any (no gust limit)" }, tick(choices, r.gustMaxKn, u)) { i ->
                 update(r.copy(gustMaxKn = choices[i]))
             }
         })
@@ -2053,14 +2118,14 @@ class ConditionsFeature(
                 val result = withContext(Dispatchers.IO) { runCatching { ConditionsAlerts.check(preferences, now) } }
                 val found = result.getOrNull()
                 when {
-                    result.isFailure -> callbacks.toast("Couldn't get the forecast: check the connection")
+                    result.isFailure -> callbacks.toast((result.exceptionOrNull() as? LimitReachedException)?.message ?: "Couldn't get the forecast: check the connection")
                     found == null -> callbacks.toast("Add a place first, or set a spot (Sea conditions → Spot)")
                     else -> {
                         // What's shown here counts as told, so the next notification brings only news.
                         ConditionsAlerts.remember(preferences, found.second)
                         val text = found.second.joinToString("\n\n") { (place, good) ->
                             place.name + "\n" + if (good.isEmpty()) "Nothing inside your limits in the next ${found.first.daysAhead} days"
-                            else good.joinToString("\n") { ConditionsAlerts.line(it) }
+                            else good.joinToString("\n") { ConditionsAlerts.line(it, u) }
                         }
                         panels.confirm("Good days coming up", text + "\n\nThe worst of the forecast across each place. Check it before you go.",
                             confirmLabel = "OK", destructive = false) {}
@@ -2069,7 +2134,9 @@ class ConditionsFeature(
             }
         })
         body.addView(panels.caption(
-            "Uses about ${6 * maxOf(1, r.places.size) * 2} small forecast requests a day. Always check the latest forecast and warnings.",
+            "The checks use about ${ConditionsAlerts.callsPerDay(r)} forecast calls a day (each point checked is one call " +
+                "for the sea and one for the wind). Saving the forecast when a day looks good costs about 500 calls more, " +
+                "at most once a day for each place. Always check the latest forecast and warnings.",
             topPaddingDp = 4
         ))
         alertsDialog?.dismiss()
@@ -2132,7 +2199,12 @@ class ConditionsFeature(
         callbacks.showArea(GeoBounds(west = b[1], south = b[0], east = b[3], north = b[2]))
         scope.launch {
             val summaries = withContext(work) { store.summaries() }
-            val newest = ConditionsPolicy.newestCovering(lat, lng, summaries)
+            // Of the copies saved in the last day, the one reaching furthest (the alert's own reaches its
+            // good days; My spot's may be newer but shorter); else the newest.
+            val now = System.currentTimeMillis()
+            val reaching = summaries.filter { lat in it.south..it.north && lng in it.west..it.east && now - it.fetchedMillis in 0..ALERT_COPY_FRESH_MS }
+                .maxWithOrNull(compareBy<ConditionsStore.Summary>({ it.forecastUntilMillis ?: 0L }, { it.fetchedMillis }))
+            val newest = reaching ?: ConditionsPolicy.newestCovering(lat, lng, summaries)
             val loaded = newest?.let { s -> withContext(work) { store.load(s.id) } }
             if (loaded != null) {
                 area = loaded
@@ -2148,6 +2220,11 @@ class ConditionsFeature(
     }
 
     private var alertsDialog: android.app.Dialog? = null
+
+    /** Which of the alert's speed [choices] (knots) is [saved]: in Beaufort, the one of the same force. */
+    private fun tick(choices: List<Double>, saved: Double, u: NavUnits): Int =
+        if (u.wind != SeaSpeedUnit.BEAUFORT || saved <= 0) choices.indexOf(saved)
+        else choices.indexOfFirst { it > 0 && SeaSpeedUnit.beaufort(it) == SeaSpeedUnit.beaufort(saved) }
 
     /** A wave height in the chosen unit: "1.5 m". */
     private fun wavesText(metres: Double): String {
@@ -2170,22 +2247,26 @@ class ConditionsFeature(
 
         val summaries = store.cachedSummaries().orEmpty()
         panels.addRow(body, panels.row("Show on the map", if (shown) colour.label else "Off") {
-            val choices = MAP_CHOICES
+            // The forecast's sea temperature isn't offered, but when the Sea line showed it, it's ticked as what shows.
+            val choices = if (shown && colour != ColourChoice.NONE && colour !in MAP_CHOICES) MAP_CHOICES + colour else MAP_CHOICES
             val labels = listOf("Off") + choices.map { it.label }
             panels.showChoicePanel("Show on the map", labels, if (shown) choices.indexOf(colour) + 1 else 0) { i ->
                 if (i == 0) {
                     setShown(false)
                 } else if (area == null && spotArea == null && summaries.isEmpty()) {
                     callbacks.toast("Nothing downloaded yet: tap Update now")
-                } else {
+                } else if (!(shown && colour == choices[i - 1])) {
+                    // Picking what already shows keeps it: only a box line's second tap hides it.
                     toggleLayer(choices[i - 1])
                 }
                 refreshDialog()
             }
         })
         body.addView(panels.caption(
-            "Or tap a line in the box on the chart. Each shows its own direction lines; sea temperature and chlorophyll " +
-                "show the current's. Temperature breaks are where warm and cold water meet, often where fish gather.",
+            "Or tap a line in the box on the chart. Wind, current, waves and swell are forecasts: the time slider steps " +
+                "through them, with moving lines for their direction. The satellite maps are one picture each, of the day the " +
+                "satellite saw (2 to 5 days ago), and temperature at depth is a model's for today: no slider with those. " +
+                "Temperature breaks are where warm and cold water meet, often where fish gather.",
             topPaddingDp = 0
         ))
 
@@ -2314,21 +2395,39 @@ class ConditionsFeature(
         panels.addRow(body, panels.row("Days of forecast to save", "${dayText(days)} (up to ${ConditionsClient.MAX_DAYS})") {
             val choices = listOf(1, 2, 3, 5, 7, 8)
             panels.showChoicePanel("Days of forecast", choices.map { dayText(it) }, choices.indexOf(days)) { i ->
+                val more = choices[i] > days
                 days = choices[i]
                 preferences.edit().putInt(KEY_DAYS, days).apply()
+                // Downloads use it from the next one: say how to get the extra days now.
+                if (more) callbacks.toast("Saved: tap Update now to get ${dayText(days)} straight away")
                 refreshDialog()
             }
         })
-        panels.addRow(body, panels.row("Satellite sea maps", if (withSatellite) "Yes: sea temp, temp breaks, chlorophyll, sea level, salinity (2 to 5 days old)" else "No: forecast only") {
+        panels.addRow(body, panels.row("Satellite sea maps", if (withSatellite) "Yes: sea temperature and breaks, chlorophyll, sea level, salinity (2 to 5 days old), and temperature at depth (model)" else "No: forecast only") {
             withSatellite = !withSatellite
             preferences.edit().putBoolean(KEY_SATELLITE, withSatellite).apply()
             refreshDialog()
         })
         status?.let { body.addView(panels.caption(it, topPaddingDp = 2)) }
-        body.addView(panels.caption(
-            "Forecast model points are about 8 km apart, so it's less accurate close to shore and in channels.",
-            topPaddingDp = 8
-        ))
+        body.addView(panels.caption(spacingNote(area ?: spotArea), topPaddingDp = 8))
+    }
+
+    /** How far apart the forecast's points are where it shows: My spot's wide block gets fewer than a small saved area. */
+    private fun spacingNote(a: ConditionsArea?): String {
+        val g = a?.forecast?.grid
+        val km = if (g != null && g.rows > 1 && g.cols > 1) {
+            val midLat = (g.lats.first() + g.lats.last()) / 2
+            val latKm = abs(g.lats[1] - g.lats[0]) * KM_PER_DEGREE
+            val lngKm = abs(g.lngs[1] - g.lngs[0]) * KM_PER_DEGREE * kotlin.math.cos(Math.toRadians(midLat))
+            (latKm + lngKm) / 2
+        } else null
+        val shore = "Forecasts are less accurate close to shore and in channels."
+        return when {
+            km == null -> "Forecast points are 9 to 30 km apart (closest in a small saved area), with the colours blended between them. $shore"
+            km < 12 -> "Forecast points here are about ${km.roundToInt()} km apart. $shore"
+            else -> "Forecast points here are about ${km.roundToInt()} km apart, with the colours blended between them; a saved area " +
+                "about 130 km across or smaller gets points about 9 km apart. $shore"
+        }
     }
 
     private fun temperatureRangeLabel(): String {
@@ -2459,12 +2558,13 @@ class ConditionsFeature(
             }
             for (line in Contours.lines(g, inside, EDDY_LEVELS_CM, minPoints = 4, rounding = 2)) {
                 val kind = (if (line.level > 0) "warm" else "cold") + if (light) "_light" else ""
-                lines += line to (kind to String.format(Locale.US, "%+.0f cm", line.level))
+                lines += line to (kind to NavFormat(u).seaLevel(line.level))
             }
             eddies = Contours.eddies(g, inside)
         }
         if (lines.isEmpty() && eddies.isEmpty()) return MapLayerIds.EMPTY_GEOJSON
-        return Contours.geoJson(lines, eddies)
+        val format = NavFormat(u)
+        return Contours.geoJson(lines, eddies) { format.seaLevel(it.valueCm) }
     }
 
     private fun installContourLayers(style: org.maplibre.android.maps.Style) {
@@ -2843,6 +2943,7 @@ class ConditionsFeature(
         }
 
         private fun hhmm(millis: Long?): String = if (millis == null) "—" else SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(millis))
+        private fun shortDay(millis: Long): String = SimpleDateFormat("d MMM", Locale.getDefault()).format(Date(millis))
 
         private const val IMAGE_LAYER = "conditions-image"
         private const val ARROW_SOURCE = "conditions-arrows-src"
@@ -2867,8 +2968,17 @@ class ConditionsFeature(
          */
         const val MAX_WIND_POINTS_PER_SIDE = MAX_POINTS_PER_SIDE
         private const val MAX_ARROWS_PER_SIDE = 12
+        private const val KM_PER_DEGREE = 111.2
+        /** A saved copy round an alert's place this new can be the one its notification opens. */
+        private const val ALERT_COPY_FRESH_MS = 24 * 3_600_000L
+        /** "At most force N" in knots: just under force N+1 (forces 2 to 6 for the wind, 3 to 7 for gusts). */
+        private val BEAUFORT_WIND_LIMITS = listOf(6.9, 10.9, 16.9, 21.9, 27.9)
+        private val BEAUFORT_GUST_LIMITS = listOf(10.9, 16.9, 21.9, 27.9, 33.9)
         private const val BOX_ROWS = 9
         private val SATELLITE_ROWS = setOf("Sea", "Depth", "Water")
+        /** Always there, wherever the point: not sea data. */
+        private val SKY_ROWS = setOf("Sun", "Moon")
+        private const val ARROW_ICON = "arrow"
         private val DAY_NAMES = listOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
         private val DAY_NAMES_LONG = listOf("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")
         private const val PLAY_STEP_MS = 650L
@@ -2986,7 +3096,15 @@ class ConditionsFeature(
          * One line of the values box: an arrow pointing [towardsDegrees] (none for null), its text, and which
          * [row] it is ("Wind", "Sea", "Depth", "Water"...), which picks the layer a tap on it shows.
          */
-        data class Value(val towardsDegrees: Double?, val text: String, val row: String = text.substringBefore(' '))
+        data class Value(
+            val towardsDegrees: Double?,
+            val text: String,
+            val row: String = text.substringBefore(' '),
+            /** A small picture in the arrow's place: the sun and moon lines'. */
+            val icon: SkyIcon? = null,
+            /** The line in full words, for screen readers and a photo's record (the sun and moon lines are short). */
+            val spoken: String = text
+        )
 
         /**
          * The values at a point and time, in the user's units. With satellite
@@ -3022,8 +3140,9 @@ class ConditionsFeature(
                 ?: a.satellites[SatelliteKind.SEA_TEMP]?.sample(lat, lng)
             val modelTemp = f?.sample(ForecastField.SEA_TEMP, lat, lng, time, masked)
             when {
-                satTemp != null && satTemp.isFinite() -> water += "Surface temp ${format.temperature(satTemp.toDouble())}"
-                modelTemp != null && modelTemp.isFinite() -> water += "Surface temp ${format.temperature(modelTemp.toDouble())}"
+                satTemp != null && satTemp.isFinite() -> water += "Surface temp ${format.temperature(satTemp.toDouble())}" +
+                    (a.satellites[SatelliteKind.SEA_TEMP]?.let { " (${shortDay(it.dateMillis)})" } ?: "")
+                modelTemp != null && modelTemp.isFinite() -> water += "Surface temp ${format.temperature(modelTemp.toDouble())} (forecast)"
             }
             a.satellites[SatelliteKind.CHLOROPHYLL]?.sample(lat, lng)?.takeIf { it.isFinite() && isSea != false }?.let {
                 water += String.format(Locale.US, if (it < 1) "chlorophyll %.2f mg/m³" else "chlorophyll %.1f mg/m³", it)
@@ -3051,13 +3170,20 @@ class ConditionsFeature(
         fun skyValues(lat: Double, lng: Double, time: Long): List<Value> {
             val out = mutableListOf<Value>()
             val sky = astroDay(lat, lng, time)
-            out += Value(null, "Sun up ${hhmm(sky.sunrise)} · down ${hhmm(sky.sunset)} · first light ${hhmm(sky.firstLight)}", "Sun")
+            // A small sun and the moon as it looks tonight start the lines, so the words can be few.
+            out += Value(
+                null, "${hhmm(sky.sunrise)} – ${hhmm(sky.sunset)} · first light ${hhmm(sky.firstLight)}", "Sun", SkyIcon.Sun,
+                spoken = "Sun up ${hhmm(sky.sunrise)} · down ${hhmm(sky.sunset)} · first light ${hhmm(sky.firstLight)}"
+            )
             val bites = buildList {
                 if (sky.majors.isNotEmpty()) add("major " + sky.majors.joinToString(", ") { hhmm(it) })
                 if (sky.minors.isNotEmpty()) add("minor " + sky.minors.joinToString(", ") { hhmm(it) })
             }
-            out += Value(null, "Moon ${(sky.illumination * 100).roundToInt()}% ${sky.phaseName}" +
-                if (bites.isEmpty()) "" else " · solunar ${bites.joinToString(" · ")}", "Moon")
+            val lit = "${(sky.illumination * 100).roundToInt()}%"
+            out += Value(
+                null, (listOf(lit) + bites).joinToString(" · "), "Moon", SkyIcon.Moon(sky.illumination, sky.waxing, south = lat < 0),
+                spoken = "Moon $lit ${sky.phaseName}" + if (bites.isEmpty()) "" else " · solunar ${bites.joinToString(" · ")}"
+            )
             return out
         }
 

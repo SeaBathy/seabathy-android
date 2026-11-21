@@ -42,7 +42,12 @@ class SpotBlockTest {
         // A newer run is out, but what's saved is only three hours old: still fine.
         assertEquals(ConditionsPolicy.Freshness.CURRENT, f(now - 3 * h, now + 48 * h, now - h))
         assertEquals(ConditionsPolicy.Freshness.OUT_OF_DATE, f(now - 13 * h, now + 48 * h, null))
-        assertEquals(ConditionsPolicy.Freshness.OUT_OF_DATE, f(now - h, now + 2 * h, null))
+        // No word on new runs: out of date at six hours, as the spot's downloads go.
+        assertEquals(ConditionsPolicy.Freshness.OUT_OF_DATE, f(now - 7 * h, now + 48 * h, null))
+        assertEquals(ConditionsPolicy.Freshness.CURRENT, f(now - 5 * h, now + 48 * h, null))
+        // Running out (under twelve hours left), once it's past the hour a download waits before asking again.
+        assertEquals(ConditionsPolicy.Freshness.OUT_OF_DATE, f(now - 2 * h, now + 2 * h, null))
+        assertEquals(ConditionsPolicy.Freshness.OUT_OF_DATE, f(now - 2 * h, now + 11 * h, now - 30 * h))
         assertEquals(ConditionsPolicy.Freshness.UPDATING, f(now - 13 * h, now + 48 * h, null, busy = true))
     }
 }

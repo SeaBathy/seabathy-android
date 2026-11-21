@@ -93,7 +93,10 @@ interface WeatherEvents {
  *   the app can't use them up by itself.
  * - When the main service can't be had (down, or its limit reached) and what's saved is
  *   missing, old or running out, the backup forecast is saved instead ([BackupForecast]), and
- *   the main one is tried again later.
+ *   the main one is tried again later. So is its wind, when only that came from the backup
+ *   ([ConditionsArea.windFromBackup]).
+ * - When a saved forecast wants downloading again is [ConditionsPolicy.updateReason]'s to say:
+ *   the box's dot goes by the same rules.
  * - The forecast is saved and shown as soon as it's in; the satellite pictures follow (once a
  *   day: they change daily), then the coastline.
  */
@@ -136,6 +139,10 @@ class WeatherEngine(
     /** From the job just run: the service's limit lasts until then, and the backup forecast is what's on show. */
     private var limitUntil = 0L
     private var backupShown = false
+    /** From the job just run: the main sea forecast is on show with the backup's wind. */
+    private var backupWindShown = false
+    /** The area whose forecast is downloading now (finding the sea included), or null: see [isWorkingOn]. */
+    private var forecastFor: String? = null
     /** The job just run found no sea in reach and downloaded nothing: it doesn't hold the next download back. */
     private var lookedOnly = false
     private var stateBefore: WeatherState = WeatherState.Idle
@@ -252,10 +259,8 @@ class WeatherEngine(
     /** Keeps [area] (one on the map that isn't the spot's) up to date, after the spot. */
     fun keepFresh(area: ConditionsArea) {
         if (area.id == ConditionsFeature.SPOT_ID || !settings().autoUpdate || !online()) return
-        val now = clock()
-        // The backup on show: the main forecast is tried again.
-        val backupDue = area.isBackup && now - area.fetchedMillis > SpotRules.BACKUP_RECHECK_MS
-        if (!backupDue && !ConditionsPolicy.needsUpdate(area.fetchedMillis, latestRun, now, runSeen(area.id))) return
+        // The same rules as the dot's (the backup or its wind on show: the main forecast is tried again).
+        ConditionsPolicy.updateReason(area.fetchedMillis, area.forecast?.endMillis, latestRun, clock(), runSeen(area.id), area.wantsMainAgain) ?: return
         downloadArea(area.south, area.west, area.north, area.east, area.id, userAsked = false)
     }
 
@@ -306,7 +311,18 @@ class WeatherEngine(
         retryAt = clock() + RETRIES_MS.first()
     }
 
+    /** Any job is under way: a forecast, satellite pictures or the temperature at depth, for any area. */
     val busy: Boolean get() = running != null
+
+    /**
+     * The forecast of [areaId] is being downloaded just now (or, for the spot, the sea looked for
+     * before it): what its dot shows as "Updating". Not while only pictures, the temperature at
+     * depth or another area are fetched, nor once the forecast is saved and pictures follow.
+     */
+    fun isWorkingOn(areaId: String): Boolean = forecastFor == areaId
+
+    /** The area whose forecast is downloading now, or null. */
+    val workingOnId: String? get() = forecastFor
 
     /** The spot is far inland: the last look found no sea within the rings' reach, so nothing is downloaded for it. */
     val noSeaInReach: Boolean get() = spot?.let { noSeaNear(it) } == true
@@ -339,6 +355,7 @@ class WeatherEngine(
         running = job
         limitUntil = 0L
         backupShown = false
+        backupWindShown = false
         lookedOnly = false
         stateBefore = state
         // The pictures come from other servers: they don't count against the forecast's.
@@ -357,6 +374,7 @@ class WeatherEngine(
                 DiagnosticLog.logError(TAG, "sea conditions job FAILED", e)
             } finally {
                 running = null
+                forecastFor = null
                 afterJob(job, ok)
             }
             pump()
@@ -406,10 +424,12 @@ class WeatherEngine(
             limited && backupShown -> "backup forecast on (free service's limit reached): main one again $again"
             limited -> "free forecast service's limit reached: trying again $again"
             backupShown -> "backup forecast on: main one tried again $again"
+            backupWindShown -> "backup wind on: the usual wind tried again $again"
             else -> "couldn't download: trying again $again"
         }
         setState(WeatherState.Waiting(retryAt, reason))
-        log("download failed (${failures} in a row${if (limited) ", limit reached" else ""}${if (backupShown) ", backup on show" else ""}): trying again in ${wait / 1000} s")
+        val shown = if (backupShown) ", backup on show" else if (backupWindShown) ", backup wind on show" else ""
+        log("download failed (${failures} in a row${if (limited) ", limit reached" else ""}$shown): trying again in ${wait / 1000} s")
     }
 
     /** Automatic downloads stay under [MAX_AUTO_PER_HOUR] an hour. */
@@ -437,6 +457,7 @@ class WeatherEngine(
     private suspend fun runSpot(job: Job.Spot): Boolean {
         val (lat, lng) = job.at
         log("updating the spot: ${job.why}")
+        forecastFor = ConditionsFeature.SPOT_ID
         setState(WeatherState.Working("Finding the sea…", job.userAsked))
         val key = String.format(Locale.US, "%.1f,%.1f", lat, lng)
         val found = seaCentres[key] ?: withContext(io) {
@@ -526,6 +547,8 @@ class WeatherEngine(
     ): Boolean {
         val s = settings()
         val problems = java.util.Collections.synchronizedList(mutableListOf<String>())
+        // This area's dot shows "Updating" while its forecast comes (not for the pictures alone).
+        if (!keepForecast) forecastFor = id
         val old = withContext(io) { runCatching { store.load(id) }.getOrNull() }
         if (keepForecast && old == null) return true
         // Asked by hand, or not yet known (a first download): is anything newer out? (A few small
@@ -556,10 +579,16 @@ class WeatherEngine(
                 var got = runCatching { net.forecast(b[0], b[1], b[2], b[3], s.days, userAsked, keepSea?.forecast) {} }
                 // The wind alone couldn't be had: the whole forecast is asked for, as it always
                 // was (its wind then comes from the backup). Not at a limit, which would refuse that too.
+                // Nor when what's saved already is that (the newest sea values, the backup's
+                // wind) and still good: the same sea forecast would only be downloaded again.
                 if (got.isFailure && keepSea != null && got.exceptionOrNull() !is LimitReachedException && online()) {
-                    log("the wind alone couldn't be had (${got.exceptionOrNull()?.let(::message)}): asking for the whole forecast")
-                    seaKept = false
-                    got = runCatching { net.forecast(b[0], b[1], b[2], b[3], s.days, userAsked, null) {} }
+                    if (keepSea.windFromBackup && stillGood(keepSea, clock())) {
+                        log("the usual wind still couldn't be had (${got.exceptionOrNull()?.let(::message)}): the backup's wind stays on show")
+                    } else {
+                        log("the wind alone couldn't be had (${got.exceptionOrNull()?.let(::message)}): asking for the whole forecast")
+                        seaKept = false
+                        got = runCatching { net.forecast(b[0], b[1], b[2], b[3], s.days, userAsked, null) {} }
+                    }
                 }
                 got
                     .onFailure {
@@ -577,11 +606,19 @@ class WeatherEngine(
         val now = clock()
         val kept = old?.takeIf { sameBlock && it.forecast != null }
         var source = ConditionsArea.SOURCE_MAIN
+        if (forecast?.windFromBackup == true) {
+            // The sea forecast came, but the main service's wind didn't: saved as such, so the
+            // dot, the note and the next update all know, and the usual wind is tried again soon.
+            source = ConditionsArea.SOURCE_BACKUP_WIND
+            backupWindShown = true
+            problems += "The usual wind couldn't be had: the backup's is shown meanwhile (coarser, with no gusts)."
+            log("the forecast came with the backup's wind: the usual wind is tried again later")
+        }
         if (forecast == null && !upToDate && online()) {
             // The main service can't be had. What's saved stays when it's still good; otherwise the backup.
-            val keptIsGood = kept != null && kept.forecast!!.endMillis - now >= SpotRules.RUNNING_OUT_MS && now - kept.fetchedMillis in 0..BACKUP_AFTER_MS
-            if (keptIsGood) {
-                backupShown = kept!!.isBackup
+            if (kept != null && stillGood(kept, now)) {
+                backupShown = kept.isBackup
+                backupWindShown = kept.windFromBackup
             } else {
                 setState(WeatherState.Working("Getting the backup forecast…", userAsked))
                 forecast = withContext(io) {
@@ -598,6 +635,8 @@ class WeatherEngine(
                 }
             }
         }
+        // The forecast part is over: the dot goes by what's saved now, while pictures follow.
+        forecastFor = null
         var area = ConditionsArea(
             id = id, name = old?.name ?: name, south = b[0], west = b[1], north = b[2], east = b[3],
             fetchedMillis = if (forecast != null) now else old?.fetchedMillis ?: now,
@@ -611,11 +650,17 @@ class WeatherEngine(
             if (savedAny) {
                 publish(area, isSpot)
                 // The newest run there was when this came down: a newer one is told from it by the service's own times.
-                if (source == ConditionsArea.SOURCE_MAIN) {
-                    kv.put(KEY_RUN_AT + id, runAtStart?.toString())
-                    // The sea values' own run: as it was, when only the wind came down.
-                    if (!seaKept) kv.put(KEY_SEA_RUN + id, seaRunAtStart?.toString())
-                } else kv.put(KEY_SEA_RUN + id, null)
+                when (source) {
+                    ConditionsArea.SOURCE_MAIN -> {
+                        kv.put(KEY_RUN_AT + id, runAtStart?.toString())
+                        // The sea values' own run: as it was, when only the wind came down.
+                        if (!seaKept) kv.put(KEY_SEA_RUN + id, seaRunAtStart?.toString())
+                    }
+                    // The sea values are the main service's own, so the next try can be the wind
+                    // alone; the run isn't marked as in hand, as the wind isn't.
+                    ConditionsArea.SOURCE_BACKUP_WIND -> if (!seaKept) kv.put(KEY_SEA_RUN + id, seaRunAtStart?.toString())
+                    else -> kv.put(KEY_SEA_RUN + id, null)
+                }
             }
         }
         // Satellite pictures: once a day.
@@ -661,20 +706,28 @@ class WeatherEngine(
                 if (ok) events.coastlineReady()
             }
         }
+        // The backup's forecast or wind: false, so the main one is tried again later.
         return upToDate || (forecast != null && source == ConditionsArea.SOURCE_MAIN)
+    }
+
+    /** [kept] is worth keeping on show rather than the backup: not running out, and not many hours old. */
+    private fun stillGood(kept: ConditionsArea, now: Long): Boolean {
+        val forecast = kept.forecast ?: return false
+        return forecast.endMillis - now >= ConditionsPolicy.RUNNING_OUT_MS && now - kept.fetchedMillis in 0..BACKUP_AFTER_MS
     }
 
     /**
      * Whether [old] already holds the newest forecast there is for the block [b], for all the
-     * days wanted: the service has brought out no run since it was downloaded.
+     * days wanted: the service has brought out no run since it was downloaded. Never with the
+     * backup's forecast or wind on show: asking then fetches the main one.
      */
     private fun isLatest(old: ConditionsArea, id: String, b: DoubleArray, s: WeatherSettings, now: Long): Boolean {
         val forecast = old.forecast ?: return false
         val newest = latestRun ?: return false
         val seen = runSeen(id) ?: return false
-        return !old.isBackup && newest <= seen &&
+        return !old.wantsMainAgain && newest <= seen &&
             old.middleContains((b[0] + b[2]) / 2, (b[1] + b[3]) / 2) &&
-            now - old.fetchedMillis in 0..SpotRules.MAX_AGE_MS &&
+            now - old.fetchedMillis in 0..ConditionsPolicy.NO_WORD_MAX_AGE_MS &&
             forecast.endMillis - now >= (s.days * 24 - LATEST_SLACK_HOURS) * HOUR_MS &&
             forecast.has(ForecastField.WIND_U) && forecast.has(ForecastField.WAVE_HEIGHT)
     }
@@ -778,24 +831,20 @@ object SpotRules {
     const val RADIUS_KM = 200.0
     /** The boat this far from where the area was downloaded for: a new one. */
     const val MOVE_KM = 100.0
-    /** The forecast running out this soon: a new one. */
-    const val RUNNING_OUT_MS = 12 * 3_600_000L
-    /** A forecast that's still running out after a download is asked for again no sooner than this. */
-    const val RUNNING_OUT_RETRY_MS = 3_600_000L
-    /** This old with no word from the service of whether a newer run is out: a new one. */
-    const val MAX_AGE_MS = 6 * 3_600_000L
-    /** With the backup forecast on show, the main one is tried again once it's this old. */
-    const val BACKUP_RECHECK_MS = 10 * 60_000L
-    /** Saved "later than now" by more than this: the phone's clock was set back. */
-    const val CLOCK_SLACK_MS = 10 * 60_000L
+    // The rules on age and runs are [ConditionsPolicy]'s, which the box's dot goes by too.
+    const val RUNNING_OUT_MS = ConditionsPolicy.RUNNING_OUT_MS
+    const val RUNNING_OUT_RETRY_MS = ConditionsPolicy.RUNNING_OUT_RETRY_MS
+    const val MAX_AGE_MS = ConditionsPolicy.NO_WORD_MAX_AGE_MS
+    const val BACKUP_RECHECK_MS = ConditionsPolicy.BACKUP_RECHECK_MS
+    const val CLOCK_SLACK_MS = ConditionsPolicy.CLOCK_SLACK_MS
 
     /** Why a download is needed (for the log); [moved]: the boat is somewhere new, which doesn't wait. */
     class Need(val why: String, val moved: Boolean = false)
 
     /**
-     * Why the spot at [at] needs a download, or null when what's saved is fine. [runSeen]: the
-     * newest forecast run there was when [saved] was downloaded; a newer one is told from it by
-     * the service's own times, so a phone clock that's wrong can't make every forecast look old.
+     * Why the spot at [at] needs a download, or null when what's saved is fine: nothing saved,
+     * the boat somewhere new, or what [ConditionsPolicy.updateReason] says of the forecast.
+     * [runSeen]: the newest forecast run there was when [saved] was downloaded.
      */
     fun needs(at: Pair<Double, Double>, saved: ConditionsArea?, origin: Pair<Double, Double>?, latestRun: Long?, now: Long, runSeen: Long? = null): Need? {
         if (saved == null) return Need("nothing saved yet")
@@ -803,15 +852,7 @@ object SpotRules {
         else !saved.middleContains(at.first, at.second)
         if (moved) return Need("the boat moved well away from where its area was downloaded", moved = true)
         val forecast = saved.forecast ?: return Need("no forecast saved")
-        val age = now - saved.fetchedMillis
-        if (age < -CLOCK_SLACK_MS) return Need("the phone's clock was set back")
-        if (saved.isBackup) return if (age > BACKUP_RECHECK_MS) Need("the backup forecast is on show") else null
-        if (forecast.endMillis - now < RUNNING_OUT_MS && age > RUNNING_OUT_RETRY_MS) return Need("the forecast runs out soon")
-        if (ConditionsPolicy.needsUpdate(saved.fetchedMillis, latestRun, now, runSeen)) {
-            return Need(if (latestRun != null && latestRun > (runSeen ?: saved.fetchedMillis)) "a newer forecast is out" else "saved ${age / 3_600_000L} h ago")
-        }
-        if (latestRun == null && age > MAX_AGE_MS) return Need("saved ${age / 3_600_000L} h ago, and the service couldn't say whether there's a newer one")
-        return null
+        return ConditionsPolicy.updateReason(saved.fetchedMillis, forecast.endMillis, latestRun, now, runSeen, saved.wantsMainAgain)?.let { Need(it) }
     }
 }
 

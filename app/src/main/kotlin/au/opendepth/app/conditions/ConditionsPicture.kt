@@ -41,7 +41,7 @@ enum class ColourChoice(val label: String, val forecast: Boolean, val fixedRange
 
 /** Which way the flow lines (or arrows) show things moving. */
 enum class ArrowChoice(val label: String, val short: String) {
-    /** Whatever the map layer is: wind for wind speed, the current for the rest. */
+    /** Whatever the map layer is: wind for wind speed, the current for current speed; none over a satellite picture. */
     SAME("Same as the map layer", ""),
     CURRENT("Current", "current flow"),
     WIND("Wind", "wind flow"),
@@ -54,6 +54,9 @@ enum class ArrowChoice(val label: String, val short: String) {
         ColourChoice.WIND -> WIND
         ColourChoice.WAVES -> WAVES
         ColourChoice.SWELL -> SWELL
+        // A satellite (or model) picture is of one day, so no forecast lines over it: and with them, no time slider.
+        ColourChoice.SEA_TEMP_SATELLITE, ColourChoice.SEA_TEMP_BREAKS, ColourChoice.TEMP_BELOW,
+        ColourChoice.CHLOROPHYLL, ColourChoice.SEA_LEVEL, ColourChoice.SALINITY -> NONE
         else -> CURRENT
     }
 

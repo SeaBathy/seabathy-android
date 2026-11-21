@@ -19,6 +19,10 @@ import androidx.work.WorkerParameters
 import au.opendepth.app.MainActivity
 import au.opendepth.app.R
 import au.opendepth.app.diagnostics.DiagnosticLog
+import au.opendepth.app.nav.NavFormat
+import au.opendepth.app.nav.NavSettingsRepository
+import au.opendepth.app.nav.NavUnits
+import au.opendepth.app.nav.SeaSpeedUnit
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import java.io.File
@@ -29,12 +33,14 @@ import java.util.Locale
 import java.util.TimeZone
 import java.util.concurrent.TimeUnit
 import kotlin.math.atan2
+import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.sin
+import kotlin.math.sqrt
 
-/** A place the alert watches: the forecast within [radiusKm] of it, the worst of its points counting. */
+/** A place the alert watches: the forecast within [radiusKm] of it, the worst of its points counting ([ConditionsAlerts.placePoints]). */
 data class AlertPlace(val id: String, val name: String, val lat: Double, val lng: Double, val radiusKm: Double)
 
 /**
@@ -99,6 +105,7 @@ object ConditionsAlerts {
     private const val WORK = "conditions-alerts"
     private const val CHANNEL = "conditions_alerts"
     private const val HOUR_MS = 3_600_000L
+    private const val DAY_MS = 24 * HOUR_MS
     private const val KNOTS_PER_MS = 1.943844
     /** How often the job runs. Android may run it a little later to save battery. */
     const val CHECK_HOURS = 4L
@@ -107,8 +114,12 @@ object ConditionsAlerts {
     private const val MORNING_HOUR = 7
     /** The saved forecast's area: this far each way from the place (more if its radius is bigger). */
     private const val SAVE_RADIUS_KM = 100.0
-    /** A saved forecast covering the place that's newer than this isn't downloaded again. */
-    private const val FRESH_MS = 6 * HOUR_MS
+    /**
+     * A saved forecast round the place that already reaches the good days and is newer than this
+     * isn't downloaded again. A day: the copy is only there for when the app opens offline (online,
+     * the app renews the area on show itself), and each download is up to 512 calls.
+     */
+    private const val FRESH_MS = 24 * HOUR_MS
     const val AREA_PREFIX = "alert-"
     private const val ALERT_ID = 4207
     private val gson = Gson()
@@ -272,15 +283,43 @@ object ConditionsAlerts {
     fun placesToCheck(rules: AlertRules, prefs: SharedPreferences): List<AlertPlace> =
         rules.places.ifEmpty { spot(prefs)?.let { (lat, lng) -> listOf(AlertPlace("spot", "Your spot", lat, lng, 0.0)) }.orEmpty() }
 
-    /** The points checked for [place]: its middle, and with a radius the edges and corners round it too. */
-    fun placeGrid(place: AlertPlace): GeoGrid {
-        if (place.radiusKm < 1.0) return GeoGrid(doubleArrayOf(place.lat), doubleArrayOf(place.lng))
+    /**
+     * The points checked for [place]: its middle, and with a radius 8 more on the circle round it
+     * (north, north-east, east and so on, each [AlertPlace.radiusKm] out), so every point is inside
+     * the circle the user drew. Each point is one forecast call for the sea and one for the wind.
+     */
+    fun placePoints(place: AlertPlace): List<Pair<Double, Double>> =
+        placeGrids(place).flatMap { g -> g.lats.flatMap { lat -> g.lngs.map { lng -> lat to lng } } }
+
+    /**
+     * [placePoints] as the forecast is asked for them. A forecast grid is rows by columns and a
+     * circle isn't, so it's three small ones (the first holds the middle): the middle with the
+     * points north and south of it, the points east and west, and the four between, at
+     * radius/√2 on each axis.
+     */
+    fun placeGrids(place: AlertPlace): List<GeoGrid> {
+        if (place.radiusKm < 1.0) return listOf(GeoGrid(doubleArrayOf(place.lat), doubleArrayOf(place.lng)))
         val dLat = place.radiusKm / 111.0
         val dLng = place.radiusKm / (111.0 * cos(Math.toRadians(place.lat)).coerceAtLeast(0.2))
-        return GeoGrid(
-            doubleArrayOf(place.lat - dLat, place.lat, place.lat + dLat),
-            doubleArrayOf(place.lng - dLng, place.lng, place.lng + dLng)
+        val diagLat = dLat * sqrt(0.5)
+        val diagLng = dLng * sqrt(0.5)
+        return listOf(
+            GeoGrid(doubleArrayOf(place.lat - dLat, place.lat, place.lat + dLat), doubleArrayOf(place.lng)),
+            GeoGrid(doubleArrayOf(place.lat), doubleArrayOf(place.lng - dLng, place.lng + dLng)),
+            GeoGrid(doubleArrayOf(place.lat - diagLat, place.lat + diagLat), doubleArrayOf(place.lng - diagLng, place.lng + diagLng))
         )
+    }
+
+    /**
+     * The forecast calls the checks use a day: each point of each place ([placePoints]; the spot,
+     * one point, when there are no places) is a call to the sea forecast and another to the wind,
+     * every [CHECK_HOURS] hours. Not counting saving a forecast when a day looks good, which is up to
+     * [ConditionsFeature.MAX_POINTS_PER_SIDE]² + [ConditionsFeature.MAX_WIND_POINTS_PER_SIDE]² more
+     * (512) each time.
+     */
+    fun callsPerDay(rules: AlertRules): Int {
+        val points = if (rules.places.isEmpty()) 1 else rules.places.sumOf { placePoints(it).size }
+        return (24 / CHECK_HOURS).toInt() * points * 2
     }
 
     /** The worst of [values] that are known; NaN when none is. */
@@ -290,7 +329,7 @@ object ConditionsAlerts {
         return w
     }
 
-    /** Fetches each place's forecast (one small download each) and finds the good stretches. Off the main thread. */
+    /** Fetches each place's forecast at its few points ([placePoints]) and finds the good stretches. Off the main thread. */
     fun check(prefs: SharedPreferences, now: Long = System.currentTimeMillis()): Pair<AlertRules, List<Pair<AlertPlace, List<GoodWindow>>>>? {
         val rules = load(prefs)
         val places = placesToCheck(rules, prefs)
@@ -307,28 +346,33 @@ object ConditionsAlerts {
     }
 
     private fun checkPlace(client: ConditionsClient, place: AlertPlace, rules: AlertRules, now: Long): List<GoodWindow> {
-        val grid = placeGrid(place)
         val days = (rules.daysAhead + 1).coerceIn(1, ConditionsClient.MAX_DAYS)
         // The main service out of reach or at its limit: the backup still has the wind and the waves.
-        val forecast = runCatching { client.forecast(grid, days) }.getOrElse { main ->
-            runCatching { client.backupForecast(grid, days) }.getOrElse { throw main }
+        // Once the main service has failed, the rest of the place's points go straight to the backup.
+        var mainFailed: Throwable? = null
+        val forecasts = placeGrids(place).map { grid ->
+            val main = if (mainFailed == null) runCatching { client.forecast(grid, days) }.onFailure { mainFailed = it }.getOrNull() else null
+            main ?: runCatching { client.backupForecast(grid, days) }.getOrElse { throw mainFailed!! }
         }
-        val points = grid.lats.flatMap { lat -> grid.lngs.map { lng -> lat to lng } }
-        fun each(value: (Double, Double) -> Double) = DoubleArray(points.size) { i -> value(points[i].first, points[i].second) }
-        fun windAt(lat: Double, lng: Double, t: Long): Double {
-            val u = forecast.sample(ForecastField.WIND_U, lat, lng, t)
-            val v = forecast.sample(ForecastField.WIND_V, lat, lng, t)
+        // Each point, with the forecast it's in.
+        val points = forecasts.flatMap { f -> f.grid.lats.flatMap { lat -> f.grid.lngs.map { lng -> Triple(f, lat, lng) } } }
+        fun each(value: (ForecastGrid, Double, Double) -> Double) = DoubleArray(points.size) { i -> value(points[i].first, points[i].second, points[i].third) }
+        fun windAt(f: ForecastGrid, lat: Double, lng: Double, t: Long): Double {
+            val u = f.sample(ForecastField.WIND_U, lat, lng, t)
+            val v = f.sample(ForecastField.WIND_V, lat, lng, t)
             return if (u.isNaN() || v.isNaN()) Double.NaN else hypot(u.toDouble(), v.toDouble()) * KNOTS_PER_MS
         }
-        val wind = { t: Long -> worst(each { lat, lng -> windAt(lat, lng, t) }) }
-        val gust = { t: Long -> worst(each { lat, lng -> forecast.sample(ForecastField.GUST, lat, lng, t).toDouble() * KNOTS_PER_MS }) }
-        val wave = { t: Long -> worst(each { lat, lng -> forecast.sample(ForecastField.WAVE_HEIGHT, lat, lng, t).toDouble() }) }
+        val wind = { t: Long -> worst(each { f, lat, lng -> windAt(f, lat, lng, t) }) }
+        val gust = { t: Long -> worst(each { f, lat, lng -> f.sample(ForecastField.GUST, lat, lng, t).toDouble() * KNOTS_PER_MS }) }
+        val wave = { t: Long -> worst(each { f, lat, lng -> f.sample(ForecastField.WAVE_HEIGHT, lat, lng, t).toDouble() }) }
+        // The middle is in the first grid.
+        val middle = forecasts.first()
         val from = { t: Long ->
-            val u = forecast.sample(ForecastField.WIND_U, place.lat, place.lng, t)
-            val v = forecast.sample(ForecastField.WIND_V, place.lat, place.lng, t)
+            val u = middle.sample(ForecastField.WIND_U, place.lat, place.lng, t)
+            val v = middle.sample(ForecastField.WIND_V, place.lat, place.lng, t)
             if (u.isNaN() || v.isNaN()) Double.NaN else (Math.toDegrees(atan2(-u.toDouble(), -v.toDouble())) + 360) % 360
         }
-        return findWindows(forecast.times, wind, wave, rules, now, place.lat, place.lng, gustKn = gust, windFromDeg = from)
+        return findWindows(middle.times, wind, wave, rules, now, place.lat, place.lng, gustKn = gust, windFromDeg = from)
     }
 
     // What changed ---------------------------------------------------------------------
@@ -362,9 +406,13 @@ object ConditionsAlerts {
         return PlaceNews(place, good, fresh, gone)
     }
 
-    /** Remembers what the user has now been told, forgetting days gone by. */
+    /**
+     * Remembers what the user has now been told, forgetting days gone by. A place missing from
+     * [results] (its forecast couldn't be had this time) keeps what it was told before, so its
+     * good days aren't reported again as new next time.
+     */
     fun remember(prefs: SharedPreferences, results: List<Pair<AlertPlace, List<GoodWindow>>>, zone: TimeZone = TimeZone.getDefault()) {
-        val map = results.associate { (place, good) -> place.id to good.associate { dayKey(it.day, zone) to listOf(it.from, it.to) } }
+        val map = seen(prefs) + results.associate { (place, good) -> place.id to good.associate { dayKey(it.day, zone) to listOf(it.from, it.to) } }
         prefs.edit().putString(KEY_SEEN, gson.toJson(map)).apply()
     }
 
@@ -383,33 +431,64 @@ object ConditionsAlerts {
     }
 
     /**
-     * For each place with a good day coming: downloads the forecast round it
-     * (unless one saved in the last few hours already covers it), so it's on
-     * the map straight away when the app opens, even offline. Each place has
-     * one saved copy, replaced each time; the app removes it once its
-     * forecast has run out, like any other.
+     * How many days of forecast to save round a place whose good days end at [lastGood], or null
+     * when there's no need: one of [covering] (saved areas round the place) was downloaded in
+     * the last [FRESH_MS] (a day) and already reaches [lastGood], or reaches as far as a download
+     * of that many days did when it was made (a stretch beyond the longest forecast can't be had
+     * by downloading again, so it mustn't bring a download at every check). A copy that falls
+     * short of the good days is replaced however new it is.
+     *
+     * At least [setting] days ("Days of forecast to save"), more when the good days are further
+     * off, at most [ConditionsClient.MAX_DAYS]. More days cost no more calls (a call is a point).
+     * Pure, unit-tested.
+     */
+    fun daysToSave(lastGood: Long, setting: Int, covering: List<ConditionsStore.Summary>, now: Long): Int? {
+        val needed = ceil((lastGood - now / HOUR_MS * HOUR_MS).toDouble() / DAY_MS).toInt()
+        val days = max(setting, needed).coerceIn(1, ConditionsClient.MAX_DAYS)
+        val saved = covering.any { s ->
+            val until = s.forecastUntilMillis ?: return@any false
+            // A download of [days] reaches at least this far from the hour it was made (12 hours more, in fact).
+            val reach = s.fetchedMillis / HOUR_MS * HOUR_MS + days * DAY_MS
+            // Saved during this check counts (a little after [now]); much later is a clock that was changed.
+            val age = now - s.fetchedMillis
+            age < FRESH_MS && age > -HOUR_MS && until >= minOf(lastGood, reach)
+        }
+        return if (saved) null else days
+    }
+
+    /**
+     * For each place with a good day coming: downloads the forecast round it,
+     * far enough ahead to reach its last good day (unless one saved in the
+     * last day already has it: [daysToSave]), so it's on the map
+     * straight away when the app opens, even offline. Each place has one
+     * saved copy, replaced each time; the app removes it once its forecast
+     * has run out, like any other. Up to 512 calls a place, inside the
+     * [CallBudget]: when that refuses, nothing more is tried until the next check.
      */
     fun saveForecasts(context: Context, prefs: SharedPreferences, rules: AlertRules, results: List<Pair<AlertPlace, List<GoodWindow>>>, now: Long) {
         if (rules.saveForecast == AlertRules.SAVE_OFF) return
+        if (results.all { it.second.isEmpty() }) return
         if (rules.saveForecast == AlertRules.SAVE_WIFI && !onUnmeteredNetwork(context)) {
             DiagnosticLog.log("Alerts", "forecast not saved: not on Wi-Fi")
             return
         }
         val store = ConditionsStore(conditionsDir(context))
-        val days = prefs.getInt(ConditionsFeature.KEY_DAYS, ConditionsFeature.DEFAULT_DAYS).coerceIn(1, ConditionsClient.MAX_DAYS)
+        val setting = prefs.getInt(ConditionsFeature.KEY_DAYS, ConditionsFeature.DEFAULT_DAYS)
         val client = ConditionsClient.forApp(prefs)
         for ((place, good) in results) {
             if (good.isEmpty()) continue
-            val lastGood = good.maxOf { it.to }
-            val have = ConditionsPolicy.newestCovering(place.lat, place.lng, store.summaries())
-            if (have != null && now - have.fetchedMillis < FRESH_MS && (have.forecastUntilMillis ?: 0L) >= lastGood) continue
+            // Every saved area round the place: a newer, shorter one (My spot's) mustn't hide a copy that
+            // already reaches the good days, or each check after the spot's update would download again.
+            // The notification opens the one that reaches furthest ([ConditionsFeature.showAlertPlace]).
+            val covering = store.summaries().filter { place.lat in it.south..it.north && place.lng in it.west..it.east }
+            val days = daysToSave(good.maxOf { it.to }, setting, covering, now) ?: continue
             val b = ConditionsFeature.boxAround(place.lat, place.lng, max(SAVE_RADIUS_KM, place.radiusKm * 2))
             val span = max(b[2] - b[0], b[3] - b[1])
             val grid = GeoGrid.covering(b[0], b[1], b[2], b[3],
                 max(ConditionsFeature.MIN_STEP_DEG, span / (ConditionsFeature.MAX_POINTS_PER_SIDE - 1)), ConditionsFeature.MAX_POINTS_PER_SIDE)
             val windGrid = GeoGrid.covering(b[0], b[1], b[2], b[3],
                 max(ConditionsFeature.MIN_STEP_DEG, span / (ConditionsFeature.MAX_WIND_POINTS_PER_SIDE - 1)), ConditionsFeature.MAX_WIND_POINTS_PER_SIDE)
-            runCatching {
+            val saved = runCatching {
                 val forecast = client.forecast(grid, days, windGrid)
                 val old = store.load(areaId(place))
                 store.save(
@@ -420,8 +499,10 @@ object ConditionsAlerts {
                         belowDepthM = old?.belowDepthM ?: ConditionsArea.DEFAULT_BELOW_DEPTH_M
                     )
                 )
-                DiagnosticLog.log("Alerts", "saved the forecast round ${place.name}")
+                DiagnosticLog.log("Alerts", "saved $days days of forecast round ${place.name}")
             }.onFailure { DiagnosticLog.logError("Alerts", "saving the forecast round ${place.name} FAILED", it) }
+            // The service's limit, or the app's share of it: the other places would be refused too.
+            if (saved.exceptionOrNull() is LimitReachedException) break
         }
     }
 
@@ -433,17 +514,28 @@ object ConditionsAlerts {
         return names[((((deg % 360) + 360) % 360) / 22.5 + 0.5).toInt() % 16]
     }
 
-    /** One line for a good day: "Sat 22 Nov · 06:00–13:00 · wind 8–11 kn SE, gusts 15 · waves 0.6 m". */
-    fun line(w: GoodWindow, zone: TimeZone = TimeZone.getDefault()): String {
+    /** The user's units, as the rest of the app has them (Settings → units). */
+    fun units(prefs: SharedPreferences): NavUnits = NavSettingsRepository(prefs).load().units
+
+    /** A wind speed given in knots as a whole number of [unit] (a force for Beaufort). */
+    private fun windFigure(knots: Double, unit: SeaSpeedUnit): Int =
+        if (unit == SeaSpeedUnit.BEAUFORT) SeaSpeedUnit.beaufort(knots) else Math.round(knots * unit.perKnot).toInt()
+
+    /**
+     * One line for a good day, in the user's [units]: "Sat 22 Nov · 06:00–13:00 · wind 8–11 kn SE,
+     * gusts 15 · waves 0.6 m".
+     */
+    fun line(w: GoodWindow, units: NavUnits = NavUnits(), zone: TimeZone = TimeZone.getDefault()): String {
         val day = SimpleDateFormat("EEE d MMM", Locale.getDefault()).apply { timeZone = zone }
         val clock = SimpleDateFormat("HH:mm", Locale.getDefault()).apply { timeZone = zone }
-        val lo = w.minWindKn.toInt()
-        val hi = Math.round(w.maxWindKn).toInt()
+        val unit = units.wind
+        val lo = windFigure(w.minWindKn, unit)
+        val hi = windFigure(w.maxWindKn, unit)
         val from = compass(w.windFromDeg)
-        val wind = (if (lo < hi) "$lo–$hi kn" else "$hi kn") + (if (from.isEmpty()) "" else " $from") +
-            (if (w.maxGustKn.isFinite() && w.maxGustKn > w.maxWindKn * 1.15) ", gusts ${Math.round(w.maxGustKn)}" else "")
+        val wind = (if (lo < hi) "$lo–$hi ${unit.label}" else "$hi ${unit.label}") + (if (from.isEmpty()) "" else " $from") +
+            (if (w.maxGustKn.isFinite() && w.maxGustKn > w.maxWindKn * 1.15) ", gusts ${windFigure(w.maxGustKn, unit)}" else "")
         return "${day.format(Date(w.day))} · ${clock.format(Date(w.from))}–${clock.format(Date(w.to))} · wind $wind · " +
-            "waves ${String.format(Locale.US, "%.1f", w.maxWaveM)} m"
+            "waves ${NavFormat(units, zone).waveHeight(w.maxWaveM)}"
     }
 
     /** "Saturday", "Sat and Sun", "Fri, Sat and Sun", "4 days". */
@@ -458,8 +550,8 @@ object ConditionsAlerts {
         }
     }
 
-    /** Posts one notification per place with news; returns how many were posted. */
-    fun notifyNews(context: Context, news: List<PlaceNews>): Int {
+    /** Posts one notification per place with news, in the user's [units]; returns how many were posted. */
+    fun notifyNews(context: Context, news: List<PlaceNews>, units: NavUnits): Int {
         val manager = context.getSystemService(NotificationManager::class.java) ?: return 0
         manager.createNotificationChannel(NotificationChannel(CHANNEL, "Good-weather alerts", NotificationManager.IMPORTANCE_DEFAULT).apply {
             description = "When the forecast at your places is inside your wind and wave limits, or stops being"
@@ -473,7 +565,7 @@ object ConditionsAlerts {
                 "${place.name}: ${dayNames(n.goneDays)} no longer look${if (n.goneDays.size == 1) "s" else ""} good"
             }
             val dayName = SimpleDateFormat("EEE d MMM", Locale.getDefault())
-            val lines = n.good.sortedBy { it.day }.map { line(it) } + n.goneDays.map { "${dayName.format(Date(it))} · no longer looks good" }
+            val lines = n.good.sortedBy { it.day }.map { line(it, units) } + n.goneDays.map { "${dayName.format(Date(it))} · no longer looks good" }
             val where = if (place.radiusKm >= 1) "Worst of the forecast within ${place.radiusKm.toInt()} km. " else "Forecast at your spot. "
             val style = NotificationCompat.InboxStyle()
             lines.take(7).forEach { style.addLine(it) }
@@ -511,13 +603,15 @@ object ConditionsAlerts {
                 // The forecast first, so it's there when the notification is tapped.
                 runCatching { saveForecasts(applicationContext, prefs, rules, results, now) }
                 if (!quietHours(now)) {
-                    notifyNews(applicationContext, news(prefs, results, now))
+                    notifyNews(applicationContext, news(prefs, results, now), units(prefs))
                     remember(prefs, results)
                 }
                 Result.success()
             }.getOrElse {
                 DiagnosticLog.logError("Alerts", "check FAILED", it)
-                Result.retry()
+                // The forecast service's limit, or the app's share of it, lasts a while: asking again
+                // within minutes (WorkManager's retry) would only be refused again. The next check tries.
+                if (it is LimitReachedException) Result.success() else Result.retry()
             }
         }
     }

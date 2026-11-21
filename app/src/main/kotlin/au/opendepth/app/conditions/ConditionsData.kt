@@ -170,7 +170,12 @@ enum class ForecastField {
 class ForecastGrid(
     val grid: GeoGrid,
     val times: LongArray,
-    val fields: Map<ForecastField, FloatArray>
+    val fields: Map<ForecastField, FloatArray>,
+    /**
+     * The main service's sea forecast, with the backup's wind (no gusts) standing in for its own,
+     * which didn't come. Only as downloaded: a saved area says it in [ConditionsArea.source].
+     */
+    val windFromBackup: Boolean = false
 ) {
     init {
         require(times.isNotEmpty()) { "no hours" }
@@ -205,7 +210,7 @@ class ForecastGrid(
             }
             out[field] = copy
         }
-        return ForecastGrid(grid, t, out)
+        return ForecastGrid(grid, t, out, windFromBackup)
     }
 
     /**
@@ -349,11 +354,24 @@ class ConditionsArea(
     val satellites: Map<SatelliteKind, SatelliteGrid>,
     /** The depth, in metres, [SatelliteKind.TEMP_BELOW] was downloaded for. */
     val belowDepthM: Int = DEFAULT_BELOW_DEPTH_M,
-    /** Where the forecast came from: [SOURCE_MAIN], or [SOURCE_BACKUP] when the main service couldn't be had. */
-    val source: Int = SOURCE_MAIN
+    /**
+     * Where the forecast came from: [SOURCE_MAIN]; [SOURCE_BACKUP] when the main service couldn't
+     * be had; [SOURCE_BACKUP_WIND] for the main sea forecast with the backup's wind. Left out, it
+     * follows [ForecastGrid.windFromBackup].
+     */
+    val source: Int = if (forecast?.windFromBackup == true) SOURCE_BACKUP_WIND else SOURCE_MAIN
 ) {
     /** The forecast on show is the backup's: coarser, with no gusts, currents or sea temperature. */
     val isBackup: Boolean get() = source == SOURCE_BACKUP && forecast != null
+
+    /**
+     * The main sea forecast, but its wind is the backup's (coarser, no gusts): the main service's
+     * wind didn't come. Like [isBackup], the main one is downloaded again before long.
+     */
+    val windFromBackup: Boolean get() = source == SOURCE_BACKUP_WIND && forecast != null
+
+    /** The backup's forecast or its wind is on show: the main forecast is to be tried again soon. */
+    val wantsMainAgain: Boolean get() = isBackup || windFromBackup
 
     /** A copy with some parts replaced. */
     fun copyWith(
@@ -417,6 +435,8 @@ class ConditionsArea(
         const val DEFAULT_BELOW_DEPTH_M = 10
         const val SOURCE_MAIN = 0
         const val SOURCE_BACKUP = 1
+        /** The main service's sea forecast with the backup's wind: see [windFromBackup]. */
+        const val SOURCE_BACKUP_WIND = 2
         /** How far a satellite picture's values are carried towards the shore, in its own cells. */
         const val SHORE_FILL_CELLS = 2
         /** Sea conditions stop here: the forecast models don't go nearer the poles. */

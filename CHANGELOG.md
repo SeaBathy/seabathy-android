@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.4.1 — 2026-11-21
+
+Clearer sea conditions, and good-weather alerts that download far less.
+
+- **Satellite maps say what they are.** Sea temperature, its breaks, chlorophyll, sea level and
+  salinity are satellite pictures of a day already past, so while one shows there's no time
+  slider and no forecast lines over it. The card says which day it is of (a whole-day average
+  for sea temperature, the 5 days to that day for chlorophyll), and the box's sea temperature
+  shows its date.
+- **Sun and moon.** The box's sun and moon lines start with a small sun and the moon as it looks
+  tonight, with fewer words.
+- **Alerts download far less.** Saving the forecast for a good day no longer downloads it again
+  at every check: it saves enough days to reach the good day, counts any fresh copy round the
+  place, and renews it at most once a day. Tapping the notification opens the copy that reaches
+  the good day.
+- **Alerts in your units.** Notifications and **Check now** use your wind and wave units, the
+  limits are whole forces in Beaufort, and every point checked is inside the circle you drew.
+- **Within the free limit.** All the app's forecast calls together stay under Open-Meteo's free
+  daily limit, the readings for older photos included.
+- **Backup wind said.** When only the usual wind couldn't be had, the backup's (no gusts) is
+  marked as such and the usual wind is tried again soon.
+- **Smaller fixes.** Picking the layer that's already on keeps it on. The box no longer reads
+  the crosshair where there's no sea data. Arrows show when zoomed in. Sea level labels use your
+  units. The box's dot shows "Updating" only for the area being downloaded and turns red exactly
+  when the app would update it. The settings show how far apart the forecast's points really are
+  and why a download is waiting.
+
 ## 1.4.0 — 2026-11-21
 
 High-detail depths outside Australia.

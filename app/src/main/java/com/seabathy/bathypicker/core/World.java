@@ -546,7 +546,7 @@ public final class World {
     }
 
     private static String stripBom(String s) {
-        return s.startsWith("﻿") ? s.substring(1) : s;
+        return s.startsWith("\uFEFF") ? s.substring(1) : s;
     }
 
     // ------------------------------------------------------------------ the plan

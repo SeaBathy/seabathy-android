@@ -62,9 +62,8 @@ class ConditionsClient(
         if (keepSea != null) return windOver(keepSea, windGrid, userAsked, onProgress)
         val points = pointsOf(grid)
         val windPoints = pointsOf(windGrid)
-        // All of it fits in what's left of the hour and the day, or none of it is asked for.
-        budget.check(points.size, userAsked, CallBudget.MARINE)
-        budget.check(windPoints.size, userAsked, CallBudget.WEATHER)
+        // All of it fits in what's left of the hour and the day (each service's and both together), or none of it is asked for.
+        budget.check(mapOf(CallBudget.MARINE to points.size, CallBudget.WEATHER to windPoints.size), userAsked)
         val chunks = points.chunked(POINTS_PER_REQUEST)
         val windChunks = windPoints.chunked(POINTS_PER_REQUEST)
         val total = (chunks.size + windChunks.size).toDouble()
@@ -173,10 +172,14 @@ class ConditionsClient(
         return models.minByOrNull(::apart)?.takeIf { apart(it) < MODEL_SAME_MS }
     }
 
-    /** [forecast] with the backup's wind added, when the main service's wind didn't come (it has no gusts). */
+    /**
+     * [forecast] with the backup's wind added, when the main service's wind didn't come (it has no
+     * gusts). Marked [ForecastGrid.windFromBackup], so it's saved as such and the main wind is
+     * asked for again before long.
+     */
     private fun withBackupWind(forecast: ForecastGrid): ForecastGrid {
         val wind = runCatching { BackupForecast.wind(::backupHttp, forecast.grid, forecast.times) }.getOrNull() ?: return forecast
-        return ForecastGrid(forecast.grid, forecast.times, forecast.fields + wind)
+        return ForecastGrid(forecast.grid, forecast.times, forecast.fields + wind, windFromBackup = true)
     }
 
     private fun backupHttp(url: String): String = retrying { http(url) }
