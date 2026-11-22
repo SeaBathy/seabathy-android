@@ -118,4 +118,18 @@ class TideWindowTest {
         assertEquals(r.periods[1].startMillis, r.nextClear(low))
         assertEquals(from + hour, r.nextClear(from + hour))
     }
+
+    @Test
+    fun `enough water now with the tides ending straight after is not a warning`() {
+        // Only the tide now is known (the end of the saved predictions), and it is enough.
+        val r = TideWindow.compute(1.0, 2.0, from, from + 48 * hour) { t -> if (t == from) tide(t) else null }!!
+        assertFalse(r.neverClear)
+        assertTrue(r.alwaysClear)
+        assertEquals(from, r.knownUntilMillis)
+        assertEquals(true, r.clearAt(from))
+        // Not enough now, and nothing known after: still never clear.
+        val low = from + period / 2
+        val shallow = TideWindow.compute(1.0, 2.0, low, low + 48 * hour) { t -> if (t == low) tide(t) else null }!!
+        assertTrue(shallow.neverClear)
+    }
 }

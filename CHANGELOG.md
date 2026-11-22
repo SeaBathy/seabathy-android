@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.4.4 — 2026-11-23
+
+- **Tide added to depths again out to 50 km near Queensland gauges.** Since 1.4.2, with official
+  Maritime Safety Queensland tides in use, the depth under the boat, the shallow-water alarm and a
+  route's least depth only had the tide added within about 15 km of the gauge (8 km up rivers);
+  further out they had no tide at all, so at a low tide they read deeper than the water was. The
+  tide is now added out to 50 km, as before 1.4.2, and when the boat goes past every gauge with no
+  connection the gauge's tides stay until the model's can be had.
+- **Tide window:** enough water now, with the saved tides ending straight after, no longer shows
+  "Not enough water".
+- **Official tides:** a year whose file couldn't be saved is downloaded again rather than counted as
+  saved; less memory kept after passing many gauges; Refresh says when an update is already running,
+  and no longer says a download failed when nothing needed downloading.
+- **Chartplotter export:** says when the contours were left out because the depth layer couldn't be
+  read just then.
+- **NSW seabed reefs:** reach the edges of a tablet's screen.
+
 ## 1.4.3 — 2026-11-22
 
 - **Bigger 3D button.** On a depth layer, 3D VIEW now has the full-width row; STRUCTURE sits beside

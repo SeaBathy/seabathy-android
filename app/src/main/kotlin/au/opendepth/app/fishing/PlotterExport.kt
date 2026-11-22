@@ -181,6 +181,8 @@ class PlotterExport(
         job?.cancel()
         callbacks.toast("Making the GPX file…")
         job = scope.launch {
+            // Contours were asked for, but the depth layer couldn't be read just now.
+            var contoursMissing = false
             val built = try {
                 withContext(Dispatchers.Default) {
                     val points = ArrayList<PlotterGpx.Point>()
@@ -191,6 +193,7 @@ class PlotterExport(
                         val (layerName, source, tileZoom) = depthLayer
                         val part = ScreenDepths.partOf(box, source.bounds)
                         val grid = part?.let { withContext(Dispatchers.IO) { gridFor(source, it, view.zoom, tileZoom) { !isActive } } }
+                        contoursMissing = part != null && grid == null
                         if (grid != null) {
                             for (d in depths) {
                                 val name = PlotterLines.contourName(d, unit)
@@ -264,7 +267,8 @@ class PlotterExport(
             if (callbacks.startShare(intent)) {
                 callbacks.toast(
                     "GPX ready: ${count(built.waypoints, "waypoint")}, ${count(built.tracks, "track")}" +
-                        if (built.leftOut > 0) ". ${built.leftOut} left out: more than a plotter takes." else ""
+                        (if (built.leftOut > 0) ". ${built.leftOut} left out: more than a plotter takes." else "") +
+                        if (contoursMissing) ". No contours: the depth layer couldn't be read just now, try again." else ""
                 )
             }
         }

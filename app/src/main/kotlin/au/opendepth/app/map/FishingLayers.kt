@@ -420,7 +420,8 @@ class FishingLayersController(
 
         /** NSW reef tiles are fetched from this zoom in (about 10 tiles on a phone's screen). */
         private const val NSW_LOAD_ZOOM = 11.0
-        private const val NSW_MAX_TILES = 30
+        /** A tablet's screen at the zoom they load from, turned 45 degrees, needs up to about 64. */
+        private const val NSW_MAX_TILES = 64
 
         const val CLOSED_COLOUR = "#EF4444"
         const val LIMITS_COLOUR = "#F97316"

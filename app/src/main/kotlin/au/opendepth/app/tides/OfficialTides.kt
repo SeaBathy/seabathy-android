@@ -220,24 +220,30 @@ class OfficialTides(
         noteChecked(checkedKey(station, kind, year), now)
         val file = file(station, kind, year)
         val part = File(dir, file.name + ".part")
+        var predictions: MsqPredictions? = null
+        var readings: MsqIntervalYear? = null
         when (kind) {
             Kind.HILO -> {
-                val predictions = MsqCsv.parse(text)
-                check(station, year, predictions)
+                val p = MsqCsv.parse(text).also { check(station, year, it) }
                 part.writeText(text)
-                years[station.id] = years[station.id].orEmpty() + (year to predictions)
+                predictions = p
             }
             Kind.INTERVAL -> {
-                val readings = MsqCsv.parseInterval(text)
-                checkInterval(station, year, readings)
-                part.outputStream().use { readings.write(it) }
-                intervals[station.id] = intervals[station.id].orEmpty() + (year to readings)
+                val r = MsqCsv.parseInterval(text).also { checkInterval(station, year, it) }
+                part.outputStream().use { r.write(it) }
+                readings = r
             }
         }
         if (!part.renameTo(file)) {
             file.delete()
-            if (!part.renameTo(file)) throw IOException("Couldn't save the tides for ${station.name}.")
+            if (!part.renameTo(file)) {
+                part.delete()
+                throw IOException("Couldn't save the tides for ${station.name}.")
+            }
         }
+        // Only once the file is in place, so what is in memory is what a restart finds.
+        predictions?.let { years[station.id] = years[station.id].orEmpty() + (year to it) }
+        readings?.let { intervals[station.id] = intervals[station.id].orEmpty() + (year to it) }
     }
 
     private fun noteChecked(key: String, now: Long) {
@@ -285,9 +291,13 @@ class OfficialTides(
     /** Only data.qld.gov.au's own files are downloaded. */
     private fun allowed(url: String): Boolean = isDataQld(url)
 
+    /**
+     * Reads [station]'s saved files the first time it is wanted. computeIfAbsent, so a read
+     * running beside a download can't put back what was there before a year was saved.
+     */
     private fun load(station: MsqStation) {
-        if (!years.containsKey(station.id)) {
-            years[station.id] = files(station, Kind.HILO).mapNotNull { f ->
+        years.computeIfAbsent(station.id) {
+            files(station, Kind.HILO).mapNotNull { f ->
                 val year = yearOf(f, Kind.HILO) ?: return@mapNotNull null
                 runCatching { year to MsqCsv.parse(f.readText()).also { check(station, year, it) } }.getOrElse {
                     f.delete()
@@ -295,8 +305,8 @@ class OfficialTides(
                 }
             }.toMap()
         }
-        if (!intervals.containsKey(station.id)) {
-            intervals[station.id] = files(station, Kind.INTERVAL).mapNotNull { f ->
+        intervals.computeIfAbsent(station.id) {
+            files(station, Kind.INTERVAL).mapNotNull { f ->
                 val year = yearOf(f, Kind.INTERVAL) ?: return@mapNotNull null
                 runCatching { year to f.inputStream().use { MsqIntervalYear.read(it) }.also { checkInterval(station, year, it) } }.getOrElse {
                     f.delete()
@@ -328,6 +338,7 @@ class OfficialTides(
             val extremes = if (withList) run.flatMap { hilo.getValue(it).extremes } else null
             val built = MsqCurve.buildInterval(run.map { tenMinute.getValue(it) }, extremes, now, mean) ?: return null
             curves[station.id] = key to built
+            trimCurves(station.id)
             return built
         }
         if (year !in hilo) return null
@@ -337,8 +348,22 @@ class OfficialTides(
         val mean = station.mslAboveLatM ?: MsqCurve.curveMean(hilo.getValue(year).extremes)
         val built = MsqCurve.build(run.flatMap { hilo.getValue(it).extremes }, now, mean) ?: return null
         curves[station.id] = key to built
+        trimCurves(station.id)
         return built
     }
+
+    /**
+     * Keeps the built curves (about 2 MB each from 10-minute predictions) of the stations in
+     * use, [keep] and at most [MAX_CURVES] in all: the rest are built again if wanted.
+     */
+    private fun trimCurves(keep: String) {
+        if (curves.size <= MAX_CURVES) return
+        val inUse = chosen.values.mapTo(HashSet()) { it.station.id } + keep
+        curves.keys.filter { it !in inUse }.take(curves.size - MAX_CURVES).forEach { curves.remove(it) }
+    }
+
+    /** How many built curves there are now (tests). */
+    internal val curveCount: Int get() = curves.size
 
     /** Deletes saved years before last year (any station, either kind). */
     private fun prune(year: Int) {
@@ -452,6 +477,8 @@ class OfficialTides(
         private const val DAY_MS = 24 * 3_600_000L
         /** How far a file's position may be from the station's: positions are to the minute (under 2 km). */
         private const val SAME_PLACE_M = 5_000.0
+        /** Built curves kept beyond the stations in use: a route's tide windows can read several. */
+        internal const val MAX_CURVES = 4
     }
 }
 

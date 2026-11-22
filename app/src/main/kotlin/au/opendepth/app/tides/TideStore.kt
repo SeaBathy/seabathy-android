@@ -725,6 +725,16 @@ fun TideSettings.chartDatumBelowMsl(forecast: TideForecast?): Double? = when {
 const val TIDE_REACH_M = 50_000.0
 
 /**
+ * True when these tides are the ones to add to depths at [lat]/[lng]: within [TIDE_REACH_M]
+ * of where they're for. Official predictions count there too, beyond their own station's
+ * reach, as the model's do: they are the nearest tides there are, and adding none would read
+ * depths at mean sea level, metres too deep at a spring low. (A route's tide window is
+ * stricter, with [holdsAt], and says when it has no tides.)
+ */
+fun TideForecast.addsTideAt(lat: Double, lng: Double): Boolean =
+    NavGeo.distanceM(lat, lng, requestLat, requestLng) <= TIDE_REACH_M
+
+/**
  * True when these tides (the tide screen's) hold at [lat]/[lng]: within [TIDE_REACH_M] of
  * where they're for, and, for official predictions, only where their own station is the
  * one that applies ([stationThere], from [MsqStationIndex.nearest]); not near another

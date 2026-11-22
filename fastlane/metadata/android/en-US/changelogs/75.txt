@@ -1,0 +1,1 @@
+Fixes the tide added to depths near Queensland tide gauges: since 1.4.2 it stopped about 15 km from the gauge, so depths and the shallow alarm read too deep at low tide. Now out to 50 km as before. Smaller fixes to the tide window, official tide downloads, chartplotter export and NSW reefs on tablets.

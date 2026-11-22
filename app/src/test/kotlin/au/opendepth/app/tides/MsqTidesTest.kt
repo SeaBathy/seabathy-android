@@ -205,6 +205,22 @@ class MsqTidesTest {
     }
 
     @Test
+    fun `an official forecast's tide is added to depths out to 50 km`() {
+        val half = index.byId("060010A")!!
+        val built = MsqCurve.build(MsqCsv.parse(MsqFixtures.csv(MsqFixtures.yearRows(2026))).extremes, aest(2026, 6, 1, 12, 0))!!
+        val official = TideForecast(-21.27, 149.31, half.lat, half.lng, 0, built.curve, lowestTideM = -built.meanAboveLatM, station = half)
+        // Beyond every station's reach, by another station, and in water with tides of its own:
+        // still the nearest tides there are (1.4.2 and 1.4.3 added none there).
+        assertTrue(official.addsTideAt(-21.28, 149.54))
+        assertTrue(official.addsTideAt(-21.12, 149.22))
+        assertTrue(official.addsTideAt(-20.95, 149.55))
+        // Beyond 50 km: another place's tides, so none.
+        assertFalse(official.addsTideAt(-20.5, 149.31))
+        // The tide window stays strict: it says when it has no tides there.
+        assertFalse(official.holdsAt(-21.28, 149.54, index.nearest(-21.28, 149.54)))
+    }
+
+    @Test
     fun `a manual height keeps the typed chart datum`() {
         val half = index.byId("060010A")!!
         val built = MsqCurve.build(MsqCsv.parse(MsqFixtures.csv(MsqFixtures.yearRows(2026))).extremes, aest(2026, 6, 1, 12, 0))!!

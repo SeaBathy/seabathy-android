@@ -255,6 +255,27 @@ class OfficialTidesTest {
     }
 
     @Test
+    fun `a year that can't be put in place isn't counted as saved`() {
+        served[url2026] = year(2026)
+        val t = tides()
+        t.choose("place", -21.27, 149.31)
+        // Something in the way of the file: a folder of the same name, not empty.
+        File(folder.root, "060010A_2026.csv").apply {
+            mkdirs()
+            File(this, "x").writeText("x")
+        }
+        try {
+            t.download(station, november)
+            fail("the save should have failed")
+        } catch (expected: IOException) {
+            // Couldn't save.
+        }
+        assertTrue(t.needsDownload(station, november))
+        assertNull(t.forecast("place", november))
+        assertFalse(File(folder.root, "060010A_2026.csv.part").exists())
+    }
+
+    @Test
     fun `old years are dropped`() {
         served[url2026] = year(2026)
         served[url2027] = year(2027)

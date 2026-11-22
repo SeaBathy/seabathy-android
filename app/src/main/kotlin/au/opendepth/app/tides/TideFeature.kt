@@ -221,14 +221,15 @@ class TideFeature(
     fun tideNear(lat: Double, lng: Double): Double? = tideNow()?.takeIf { coversPoint(lat, lng) }
 
     /**
-     * True when the tide spot's tides hold at [lat]/[lng]: close enough to it, and for
-     * official predictions only where their own station applies (not near another
-     * station, nor in waters with tides of their own).
+     * True when the tide spot's tides are added to depths at [lat]/[lng]: within
+     * [TIDE_REACH_M] of it, official predictions included ([addsTideAt]). Until 1.4.4
+     * official ones stopped at their station's own reach (15 km), and past it depths
+     * got no tide at all.
      */
     fun coversPoint(lat: Double, lng: Double): Boolean {
         if (settings.mode != TideMode.MODEL) return true
         val f = forecast ?: return false
-        return f.holdsAt(lat, lng, store.officialStationAt(lat, lng))
+        return f.addsTideAt(lat, lng)
     }
 
     /** The tide now as a tide table gives it (above chart datum), for showing. */
@@ -432,8 +433,11 @@ class TideFeature(
         val (lat, lng) = position() ?: return
         val station = store.officialStationAt(lat, lng)
         if (station == null) {
-            store.dropOfficial(key)
             officialError = null
+            // Past every station's reach the model takes over once it has tides here. Until
+            // then (offline, say) the station's predictions stay: the nearest tides there are,
+            // so depths aren't left with no tide added.
+            if (!store.needsRefresh(key, lat, lng)) store.dropOfficial(key)
             refreshModelIfNeeded(force)
             return
         }
@@ -470,7 +474,10 @@ class TideFeature(
      * connection the first time), the tide model fills in.
      */
     private fun refreshOfficial(station: MsqStation, lat: Double, lng: Double, manual: Boolean, force: Boolean) {
-        if (officialJob?.isActive == true) return
+        if (officialJob?.isActive == true) {
+            if (manual) callbacks.toast("The official tides are already being updated")
+            return
+        }
         val forKey = key
         officialJob = scope.launch {
             val before = store.officialStationFor(forKey)?.id to store.hasOfficial(forKey)
@@ -496,8 +503,15 @@ class TideFeature(
                     }
                 fetchingOfficial = false
             } else if (manual) {
+                // Nothing to download: say what is saved, not that a download failed.
                 val until = forecast?.takeIf { it.station != null }?.curve?.endMillis
-                callbacks.toast(until?.let { "Official tides saved to ${SimpleDateFormat("d MMM yyyy", Locale.US).format(Date(it))}" } ?: "Couldn't download the official tides")
+                callbacks.toast(
+                    when {
+                        until != null -> "Official tides saved to ${SimpleDateFormat("d MMM yyyy", Locale.US).format(Date(until))}"
+                        store.hasOfficial(forKey) -> "Official tides saved"
+                        else -> "The official tides saved here don't cover now: the tide model fills in"
+                    }
+                )
             }
             if (forKey != key) return@launch
             refreshChip()
@@ -546,6 +560,8 @@ class TideFeature(
             runCatching { store.refresh(forKey, lat, lng) }
                 .onSuccess {
                     lastError = null
+                    // Past every station's reach: the model's tides replace the station's kept till now.
+                    if (store.officialStationAt(lat, lng) == null) store.dropOfficial(forKey)
                     if (manual) callbacks.toast("Tides updated")
                 }
                 .onFailure { error ->

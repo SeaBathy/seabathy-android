@@ -120,7 +120,9 @@ object TideWindow {
             tPrev = t
             hPrev = h
         }
-        openSince?.let { if (known > it) periods += Period(it, known) }
+        // Clear at the start counts even when the tides stop straight after (the end of the
+        // saved predictions): else that would read as never enough water.
+        openSince?.let { if (known > it || it == fromMillis) periods += Period(it, known) }
         return Result(fromMillis, known, needed, periods, highest, highestAt, lowest)
     }
 
