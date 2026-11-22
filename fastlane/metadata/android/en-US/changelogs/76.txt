@@ -1,0 +1,1 @@
+The Water line in sea conditions now steps through sea level, water clarity and salinity, like the Sea line, and shows "1 of 3". A Clear button for structure marks on the chart. New installs start on the light OpenStreetMap map.

@@ -42,6 +42,51 @@ enum class ColourChoice(val label: String, val forecast: Boolean, val fixedRange
     val isTemperature: Boolean get() = this == SEA_TEMP_SATELLITE || this == SEA_TEMP_FORECAST || this == TEMP_BELOW
 }
 
+/**
+ * The maps a line of the sea conditions box steps through: tapped again it shows the next,
+ * and after the last it hides. The Sea line: sea temperature, then chlorophyll. The Water
+ * line: sea level, then water clarity, then salinity. Only those the area has.
+ */
+object BoxCycle {
+    private val SEA_TEMPERATURE = setOf(ColourChoice.SEA_TEMP_SATELLITE, ColourChoice.SEA_TEMP_BREAKS, ColourChoice.SEA_TEMP_FORECAST)
+
+    fun of(row: String, satellites: Set<SatelliteKind>, forecastSeaTemp: Boolean): List<ColourChoice> = when (row) {
+        "Sea" -> listOfNotNull(
+            when {
+                SatelliteKind.SEA_TEMP in satellites -> ColourChoice.SEA_TEMP_SATELLITE
+                forecastSeaTemp -> ColourChoice.SEA_TEMP_FORECAST
+                else -> null
+            },
+            ColourChoice.CHLOROPHYLL.takeIf { SatelliteKind.CHLOROPHYLL in satellites }
+        )
+        "Water" -> listOfNotNull(
+            ColourChoice.SEA_LEVEL.takeIf { SatelliteKind.SEA_LEVEL in satellites },
+            ColourChoice.WATER_CLARITY.takeIf { SatelliteKind.WATER_CLARITY in satellites },
+            ColourChoice.SALINITY.takeIf { SatelliteKind.SALINITY in satellites }
+        )
+        else -> emptyList()
+    }
+
+    /** Where [shown] is in [cycle] (any sea temperature map is the temperature step), or -1. */
+    fun indexOf(cycle: List<ColourChoice>, shown: ColourChoice): Int {
+        val i = cycle.indexOf(shown)
+        if (i >= 0 || shown !in SEA_TEMPERATURE) return i
+        return cycle.indexOfFirst { it in SEA_TEMPERATURE }
+    }
+
+    /** The map after [shown], or null after the last one (or one not in [cycle]): then the line hides it. */
+    fun next(cycle: List<ColourChoice>, shown: ColourChoice): ColourChoice? {
+        val i = indexOf(cycle, shown)
+        return if (i < 0) null else cycle.getOrNull(i + 1)
+    }
+
+    /** "1 of 2" while [shown] is a step of a line with more than one, else null. */
+    fun label(cycle: List<ColourChoice>, shown: ColourChoice): String? {
+        val i = indexOf(cycle, shown)
+        return if (cycle.size < 2 || i < 0) null else "${i + 1} of ${cycle.size}"
+    }
+}
+
 /** Which way the flow lines (or arrows) show things moving. */
 enum class ArrowChoice(val label: String, val short: String) {
     /** Whatever the map layer is: wind for wind speed, the current for current speed; none over a satellite picture. */

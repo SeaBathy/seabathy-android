@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.4.5 — 2026-11-23
+
+- **Water clarity from the Water line.** In the sea conditions box the Water line now steps through
+  its maps like the Sea line: sea level, then water clarity (the estimated visibility), then
+  salinity, then off. The line showing a map says which it is ("1 of 3"), so it's clear another tap
+  shows the next; the Sea line says "1 of 2" for sea temperature and chlorophyll.
+- **Clear structure marks from the chart.** While structure marks are on the chart, a small
+  "Clear structure" button sits at the top left, so they can be cleared without opening the list.
+- **A light map to start with.** New installs open on the OpenStreetMap map (OpenFreeMap's light
+  style), easier to read at first than the dark one. A map already chosen is kept.
+
 ## 1.4.4 — 2026-11-23
 
 - **Tide added to depths again out to 50 km near Queensland gauges.** Since 1.4.2, with official

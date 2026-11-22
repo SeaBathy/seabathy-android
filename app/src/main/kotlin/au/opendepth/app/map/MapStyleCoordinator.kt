@@ -35,7 +35,7 @@ class MapStyleCoordinator(
     var usingOfflineFallback = false
         private set
 
-    var currentType: String = BasemapType.DARK
+    var currentType: String = BasemapType.DEFAULT
         private set
 
     var customUrl: String = ""
@@ -74,7 +74,7 @@ class MapStyleCoordinator(
         customAttribution = ""
         settings.clearCustomBasemap()
         if (currentType == BasemapType.CUSTOM) {
-            rebuild(BasemapType.DARK)
+            rebuild(BasemapType.DEFAULT)
         } else {
             refreshAttribution()
         }
@@ -214,7 +214,7 @@ class MapStyleCoordinator(
             return requestedType
         }
         onMessage("Set a custom basemap link in Settings first")
-        return if (currentType == BasemapType.CUSTOM) BasemapType.DARK else currentType
+        return if (currentType == BasemapType.CUSTOM) BasemapType.DEFAULT else currentType
     }
 
     private companion object {

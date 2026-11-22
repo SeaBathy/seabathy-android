@@ -471,6 +471,20 @@ class ConditionsFeature(
             setOnClickListener { layer?.let { toggleLayer(boxStep(it, from), from) } }
         }
 
+        /** [value] with "1 of 2" after it, smaller, while this line's map is one of several. */
+        fun showText(value: String, step: String?) {
+            if (step == null) {
+                text.text = value
+                return
+            }
+            val tag = "  $step"
+            text.text = android.text.SpannableString(value + tag).apply {
+                val start = value.length
+                setSpan(android.text.style.RelativeSizeSpan(0.8f), start, length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                setSpan(android.text.style.ForegroundColorSpan(palette.secondaryText), start, length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+        }
+
         fun highlight(on: Boolean) {
             view.background = if (on) activity.roundedBackground(0x3319C6B3, palette.accent, 8) else null
             text.setTextColor(if (on) palette.accent else palette.primaryText)
@@ -514,17 +528,22 @@ class ConditionsFeature(
     }
 
     /**
-     * What a tap on a box line shows: its [layer], except that the Sea line steps through its
-     * maps, sea temperature, then chlorophyll (when the area has it), then off. Giving back what
-     * already shows is what makes [toggleLayer] hide it.
+     * What a tap on a box line shows: its [layer], or while the line's map shows, the next of
+     * its maps ([BoxCycle]: the Sea line's sea temperature then chlorophyll, the Water line's
+     * sea level, water clarity, salinity). After the last, what already shows: [toggleLayer]
+     * then hides it.
      */
     private fun boxStep(layer: ColourChoice, from: ConditionsArea?): ColourChoice {
         val a = from ?: area ?: return layer
         val sameArea = from == null || from.id == area?.id
-        if (!shown || !sameArea || rowNameOf(layer) != "Sea" || rowNameOf(colour) != "Sea") return layer
-        if (colour == ColourChoice.CHLOROPHYLL) return colour
-        return if (SatelliteKind.CHLOROPHYLL in a.satellites) ColourChoice.CHLOROPHYLL else colour
+        val row = rowNameOf(layer) ?: return layer
+        if (!shown || !sameArea || rowNameOf(colour) != row) return layer
+        return BoxCycle.next(rowCycle(row, a), colour) ?: colour
     }
+
+    /** The maps [row] steps through for [a]. */
+    private fun rowCycle(row: String, a: ConditionsArea): List<ColourChoice> =
+        BoxCycle.of(row, a.satellites.keys, a.forecast?.has(ForecastField.SEA_TEMP) == true)
 
     /** The flow lines, drawn over the map and under everything else. */
     private val flowLines = FlowLinesView(activity, mapHolder)
@@ -1471,12 +1490,21 @@ class ConditionsFeature(
                 return@forEachIndexed
             }
             row.view.visibility = View.VISIBLE
-            row.text.text = value.text
             row.layer = layerOfRow(value.row, a)
-            row.view.contentDescription = value.spoken + if (row.layer != null) ". Tap to show it on the map" else ""
-            row.from = a
             // The showing layer's own line (chlorophyll and the temperature breaks are the Sea line's).
-            row.highlight(shown && row.layer != null && value.row == rowNameOf(colour))
+            val showing = shown && row.layer != null && value.row == rowNameOf(colour)
+            // "1 of 2" on it while its map is one of several, so it's clear another tap shows the next.
+            val cycle = if (showing) rowCycle(value.row, a) else emptyList()
+            val step = BoxCycle.label(cycle, colour)
+            row.showText(value.text, step)
+            row.view.contentDescription = value.spoken + when {
+                step != null && BoxCycle.next(cycle, colour) != null -> ". Map $step: tap again for the next"
+                step != null -> ". Map $step: tap again to hide it"
+                row.layer != null -> ". Tap to show it on the map"
+                else -> ""
+            }
+            row.from = a
+            row.highlight(showing)
             row.showIcon(value.icon)
             if (value.icon != null) {
                 row.arrow.visibility = View.VISIBLE
@@ -1694,19 +1722,11 @@ class ConditionsFeature(
         "Current" -> ColourChoice.CURRENT
         "Waves" -> ColourChoice.WAVES
         "Swell" -> ColourChoice.SWELL
-        "Sea" -> when {
-            SatelliteKind.SEA_TEMP in a.satellites -> ColourChoice.SEA_TEMP_SATELLITE
-            a.forecast?.has(ForecastField.SEA_TEMP) == true -> ColourChoice.SEA_TEMP_FORECAST
-            SatelliteKind.CHLOROPHYLL in a.satellites -> ColourChoice.CHLOROPHYLL
-            else -> null
-        }
+        // The first of the line's maps: another tap steps on ([boxStep]).
+        "Sea" -> rowCycle(name, a).firstOrNull()
         // Keeps the layer showing when it's one of this line's.
         "Depth" -> ColourChoice.TEMP_BELOW
-        "Water" -> if (rowNameOf(colour) == "Water" && a.satellites[colour.satellite] != null) colour else when {
-            SatelliteKind.SEA_LEVEL in a.satellites -> ColourChoice.SEA_LEVEL
-            SatelliteKind.SALINITY !in a.satellites && SatelliteKind.WATER_CLARITY in a.satellites -> ColourChoice.WATER_CLARITY
-            else -> ColourChoice.SALINITY
-        }
+        "Water" -> rowCycle(name, a).firstOrNull()
         else -> null
     }
 
@@ -2290,7 +2310,9 @@ class ConditionsFeature(
             }
         })
         body.addView(panels.caption(
-            "Or tap a line in the box on the chart: tap the Sea line again for chlorophyll, and once more to hide it. " +
+            "Or tap a line in the box on the chart. The Sea and Water lines step through their maps (it says \"1 of 2\"): " +
+                "the Sea line sea temperature then chlorophyll, the Water line sea level, water clarity, then salinity; " +
+                "after the last, a tap hides it. " +
                 "Wind, current, waves and swell are forecasts: the time slider steps " +
                 "through them, with moving lines for their direction. The satellite maps are one picture each, of the day the " +
                 "satellite saw (2 to 5 days ago), and temperature at depth is a model's for today: no slider with those. " +
@@ -3183,11 +3205,12 @@ class ConditionsFeature(
                 coarse(SatelliteKind.TEMP_BELOW)?.let {
                     out += Value(null, "Sea temp ${format.depth(a.belowDepthM.toDouble())} down ${format.temperature(it.toDouble())}", "Depth")
                 }
+                // In the order a tap on the line steps through their maps ([BoxCycle]).
                 val surface = listOfNotNull(
-                    coarse(SatelliteKind.SALINITY)?.let { String.format(Locale.US, "Salinity %.1f", it) },
                     coarse(SatelliteKind.SEA_LEVEL)?.let { "sea level ${format.seaLevelVsAverage(it.toDouble())}" },
                     coarse(SatelliteKind.WATER_CLARITY)?.let { WaterClarity.visibilityMetres(it) }?.takeIf { it.isFinite() }
-                        ?.let { "visibility about ${WaterClarity.text(it.toDouble(), format)} (estimate)" }
+                        ?.let { "visibility about ${WaterClarity.text(it.toDouble(), format)} (estimate)" },
+                    coarse(SatelliteKind.SALINITY)?.let { String.format(Locale.US, "salinity %.1f", it) }
                 )
                 if (surface.isNotEmpty()) out += Value(null, surface.joinToString(" · ").replaceFirstChar { it.uppercase() }, "Water")
             }

@@ -39,10 +39,17 @@ object BasemapType {
     const val OSM = "osm"
     const val CUSTOM = "custom"
     const val NONE = "none"
+
+    /**
+     * What a new install opens on: the light OpenStreetMap style (OpenFreeMap's "liberty"),
+     * easier to read at first sight than the dark one. Every map shown is saved as the
+     * current one, so installs from before 1.4.5 keep theirs.
+     */
+    const val DEFAULT = OSM
 }
 
 data class BasemapSettings(
-    val current: String = BasemapType.DARK,
+    val current: String = BasemapType.DEFAULT,
     val customUrl: String = "",
     val customAttribution: String = ""
 )
@@ -95,8 +102,8 @@ class AppSettingsRepository(private val preferences: SharedPreferences) {
 
     fun loadBasemap(): BasemapSettings {
         val settings = BasemapSettings(
-            current = preferences.getString(KEY_LAST_BASEMAP, BasemapType.DARK)
-                ?: BasemapType.DARK,
+            current = preferences.getString(KEY_LAST_BASEMAP, BasemapType.DEFAULT)
+                ?: BasemapType.DEFAULT,
             customUrl = preferences.getString(KEY_CUSTOM_BASEMAP_URL, "").orEmpty(),
             customAttribution =
                 preferences.getString(KEY_CUSTOM_BASEMAP_ATTRIBUTION, "").orEmpty()
@@ -104,7 +111,7 @@ class AppSettingsRepository(private val preferences: SharedPreferences) {
 
         // A saved "custom" selection is meaningless without a URL to load.
         return if (settings.current == BasemapType.CUSTOM && settings.customUrl.isBlank()) {
-            settings.copy(current = BasemapType.DARK)
+            settings.copy(current = BasemapType.DEFAULT)
         } else {
             settings
         }

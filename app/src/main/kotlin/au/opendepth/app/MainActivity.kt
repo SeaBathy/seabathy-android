@@ -1334,6 +1334,7 @@ class MainActivity : AppCompatActivity() {
             bottomViews = listOf(views.hint, views.routeCard, views.measureCard, views.mapAttribution)
         )
         navFeature.extraTopViews = listOf(conditions.boxView)
+        fishingTools.structure.bind(views.mapView.parent as android.view.ViewGroup) { navFeature.topViews }
     }
 
     private fun clearMeasurement() {

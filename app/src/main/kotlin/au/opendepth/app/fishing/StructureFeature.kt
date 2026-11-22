@@ -7,6 +7,8 @@ import android.graphics.RectF
 import android.text.TextUtils
 import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
+import androidx.coordinatorlayout.widget.CoordinatorLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
@@ -83,6 +85,59 @@ class StructureFeature(
 
     /** Puts the marks back on a new style: from the activity's style-installed hook. */
     fun install() = layer.install()
+
+    /** "Clear structure" over the chart while marks show and the list is closed, so they go without a new search. */
+    private var clearChip: TextView? = null
+    private var chipBelow: () -> List<View> = { emptyList() }
+
+    /**
+     * Adds the Clear button to [root], top left: under [below] (the top bar and what hangs
+     * from it), skipping those off to the right, like the tide chip.
+     */
+    fun bind(root: ViewGroup, below: () -> List<View>) {
+        chipBelow = below
+        val chip = TextView(activity).apply {
+            text = "✕  Clear structure"
+            textSize = 12f
+            setTextColor(palette.primaryText)
+            background = activity.roundedBackground(0xE6111827.toInt(), palette.border, 16)
+            setPadding(activity.dp(10), activity.dp(6), activity.dp(10), activity.dp(6))
+            elevation = activity.dp(4).toFloat()
+            maxLines = 1
+            visibility = View.GONE
+            contentDescription = "Clear the structure marks from the chart"
+            setOnClickListener {
+                clear()
+                callbacks.toast("Structure marks cleared")
+            }
+        }
+        root.addView(chip, CoordinatorLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            gravity = Gravity.TOP or Gravity.START
+            marginStart = activity.dp(10)
+        })
+        root.viewTreeObserver.addOnGlobalLayoutListener { placeChip() }
+        clearChip = chip
+    }
+
+    private fun placeChip() {
+        val chip = clearChip ?: return
+        if (chip.visibility != View.VISIBLE) return
+        val right = if (chip.width > 0) chip.left + chip.width else activity.dp(CHIP_WIDTH_DP)
+        val top = (chipBelow().filter { it.visibility == View.VISIBLE && it.left < right }.maxOfOrNull { it.bottom } ?: 0) + activity.dp(8)
+        if (chip.translationY != top.toFloat()) chip.translationY = top.toFloat()
+    }
+
+    /** Shows the Clear button while there are marks and the list isn't open. */
+    private fun updateChip() {
+        val chip = clearChip ?: return
+        val wanted = marks.isNotEmpty() && panel == null
+        if (wanted && chip.visibility != View.VISIBLE) {
+            chip.visibility = View.VISIBLE
+            placeChip()
+        } else if (!wanted) {
+            chip.visibility = View.GONE
+        }
+    }
 
     /** The marks on the chart now (cut to the depth range picked), for the plotter export: names and descriptions. */
     fun shownMarks(): List<Triple<StructureFinder.Mark, String, String>> {
@@ -227,6 +282,7 @@ class StructureFeature(
         marks = emptyList()
         searchKey = null
         saved.clear()
+        updateChip()
     }
 
     // List -------------------------------------------------------------------------
@@ -271,8 +327,12 @@ class StructureFeature(
         })
         lateinit var shown: Dialog
         // A dialog says it was dismissed a moment later: by then a new list may have replaced it.
-        shown = panels.showPanel("Structure", body, overMap = true, onDismiss = { if (panel === shown) panel = null })
+        shown = panels.showPanel("Structure", body, overMap = true, onDismiss = {
+            if (panel === shown) panel = null
+            updateChip()
+        })
         panel = shown
+        updateChip()
     }
 
     private fun fillList(list: LinearLayout, unit: DepthUnit) {
@@ -356,6 +416,7 @@ class StructureFeature(
             ToolMarksLayer.point(mark.lat, mark.lng, colourOf(mark.kind), "${index + 1}", index)
         }
         if (marks.isEmpty()) layer.clear() else layer.show(GeoJson.featureCollection(features))
+        updateChip()
     }
 
     private fun colourOf(kind: StructureFinder.Kind) = when (kind) {
@@ -372,5 +433,8 @@ class StructureFeature(
 
         /** How near a mark a tap counts as on it, for a finger on a 6 dp dot. */
         const val HIT_RADIUS_DP = 20
+
+        /** About how wide the Clear button is, before it has been laid out. */
+        const val CHIP_WIDTH_DP = 140
     }
 }
