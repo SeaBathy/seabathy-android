@@ -244,7 +244,8 @@ class LayerPanelBinder(
             )
         })
 
-        // Depth layers: their own tools on a second row (a hidden one too, though its file is closed).
+        // Depth layers: their own tools on a second row (a hidden one too, though its file is closed),
+        // and 3D VIEW on a row of its own, the biggest button.
         if (controller.isDepthLayer(layer)) {
             addView(LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -252,19 +253,19 @@ class LayerPanelBinder(
                 setPadding(0, context.dp(6), 0, 0)
                 addView(wideChip(chip("COLOURS", "Depth colours for ${layer.name}") {
                     onEditDepthColours(layer)
-                }, last = onOpen3d == null && onEditContours == null))
+                }, last = onEditContours == null && onFindStructure == null))
                 onEditContours?.let { edit ->
-                    addView(wideChip(chip("CONTOURS", "Contour lines for ${layer.name}") { edit(layer) }, last = onOpen3d == null))
+                    addView(wideChip(chip("CONTOURS", "Contour lines for ${layer.name}") { edit(layer) }, last = onFindStructure == null))
                 }
-                onOpen3d?.let { open ->
-                    addView(wideChip(chip("3D VIEW", "Show ${layer.name} in 3D") { open(layer) }, last = true))
+                onFindStructure?.let { find ->
+                    addView(wideChip(chip("STRUCTURE", "Find fishing structure in ${layer.name}") { find(layer) }, last = true))
                 }
             })
-            onFindStructure?.let { find ->
+            onOpen3d?.let { open ->
                 addView(LinearLayout(context).apply {
                     orientation = LinearLayout.HORIZONTAL
                     setPadding(0, context.dp(6), 0, 0)
-                    addView(wideChip(chip("FIND STRUCTURE", "Find fishing structure in ${layer.name}") { find(layer) }, last = true))
+                    addView(wideChip(chip("3D VIEW", "Show ${layer.name} in 3D") { open(layer) }, last = true))
                 })
             }
         }

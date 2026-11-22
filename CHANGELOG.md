@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.4.3 — 2026-11-22
+
+- **Bigger 3D button.** On a depth layer, 3D VIEW now has the full-width row; STRUCTURE sits beside
+  COLOURS and CONTOURS.
+- **Tap a structure mark.** Once the structure list is closed, tapping a numbered mark on the chart
+  shows what it is (pinnacle, ledge or hole, its depths and position) with Save waypoint, or the
+  whole list again. A saved mark's waypoint can then be tapped to change it.
+- **Chlorophyll from the Sea line.** In the sea conditions box, tapping the Sea line shows sea
+  temperature, tapping it again shows chlorophyll, and once more hides it.
+
 ## 1.4.2 — 2026-11-22
 
 Sharper Australian depths, official Queensland tides, fishing layers and fishing tools, all free.

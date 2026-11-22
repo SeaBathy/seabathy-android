@@ -1,0 +1,1 @@
+Bigger 3D VIEW button on depth layers. Tap a structure mark on the chart to see what it is and save it as a waypoint. In the sea conditions box, tap the Sea line once for sea temperature, again for chlorophyll, and once more to hide it.

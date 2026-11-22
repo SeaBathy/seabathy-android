@@ -1,5 +1,6 @@
 package au.opendepth.app.fishing
 
+import android.graphics.RectF
 import android.util.Log
 import au.opendepth.app.map.MapHolder
 import au.opendepth.app.map.MapLayerIds
@@ -83,6 +84,17 @@ class ToolMarksLayer(private val mapHolder: MapHolder, private val id: String) {
 
     fun clear() = show(MapLayerIds.EMPTY_GEOJSON)
 
+    /** The "i" numbers of the dots (and their labels) drawn inside [box], a part of the screen. */
+    fun indicesIn(box: RectF): List<Int> {
+        if (isEmpty) return emptyList()
+        val map = mapHolder.map ?: return emptyList()
+        return runCatching {
+            map.queryRenderedFeatures(box, dotId, labelId).mapNotNull { feature ->
+                if (feature.hasProperty("i")) feature.getNumberProperty("i")?.toInt() else null
+            }.distinct()
+        }.onFailure { Log.w(TAG, "tool marks hit test FAILED ($id)", it) }.getOrDefault(emptyList())
+    }
+
     /** Under the waypoints, which stay on top; above everything else. */
     private fun add(style: Style, layer: Layer) {
         if (style.getLayer(layer.id) != null) return
@@ -92,10 +104,12 @@ class ToolMarksLayer(private val mapHolder: MapHolder, private val id: String) {
     companion object {
         private const val TAG = "SeaBathyToolMarks"
 
-        /** A point feature for [show]. */
-        fun point(lat: Double, lng: Double, colour: String, label: String): String =
-            """{"type":"Feature","geometry":{"type":"Point","coordinates":[$lng,$lat]},""" +
-                """"properties":{"colour":"$colour","label":"${au.opendepth.app.map.GeoJson.jsonEscape(label)}"}}"""
+        /** A point feature for [show]; [index] (the mark's place in its list) is what [indicesIn] finds. */
+        fun point(lat: Double, lng: Double, colour: String, label: String, index: Int? = null): String {
+            val number = if (index != null) ""","i":$index""" else ""
+            return """{"type":"Feature","geometry":{"type":"Point","coordinates":[$lng,$lat]},""" +
+                """"properties":{"colour":"$colour","label":"${au.opendepth.app.map.GeoJson.jsonEscape(label)}"$number}}"""
+        }
 
         /** A line feature through (lat, lng) points, for [show]. */
         fun line(points: List<Pair<Double, Double>>, colour: String, dashed: Boolean = false): String =

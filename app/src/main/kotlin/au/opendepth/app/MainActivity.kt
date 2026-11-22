@@ -904,7 +904,7 @@ class MainActivity : AppCompatActivity() {
                 hud.showMeasureSummary(measureController.summary())
             }
 
-            ToolMode.NONE -> showNavMarkAt(lat, lng)
+            ToolMode.NONE -> if (!fishingTools.structure.showMarkAt(lat, lng)) showNavMarkAt(lat, lng)
         }
     }
 

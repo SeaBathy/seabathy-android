@@ -1,7 +1,9 @@
 package au.opendepth.app.fishing
 
 import android.app.Dialog
+import android.graphics.Color
 import android.graphics.PointF
+import android.graphics.RectF
 import android.text.TextUtils
 import android.view.Gravity
 import android.view.View
@@ -16,6 +18,7 @@ import au.opendepth.app.model.GeoBounds
 import au.opendepth.app.model.OverlayLayer
 import au.opendepth.app.nav.DepthUnit
 import au.opendepth.app.ui.AppTheme
+import au.opendepth.app.ui.InfoCard
 import au.opendepth.app.ui.PanelDialogs
 import au.opendepth.app.ui.UiRadius
 import au.opendepth.app.ui.applyReadableText
@@ -39,7 +42,9 @@ import java.util.Locale
  * panel): looks through the depths on screen, or the whole layer when it is
  * small, for pinnacles, ledges and holes ([StructureFinder]), marks them on
  * the chart and lists them best first, cut to a range of depths. A row goes
- * to its mark; SAVE keeps it as a waypoint. Works offline, off the main thread.
+ * to its mark; SAVE keeps it as a waypoint. Once the list is closed, a tap on
+ * a mark on the chart says what it is, with the same Save. Works offline, off
+ * the main thread.
  */
 class StructureFeature(
     private val activity: AppCompatActivity,
@@ -156,6 +161,65 @@ class StructureFeature(
         }
     }
 
+    /**
+     * A tap on the chart at [lat], [lng]: when it lands on a structure mark (the nearest, if
+     * several), shows what the mark is and returns true; false leaves the tap to the rest of the map.
+     */
+    fun showMarkAt(lat: Double, lng: Double): Boolean {
+        if (marks.isEmpty() || layer.isEmpty) return false
+        val map = mapHolder.map ?: return false
+        val at = runCatching { map.projection.toScreenLocation(LatLng(lat, lng)) }.getOrNull() ?: return false
+        val r = activity.dp(HIT_RADIUS_DP).toFloat()
+        val index = layer.indicesIn(RectF(at.x - r, at.y - r, at.x + r, at.y + r))
+            .filter { it in marks.indices }
+            .minByOrNull { i ->
+                runCatching {
+                    val p = map.projection.toScreenLocation(LatLng(marks[i].lat, marks[i].lng))
+                    (p.x - at.x) * (p.x - at.x) + (p.y - at.y) * (p.y - at.y)
+                }.getOrDefault(Float.MAX_VALUE)
+            } ?: return false
+        showMark(index)
+        return true
+    }
+
+    /** One mark's card: what it is and where, with Save as a waypoint and the whole list. */
+    private fun showMark(index: Int) {
+        val mark = marks.getOrNull(index) ?: return
+        val unit = callbacks.depthUnit()
+        val name = StructureFinder.name(mark, unit)
+        val description = StructureFinder.describe(mark, unit)
+        val done = index in saved
+        InfoCard(activity).apply {
+            badge = "Structure"
+            badgeColour = Color.parseColor(colourOf(mark.kind))
+            title = "${index + 1}. $name"
+            paragraphs += description
+            rows += InfoCard.Row("Position", CoordinateFormatter.format(mark.lat, mark.lng))
+            if (mark.kind == StructureFinder.Kind.LEDGE) {
+                rows += InfoCard.Row("Length", "${Math.round(mark.lengthM * unit.perMetre)} ${unit.label}")
+            }
+            if (done) paragraphs += "Saved as a waypoint: tap the waypoint to change it."
+            fine = "An automatic guess from the chart depths, not a survey: check it on your sounder."
+            actions += InfoCard.Action("Close")
+            actions += InfoCard.Action("All marks") { showList() }
+            if (!done) {
+                actions += InfoCard.Action("Save waypoint", primary = true) { saveMark(index, mark, unit) }
+            }
+        }.show()
+    }
+
+    /** Keeps [mark] as a waypoint (a fish icon, under a free name); remembered so it isn't saved twice. */
+    private fun saveMark(index: Int, mark: StructureFinder.Mark, unit: DepthUnit): String? {
+        val description = StructureFinder.describe(mark, unit)
+        val name = callbacks.saveWaypoint(
+            StructureFinder.name(mark, unit), mark.lat, mark.lng,
+            "$description. An automatic guess from the chart depths (SeaBathy structure finder): check it on the sounder."
+        ) ?: return null
+        saved += index
+        callbacks.toast("Saved $name")
+        return name
+    }
+
     /** Takes the marks off the chart. */
     fun clear() {
         job?.cancel()
@@ -255,15 +319,7 @@ class StructureFeature(
             }
             showSaved(index in saved)
             setOnClickListener {
-                val name = callbacks.saveWaypoint(
-                    StructureFinder.name(mark, unit), mark.lat, mark.lng,
-                    "$description. An automatic guess from the chart depths (SeaBathy structure finder): check it on the sounder."
-                )
-                if (name != null) {
-                    saved += index
-                    showSaved(true)
-                    callbacks.toast("Saved $name")
-                }
+                if (saveMark(index, mark, unit) != null) showSaved(true)
             }
         }
         addView(save, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
@@ -297,7 +353,7 @@ class StructureFeature(
         val unit = callbacks.depthUnit()
         val range = StructureFinder.bands(unit).getOrNull(band) ?: return
         val features = marks.withIndex().filter { range.holds(it.value) }.map { (index, mark) ->
-            ToolMarksLayer.point(mark.lat, mark.lng, colourOf(mark.kind), "${index + 1}")
+            ToolMarksLayer.point(mark.lat, mark.lng, colourOf(mark.kind), "${index + 1}", index)
         }
         if (marks.isEmpty()) layer.clear() else layer.show(GeoJson.featureCollection(features))
     }
@@ -313,5 +369,8 @@ class StructureFeature(
 
         /** The list covers the lower part of the screen: a mark gone to sits this share of the screen above the middle. */
         const val LIST_CLEAR_SHIFT = 0.29f
+
+        /** How near a mark a tap counts as on it, for a finger on a 6 dp dot. */
+        const val HIT_RADIUS_DP = 20
     }
 }

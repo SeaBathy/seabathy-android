@@ -468,7 +468,7 @@ class ConditionsFeature(
             isClickable = true
             addView(arrow, LinearLayout.LayoutParams(activity.dp(18), activity.dp(18)).apply { marginEnd = activity.dp(6) })
             addView(text)
-            setOnClickListener { layer?.let { toggleLayer(it, from) } }
+            setOnClickListener { layer?.let { toggleLayer(boxStep(it, from), from) } }
         }
 
         fun highlight(on: Boolean) {
@@ -511,6 +511,19 @@ class ConditionsFeature(
         if (area == null) area = spotArea
         if (!shown) setShown(true) else redraw()
         refreshDialog()
+    }
+
+    /**
+     * What a tap on a box line shows: its [layer], except that the Sea line steps through its
+     * maps, sea temperature, then chlorophyll (when the area has it), then off. Giving back what
+     * already shows is what makes [toggleLayer] hide it.
+     */
+    private fun boxStep(layer: ColourChoice, from: ConditionsArea?): ColourChoice {
+        val a = from ?: area ?: return layer
+        val sameArea = from == null || from.id == area?.id
+        if (!shown || !sameArea || rowNameOf(layer) != "Sea" || rowNameOf(colour) != "Sea") return layer
+        if (colour == ColourChoice.CHLOROPHYLL) return colour
+        return if (SatelliteKind.CHLOROPHYLL in a.satellites) ColourChoice.CHLOROPHYLL else colour
     }
 
     /** The flow lines, drawn over the map and under everything else. */
@@ -2277,7 +2290,8 @@ class ConditionsFeature(
             }
         })
         body.addView(panels.caption(
-            "Or tap a line in the box on the chart. Wind, current, waves and swell are forecasts: the time slider steps " +
+            "Or tap a line in the box on the chart: tap the Sea line again for chlorophyll, and once more to hide it. " +
+                "Wind, current, waves and swell are forecasts: the time slider steps " +
                 "through them, with moving lines for their direction. The satellite maps are one picture each, of the day the " +
                 "satellite saw (2 to 5 days ago), and temperature at depth is a model's for today: no slider with those. " +
                 "Temperature breaks are where warm and cold water meet, often where fish gather.",
