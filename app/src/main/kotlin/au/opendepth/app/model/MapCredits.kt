@@ -46,6 +46,44 @@ object MapCredits {
             .distinct()
             .joinToString(SEPARATOR)
 
+    /**
+     * Words that keep a credit in the short line ([compactLine]), from each provider's terms:
+     * OpenStreetMap and the map built from it (OSM's attribution guidelines: visible on the
+     * map), EOX (its credit "clearly visible" wherever its pictures show), Open-Meteo (credit
+     * next to where its data shows) and Copernicus (the Copernicus Marine licence, and the
+     * "contains modified Copernicus Sentinel data" notice). The rest are CC BY or public
+     * domain: credited "in any reasonable manner", the full list one tap away.
+     */
+    private val ALWAYS_SHOWN = listOf("OpenStreetMap", "OpenMapTiles", "OpenFreeMap", "EOX", "Open-Meteo", "Copernicus")
+
+    /**
+     * The short credit line the full one ([line]) shrinks to a few seconds after it changes,
+     * or once the chart is moved, as OSM's attribution guidelines allow: "Not for navigation",
+     * the basemap's credit, the credits in [ALWAYS_SHOWN] (the sea conditions' named
+     * shortly), then how many more there are and "ⓘ". Tapping it shows the full list.
+     */
+    fun compactLine(credits: List<MapCredit>): String {
+        val all = credits.flatMap { c -> c.text.split("; ").map { c.group to it.trim() } }
+            .filter { it.second.isNotEmpty() }
+            .distinctBy { it.second }
+        val (kept, hidden) = all.partition { (group, text) -> group == MapCredit.Group.BASEMAP || ALWAYS_SHOWN.any { it in text } }
+        val end = if (hidden.isEmpty()) "ⓘ" else "+${hidden.size} more ⓘ"
+        return (listOf(NOT_FOR_NAVIGATION) + kept.map { shortened(it.second) }.distinct() + end).joinToString(SEPARATOR)
+    }
+
+    /** The sea conditions' long credit, by the names that must stay in sight; anything else as it is. */
+    private fun shortened(text: String): String {
+        if (!text.startsWith(SEA_PREFIX)) return text
+        val names = buildList {
+            if ("Open-Meteo" in text) add("Open-Meteo")
+            if ("Copernicus Marine" in text) add("Copernicus Marine")
+            if ("Copernicus Sentinel" in text) add("contains modified Copernicus Sentinel data")
+        }
+        return SEA_PREFIX + names.joinToString(", ") + " and others"
+    }
+
+    private const val SEA_PREFIX = "Sea: "
+
     /** One heading of the full list, with the credits under it, each on its own line. */
     data class Section(val title: String, val lines: List<String>)
 

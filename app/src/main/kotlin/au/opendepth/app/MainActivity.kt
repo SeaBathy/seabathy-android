@@ -478,7 +478,7 @@ class MainActivity : AppCompatActivity() {
             settings = settingsRepository,
             overlays = overlays,
             onStyleInstalled = ::onStyleInstalled,
-            onAttributionChanged = { text -> hud.showAttribution(text) },
+            onAttributionChanged = { full, short -> hud.showAttribution(full, short) },
             onMessage = ::toast,
             isOnline = ::hasWorkingInternet,
             extraAttributions = {
@@ -807,6 +807,8 @@ class MainActivity : AppCompatActivity() {
             // a chartplotter; tap GPS again to follow.
             map.addOnMoveListener(object : org.maplibre.android.maps.MapLibreMap.OnMoveListener {
                 override fun onMoveBegin(detector: org.maplibre.android.gestures.MoveGestureDetector) {
+                    // Moving the chart shrinks the credit line to its short form (OSM's guidelines allow it on map interaction).
+                    hud.shrinkAttribution()
                     if (gpsController.releaseFollow()) updateGpsButton()
                 }
                 override fun onMove(detector: org.maplibre.android.gestures.MoveGestureDetector) = Unit

@@ -1,0 +1,1 @@
+A shorter credit line on the chart: it shows in full when the map or a layer changes, then shrinks to one line after five seconds or when you move the chart. Tap it for every credit.

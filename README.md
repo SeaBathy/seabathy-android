@@ -4,7 +4,7 @@
 Your depth maps in 3D, offline charts, tides and sea conditions. Works anywhere in the world.</p>
 
 <p align="center">
-  <img alt="Version 1.4.6" src="https://img.shields.io/badge/version-1.4.6-0f766e">
+  <img alt="Version 1.4.7" src="https://img.shields.io/badge/version-1.4.7-0f766e">
   <img alt="Android 8.0+" src="https://img.shields.io/badge/Android-8.0%2B-3ddc84?logo=android&logoColor=white">
   <img alt="GPL-3.0 licence" src="https://img.shields.io/badge/licence-GPL--3.0-blue">
   <img alt="No ads, no tracking" src="https://img.shields.io/badge/ads%20%26%20tracking-none-success">
@@ -70,7 +70,7 @@ reef wall, channel and bommie stand out, with depth colours or satellite on top.
 
 ## Install
 
-1. Download **[`SeaBathy-1.4.6.apk`](download/SeaBathy-1.4.6.apk)** onto your phone (or
+1. Download **[`SeaBathy-1.4.7.apk`](download/SeaBathy-1.4.7.apk)** onto your phone (or
    from the Releases page).
 2. Open it. If Android asks, allow your browser or file manager to *install unknown apps*.
 3. Open SeaBathy. The first start shows the whole world; zoom in to where you go.

@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.4.7 — 2026-11-24
+
+- **A shorter credit line on the chart.** The credits show in full when they change (the map first
+  shows, a layer is turned on), then after five seconds, or as soon as the chart is moved, shrink
+  to one short line: "Not for navigation", the map's OpenStreetMap credit, and the sources whose
+  terms ask to be seen where their data shows (EOX's satellite map, Open-Meteo, Copernicus), then
+  "+N more ⓘ". Tapping it lists every credit, as before. This follows OpenStreetMap's attribution
+  guidelines and each provider's terms.
+
 ## 1.4.6 — 2026-11-23
 
 - **The box line names the map that shows.** While one of the Sea or Water line's maps is on the

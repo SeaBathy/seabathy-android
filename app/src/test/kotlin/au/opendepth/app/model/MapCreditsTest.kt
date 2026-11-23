@@ -105,4 +105,38 @@ class MapCreditsTest {
             assertTrue("$credit is missing from the full list", listed.contains(credit))
         }
     }
+
+    @Test
+    fun `the short credit line keeps the credits whose terms ask to be seen`() {
+        val credits = listOf(
+            MapCredit(MapCredit.Group.BASEMAP, "", "OpenFreeMap © OpenMapTiles • © OpenStreetMap contributors"),
+            MapCredit(MapCredit.Group.LAYER, "High detail", "Depths: IMAS composite (Flukes 2026), AusSeabed and state surveys (CC BY 4.0)"),
+            MapCredit(MapCredit.Group.LAYER, "Shallow depths", "Generated using E.U. Copernicus Marine Service Information; https://doi.org/10.48670/mds-00364"),
+            MapCredit(
+                MapCredit.Group.BUILT_IN, "",
+                "Sea: Open-Meteo (CC BY 4.0): Copernicus Marine, Météo-France, ECMWF, DWD, NOAA, NOAA CoastWatch, NASA JPL MUR, contains modified Copernicus Sentinel data"
+            ),
+            MapCredit(MapCredit.Group.BUILT_IN, "", "Shipwrecks: Australasian Underwater Cultural Heritage Database (CC BY 3.0 AU)")
+        )
+        assertEquals(
+            "Not for navigation • OpenFreeMap © OpenMapTiles • © OpenStreetMap contributors • " +
+                "Generated using E.U. Copernicus Marine Service Information • " +
+                "Sea: Open-Meteo, Copernicus Marine, contains modified Copernicus Sentinel data and others • +3 more ⓘ",
+            MapCredits.compactLine(credits)
+        )
+        // The full line still names everything.
+        assertTrue(MapCredits.line(credits).contains("Shipwrecks"))
+    }
+
+    @Test
+    fun `the short line keeps EOX and a typed basemap credit, and says when nothing is hidden`() {
+        assertEquals(
+            "Not for navigation • $now • ⓘ",
+            MapCredits.compactLine(listOf(MapCredit(MapCredit.Group.LAYER, "Satellite", now)))
+        )
+        assertEquals(
+            "Not for navigation • My club's charts • ⓘ",
+            MapCredits.compactLine(listOf(MapCredit(MapCredit.Group.BASEMAP, "", "My club's charts")))
+        )
+    }
 }

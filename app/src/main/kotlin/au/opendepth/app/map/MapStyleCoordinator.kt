@@ -21,7 +21,8 @@ class MapStyleCoordinator(
     private val settings: AppSettingsRepository,
     private val overlays: OverlayLayerController,
     private val onStyleInstalled: () -> Unit,
-    private val onAttributionChanged: (String) -> Unit,
+    /** The credit line in full, and the short line it shrinks to ([MapCredits.compactLine]). */
+    private val onAttributionChanged: (full: String, short: String) -> Unit,
     private val onMessage: (String) -> Unit,
     /** Whether the phone has working internet now (checked, not just a network). */
     private val isOnline: () -> Boolean = { true },
@@ -196,7 +197,8 @@ class MapStyleCoordinator(
 
     /** Recomputes the credit line from the basemap and visible overlays. */
     fun refreshAttribution() {
-        onAttributionChanged(MapCredits.line(credits()))
+        val all = credits()
+        onAttributionChanged(MapCredits.line(all), MapCredits.compactLine(all))
     }
 
     private fun baseAttribution(): String? = when {

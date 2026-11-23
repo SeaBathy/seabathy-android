@@ -31,10 +31,43 @@ class ChartHud(private val views: MainViews) {
         views.coordinates.text = CoordinateFormatter.format(lat, lng)
     }
 
-    fun showAttribution(text: String) {
-        views.mapAttribution.text = text
-        views.mapAttribution.contentDescription = "$CREDITS_DESCRIPTION $text"
-        views.mapAttribution.visibility = if (text.isBlank()) View.GONE else View.VISIBLE
+    private var fullCredits = ""
+    private var shortCredits = ""
+    private var creditsInFull = false
+    private val shrinkCredits = Runnable {
+        creditsInFull = false
+        views.mapAttribution.text = shortCredits
+    }
+
+    /**
+     * The credit line: in [full] when what it credits changes (the map first shows, a layer is
+     * turned on), then [short] after [CREDITS_FULL_MS] or once the chart is moved
+     * ([shrinkAttribution]), as OSM's attribution guidelines allow. The short line still names
+     * OpenStreetMap and the sources whose terms ask to be seen ([MapCredits.compactLine]);
+     * tapping either shows the full list. Screen readers always get the full line.
+     */
+    fun showAttribution(full: String, short: String) {
+        val line = views.mapAttribution
+        val changed = full != fullCredits
+        fullCredits = full
+        shortCredits = short
+        line.contentDescription = "$CREDITS_DESCRIPTION $full"
+        line.visibility = if (full.isBlank()) View.GONE else View.VISIBLE
+        if (changed) {
+            creditsInFull = true
+            line.text = full
+            line.removeCallbacks(shrinkCredits)
+            line.postDelayed(shrinkCredits, CREDITS_FULL_MS)
+        } else if (!creditsInFull) {
+            line.text = short
+        }
+    }
+
+    /** The chart was moved by hand: the credit line goes short at once. */
+    fun shrinkAttribution() {
+        if (!creditsInFull) return
+        views.mapAttribution.removeCallbacks(shrinkCredits)
+        shrinkCredits.run()
     }
 
     /**
@@ -109,5 +142,8 @@ class ChartHud(private val views: MainViews) {
 
         /** Read out before the credit line's own text, saying what a tap on it does. */
         const val CREDITS_DESCRIPTION = "Map and depth credits, tap for the full list."
+
+        /** How long the credit line stays in full after it changes: OSM's guidelines allow it to shrink after five seconds. */
+        const val CREDITS_FULL_MS = 5_000L
     }
 }
