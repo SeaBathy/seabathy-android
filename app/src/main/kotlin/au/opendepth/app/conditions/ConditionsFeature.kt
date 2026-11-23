@@ -1496,8 +1496,10 @@ class ConditionsFeature(
             // "1 of 2" on it while its map is one of several, so it's clear another tap shows the next.
             val cycle = if (showing) rowCycle(value.row, a) else emptyList()
             val step = BoxCycle.label(cycle, colour)
-            row.showText(value.text, step)
-            row.view.contentDescription = value.spoken + when {
+            // While one of the line's maps shows, only its reading: the line names what the map shows.
+            val alone = if (showing) BoxCycle.textFor(value.parts, colour) else null
+            row.showText(alone ?: value.text, step)
+            row.view.contentDescription = (alone ?: value.spoken) + when {
                 step != null && BoxCycle.next(cycle, colour) != null -> ". Map $step: tap again for the next"
                 step != null -> ". Map $step: tap again to hide it"
                 row.layer != null -> ". Tap to show it on the map"
@@ -3153,7 +3155,9 @@ class ConditionsFeature(
             /** A small picture in the arrow's place: the sun and moon lines'. */
             val icon: SkyIcon? = null,
             /** The line in full words, for screen readers and a photo's record (the sun and moon lines are short). */
-            val spoken: String = text
+            val spoken: String = text,
+            /** Each map's own reading in the line (the Sea and Water lines): shown alone while that map is ([BoxCycle.textFor]). */
+            val parts: List<Pair<ColourChoice, String>> = emptyList()
         )
 
         /**
@@ -3185,19 +3189,19 @@ class ConditionsFeature(
                 wave(f, "Waves", ForecastField.WAVE_HEIGHT, ForecastField.WAVE_PERIOD, ForecastField.WAVE_U, ForecastField.WAVE_V, lat, lng, time, format, masked)?.let { out += it }
                 wave(f, "Swell", ForecastField.SWELL_HEIGHT, ForecastField.SWELL_PERIOD, ForecastField.SWELL_U, ForecastField.SWELL_V, lat, lng, time, format, masked)?.let { out += it }
             }
-            val water = mutableListOf<String>()
+            val water = mutableListOf<Pair<ColourChoice, String>>()
             val satTemp = (if (sea == true) a.toShore(SatelliteKind.SEA_TEMP)?.sampleToShore(lat, lng) else null)?.takeIf { it.isFinite() }
                 ?: a.satellites[SatelliteKind.SEA_TEMP]?.sample(lat, lng)
             val modelTemp = f?.sample(ForecastField.SEA_TEMP, lat, lng, time, masked)
             when {
-                satTemp != null && satTemp.isFinite() -> water += "Surface temp ${format.temperature(satTemp.toDouble())}" +
+                satTemp != null && satTemp.isFinite() -> water += ColourChoice.SEA_TEMP_SATELLITE to "Surface temp ${format.temperature(satTemp.toDouble())}" +
                     (a.satellites[SatelliteKind.SEA_TEMP]?.let { " (${shortDay(it.dateMillis)})" } ?: "")
-                modelTemp != null && modelTemp.isFinite() -> water += "Surface temp ${format.temperature(modelTemp.toDouble())} (forecast)"
+                modelTemp != null && modelTemp.isFinite() -> water += ColourChoice.SEA_TEMP_FORECAST to "Surface temp ${format.temperature(modelTemp.toDouble())} (forecast)"
             }
             a.satellites[SatelliteKind.CHLOROPHYLL]?.sample(lat, lng)?.takeIf { it.isFinite() && isSea != false }?.let {
-                water += String.format(Locale.US, if (it < 1) "chlorophyll %.2f mg/m³" else "chlorophyll %.1f mg/m³", it)
+                water += ColourChoice.CHLOROPHYLL to String.format(Locale.US, if (it < 1) "chlorophyll %.2f mg/m³" else "chlorophyll %.1f mg/m³", it)
             }
-            if (water.isNotEmpty()) out += Value(null, water.joinToString(" · "), "Sea")
+            if (water.isNotEmpty()) out += Value(null, water.joinToString(" · ") { it.second }, "Sea", parts = water)
 
             // The coarser layers, which change slowly: the temperature at depth, then salinity and sea level.
             if (isSea != false) {
@@ -3207,12 +3211,14 @@ class ConditionsFeature(
                 }
                 // In the order a tap on the line steps through their maps ([BoxCycle]).
                 val surface = listOfNotNull(
-                    coarse(SatelliteKind.SEA_LEVEL)?.let { "sea level ${format.seaLevelVsAverage(it.toDouble())}" },
+                    coarse(SatelliteKind.SEA_LEVEL)?.let { ColourChoice.SEA_LEVEL to "sea level ${format.seaLevelVsAverage(it.toDouble())}" },
                     coarse(SatelliteKind.WATER_CLARITY)?.let { WaterClarity.visibilityMetres(it) }?.takeIf { it.isFinite() }
-                        ?.let { "visibility about ${WaterClarity.text(it.toDouble(), format)} (estimate)" },
-                    coarse(SatelliteKind.SALINITY)?.let { String.format(Locale.US, "salinity %.1f", it) }
+                        ?.let { ColourChoice.WATER_CLARITY to "visibility about ${WaterClarity.text(it.toDouble(), format)} (estimate)" },
+                    coarse(SatelliteKind.SALINITY)?.let { ColourChoice.SALINITY to String.format(Locale.US, "salinity %.1f", it) }
                 )
-                if (surface.isNotEmpty()) out += Value(null, surface.joinToString(" · ").replaceFirstChar { it.uppercase() }, "Water")
+                if (surface.isNotEmpty()) {
+                    out += Value(null, surface.joinToString(" · ") { it.second }.replaceFirstChar { it.uppercase() }, "Water", parts = surface)
+                }
             }
 
             out += skyValues(lat, lng, time)

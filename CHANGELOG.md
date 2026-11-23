@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.4.6 — 2026-11-23
+
+- **The box line names the map that shows.** While one of the Sea or Water line's maps is on the
+  chart, its line in the sea conditions box shows only that map's reading, e.g. "Visibility about
+  16 m (estimate) 2 of 3" or "Chlorophyll 0.41 mg/m³ 2 of 2", so the line and the card at the bottom
+  say the same thing. With the map off, the line shows all its readings again.
+
 ## 1.4.5 — 2026-11-23
 
 - **Water clarity from the Water line.** In the sea conditions box the Water line now steps through

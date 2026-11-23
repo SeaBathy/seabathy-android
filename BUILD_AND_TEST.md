@@ -106,7 +106,7 @@ screens need a device or emulator (`arm64-v8a` or `x86_64`):
 ## Releasing
 
 Version numbers have three parts and every release adds one to the last (1.3.2, 1.3.3 …
-1.3.9, then 1.4.0, 1.4.1, 1.4.2, 1.4.3, 1.4.4, 1.4.5). The GitHub and Google Play builds share the number.
+1.3.9, then 1.4.0, 1.4.1, 1.4.2, 1.4.3, 1.4.4, 1.4.5, 1.4.6). The GitHub and Google Play builds share the number.
 
 1. In `app/build.gradle.kts` raise `versionCode` by one and set `versionName`.
 2. In `README.md` update the version badge and the download link's file name.

@@ -80,6 +80,30 @@ object BoxCycle {
         return if (i < 0) null else cycle.getOrNull(i + 1)
     }
 
+    /** What each map is called on its own line, for when it has no reading there. */
+    private val NAMES = mapOf(
+        ColourChoice.SEA_TEMP_SATELLITE to "Surface temp",
+        ColourChoice.SEA_TEMP_BREAKS to "Surface temp",
+        ColourChoice.SEA_TEMP_FORECAST to "Surface temp",
+        ColourChoice.CHLOROPHYLL to "Chlorophyll",
+        ColourChoice.SEA_LEVEL to "Sea level",
+        ColourChoice.WATER_CLARITY to "Visibility",
+        ColourChoice.SALINITY to "Salinity"
+    )
+
+    /**
+     * What a line says while [shown] is its map: only that map's reading from [parts] (each
+     * map with its words), so the line and the map's card name the same thing; or that there
+     * is no reading of it here. Null for a line without parts: it keeps its own words.
+     */
+    fun textFor(parts: List<Pair<ColourChoice, String>>, shown: ColourChoice): String? {
+        if (parts.isEmpty()) return null
+        val match = parts.firstOrNull { it.first == shown }
+            ?: parts.firstOrNull { shown in SEA_TEMPERATURE && it.first in SEA_TEMPERATURE }
+        if (match != null) return match.second.replaceFirstChar { it.uppercase() }
+        return NAMES[shown]?.let { "$it: no reading here" }
+    }
+
     /** "1 of 2" while [shown] is a step of a line with more than one, else null. */
     fun label(cycle: List<ColourChoice>, shown: ColourChoice): String? {
         val i = indexOf(cycle, shown)

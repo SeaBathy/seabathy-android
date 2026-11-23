@@ -54,4 +54,20 @@ class BoxCycleTest {
         assertNull(BoxCycle.next(sea, WIND))
         assertNull(BoxCycle.label(sea, WIND))
     }
+
+    @Test
+    fun `the line shows only the reading of the map that is showing`() {
+        val water = listOf(SEA_LEVEL to "sea level 8 cm above average", WATER_CLARITY to "visibility about 16 m (estimate)", SALINITY to "salinity 35.2")
+        assertEquals("Visibility about 16 m (estimate)", BoxCycle.textFor(water, WATER_CLARITY))
+        assertEquals("Salinity 35.2", BoxCycle.textFor(water, SALINITY))
+        assertEquals("Sea level 8 cm above average", BoxCycle.textFor(water, SEA_LEVEL))
+        val sea = listOf(SEA_TEMP_SATELLITE to "Surface temp 24.9 °C (20 Nov)", CHLOROPHYLL to "chlorophyll 0.41 mg/m³")
+        assertEquals("Chlorophyll 0.41 mg/m³", BoxCycle.textFor(sea, CHLOROPHYLL))
+        // Temperature breaks show the sea temperature reading.
+        assertEquals("Surface temp 24.9 °C (20 Nov)", BoxCycle.textFor(sea, SEA_TEMP_BREAKS))
+        // The map shows but has no reading at this point (a cloud gap, say).
+        assertEquals("Chlorophyll: no reading here", BoxCycle.textFor(sea.take(1), CHLOROPHYLL))
+        // A line without parts keeps its own words.
+        assertNull(BoxCycle.textFor(emptyList(), WIND))
+    }
 }

@@ -1,0 +1,1 @@
+While a Sea or Water line map shows (water clarity, chlorophyll, salinity...), its line in the sea conditions box shows only that map's reading, matching the card at the bottom.
