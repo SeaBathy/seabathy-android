@@ -34,8 +34,8 @@ android {
         // Google Play requires apps and updates to target Android 16 (API 36)
         // from 31 August 2026.
         targetSdk = 36
-        versionCode = 78
-        versionName = "1.4.7"
+        versionCode = 79
+        versionName = "1.4.8"
     }
     // Two builds of the same app. "github" keeps the original application id,
     // so the APKs already installed from GitHub keep updating. "play" is the
@@ -45,10 +45,13 @@ android {
     productFlavors {
         create("github") {
             dimension = "store"
+            // Settings → About offers "Rate SeaBathy on Google Play" in the Play build only.
+            buildConfigField("boolean", "PLAY_STORE", "false")
         }
         create("play") {
             dimension = "store"
             applicationId = "com.seabathy.app"
+            buildConfigField("boolean", "PLAY_STORE", "true")
         }
     }
     signingConfigs {

@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.4.8 — 2026-11-24
+
+From testers' suggestions in the Google Play closed test:
+
+- **Share SeaBathy** in Settings → About: Android's own share sheet with a short line and the link
+  (the Google Play listing in the Play build, seabathy.com in this one). Nothing else is sent; no
+  extra library or permission.
+- **Rate SeaBathy on Google Play** (the Play build only), next to Share: opens the Play Store on
+  SeaBathy's page. The app never asks on its own.
+- **Help and guide** in Settings → About: the SeaBathy guide on seabathy.com.
+
 ## 1.4.7 — 2026-11-24
 
 - **A shorter credit line on the chart.** The credits show in full when they change (the map first

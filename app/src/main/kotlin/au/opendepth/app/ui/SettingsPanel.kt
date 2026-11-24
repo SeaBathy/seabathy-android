@@ -513,6 +513,26 @@ class SettingsPanel(
         fun about(body: android.widget.LinearLayout) {
             panels.addRow(
                 body,
+                panels.row("Help and guide", "How to use SeaBathy, on seabathy.com") {
+                    openLink(AppLinks.GUIDE_URL)
+                }
+            )
+            panels.addRow(
+                body,
+                panels.row("Share SeaBathy", "Send a link to a friend or your fishing club") {
+                    shareApp()
+                }
+            )
+            if (au.opendepth.app.BuildConfig.PLAY_STORE) {
+                panels.addRow(
+                    body,
+                    panels.row("Rate SeaBathy on Google Play", "Reviews help other boaters find the app") {
+                        rateApp()
+                    }
+                )
+            }
+            panels.addRow(
+                body,
                 panels.row("Safety and terms", "Not for navigation: what SeaBathy is and isn't") {
                     SafetyTerms.show(context)
                 }
@@ -539,7 +559,12 @@ class SettingsPanel(
             Triple("Tides and sea conditions", "Tide charts, wind, waves, currents, sea temperature", ::tidesAndSea),
             Triple("Australia", "Marine park zones, closures, wrecks, reefs, boat ramps, buoys", ::australia),
             Triple("Waypoints and backup", "Backup, photos, GPX and KML, storage, debug log", ::dataAndBackup),
-            Triple("About", "Safety and terms, privacy, licences", ::about)
+            Triple(
+                "About",
+                if (au.opendepth.app.BuildConfig.PLAY_STORE) "Help, share, rate, safety and terms, privacy, licences"
+                else "Help, share, safety and terms, privacy, licences",
+                ::about
+            )
         )
 
         openCategory = { index ->
@@ -562,12 +587,36 @@ class SettingsPanel(
     private var categoryDialog: android.app.Dialog? = null
     private var currentCategory = 0
 
-    private fun openPrivacyPolicy() {
-        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(PRIVACY_POLICY_URL))
+    private fun openPrivacyPolicy() = openLink(PRIVACY_POLICY_URL)
+
+    /** Opens [url] in the browser; with none, says the address so it can be typed. */
+    private fun openLink(url: String) {
+        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
             .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
         runCatching { context.startActivity(intent) }.onFailure {
-            android.widget.Toast.makeText(context, "Privacy policy: $PRIVACY_POLICY_URL", android.widget.Toast.LENGTH_LONG).show()
+            android.widget.Toast.makeText(context, url, android.widget.Toast.LENGTH_LONG).show()
         }
+    }
+
+    /** Android's own share sheet with a short line and the link: nothing else is sent anywhere. */
+    private fun shareApp() {
+        val link = AppLinks.shareUrl(au.opendepth.app.BuildConfig.PLAY_STORE, context.packageName)
+        val send = android.content.Intent(android.content.Intent.ACTION_SEND)
+            .setType("text/plain")
+            .putExtra(android.content.Intent.EXTRA_SUBJECT, "SeaBathy")
+            .putExtra(android.content.Intent.EXTRA_TEXT, AppLinks.shareText(link))
+        val chooser = android.content.Intent.createChooser(send, "Share SeaBathy")
+            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        runCatching { context.startActivity(chooser) }.onFailure {
+            android.widget.Toast.makeText(context, link, android.widget.Toast.LENGTH_LONG).show()
+        }
+    }
+
+    /** The Play Store app on SeaBathy's page, or the page in the browser without it. */
+    private fun rateApp() {
+        val market = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(AppLinks.marketUri(context.packageName)))
+            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        runCatching { context.startActivity(market) }.onFailure { openLink(AppLinks.storeWebUrl(context.packageName)) }
     }
 
     private fun showLicences() {
