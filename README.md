@@ -4,7 +4,7 @@
 Your depth maps in 3D, offline charts, tides and sea conditions. Works anywhere in the world.</p>
 
 <p align="center">
-  <img alt="Version 1.4.8" src="https://img.shields.io/badge/version-1.4.8-0f766e">
+  <img alt="Version 1.4.9" src="https://img.shields.io/badge/version-1.4.9-0f766e">
   <img alt="Android 8.0+" src="https://img.shields.io/badge/Android-8.0%2B-3ddc84?logo=android&logoColor=white">
   <img alt="GPL-3.0 licence" src="https://img.shields.io/badge/licence-GPL--3.0-blue">
   <img alt="No ads, no tracking" src="https://img.shields.io/badge/ads%20%26%20tracking-none-success">
@@ -70,7 +70,7 @@ reef wall, channel and bommie stand out, with depth colours or satellite on top.
 
 ## Install
 
-1. Download **[`SeaBathy-1.4.8.apk`](download/SeaBathy-1.4.8.apk)** onto your phone (or
+1. Download **[`SeaBathy-1.4.9.apk`](download/SeaBathy-1.4.9.apk)** onto your phone (or
    from the Releases page).
 2. Open it. If Android asks, allow your browser or file manager to *install unknown apps*.
 3. Open SeaBathy. The first start shows the whole world; zoom in to where you go.
@@ -102,7 +102,8 @@ the area (drag the box to move it, or a corner to resize it). The depths
 come from GMRT, a free worldwide model built from ship surveys. They're sharpest where ships
 have surveyed and coarser elsewhere, and they're saved on the phone for offline use.
 
-**High detail** is offered in Australian waters (IMAS and multibeam surveys), on US coasts
+**High detail** is offered in Australian waters (IMAS and multibeam surveys; while IMAS's server
+is closed, Geoscience Australia's AusBathyTopo models with the AusSeabed surveys), on US coasts
 (NOAA, about 3 m), on surveyed Canadian coasts and harbours (CHS), in European seas (EMODnet,
 about 115 m), on New Zealand coasts surveyed by lidar since 2024 (LINZ, to about 25 m deep) and
 on Pacific island reef shallows (Digital Earth Pacific, a satellite estimate to about 10 m).

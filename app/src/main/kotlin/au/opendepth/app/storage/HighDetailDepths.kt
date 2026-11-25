@@ -2,6 +2,7 @@ package au.opendepth.app.storage
 
 import android.content.Context
 import au.opendepth.app.BuildConfig
+import com.seabathy.bathypicker.core.AusSeabed
 import com.seabathy.bathypicker.core.Builder
 import com.seabathy.bathypicker.core.Catalog
 import com.seabathy.bathypicker.core.Credits
@@ -125,7 +126,19 @@ object HighDetailDepths {
             return Estimate(a.line, a.ok)
         }
         val params = Planner.parse(doubleArrayOf(area.west, area.south, area.east, area.north), null, "wgs84", "auto", "auto")
-        val plan = Planner.assess(params, catalog, surveys(context), limitMb(context) / 1024.0, context.filesDir.usableSpace, "SeaBathy", null)
+        val plan = try {
+            Planner.assess(params, catalog, surveys(context), limitMb(context) / 1024.0, context.filesDir.usableSpace, "SeaBathy", null)
+        } catch (e: IOException) {
+            if (!serverDown(e)) throw e
+            // IMAS's server is closed: the box is built from AusSeabed instead (see buildAusSeabed).
+            val b = bbox(area)
+            val res = AusSeabed.resolution(b, limitMb(context) * 1048576.0)
+            val m = AusSeabed.boxMetres(b)
+            val mb = m[0] / res * (m[1] / res) * 4 / 1e6
+            val n = AusSeabed.choose(ausSources(context), b).count { it.g == "surveys" }
+            return Estimate(String.format(java.util.Locale.US, "Up to about %.0f MB at %.0f m detail · from AusSeabed (IMAS's server isn't working): GA's depth models%s",
+                mb.coerceAtLeast(1.0), res, if (n > 0) " and $n survey${if (n > 1) "s" else ""}" else ""), true)
+        }
         if (plan.json["ok"] != true) {
             return Estimate((plan.json["errors"] as? List<*>).orEmpty().joinToString(" ").ifBlank { "No high-detail depths here." }, true)
         }
@@ -163,11 +176,69 @@ object HighDetailDepths {
 
         Http.userAgent = "SeaBathy-Android/${BuildConfig.VERSION_NAME} (+https://github.com/SeaBathy/seabathy-android)"
         onProgress(0, "Finding the depth data for this area…")
-        return if (australian(area)) buildAustralia(context, area, dir, target, credits, onProgress)
-        else buildOverseas(context, area, dir, target, credits, onProgress)
+        if (!australian(area)) return buildOverseas(context, area, dir, target, credits, onProgress)
+        return try {
+            buildAustralia(context, area, dir, target, credits, onProgress)
+        } catch (e: Throwable) {
+            // IMAS's servers closed on 25 November 2026: the same sources its composite was made
+            // from, put together here from AusSeabed. Anything else (Cancel, no internet) as it is.
+            if (e is InterruptedIOException || e is kotlinx.coroutines.CancellationException || !serverDown(e)) throw e
+            onProgress(0, "IMAS's server isn't sending depths, so they're being put together from AusSeabed…")
+            buildAusSeabed(context, area, dir, target, credits, onProgress)
+        }
+    }
+
+    @Volatile private var ausSources: AusSeabed.Sources? = null
+
+    /** AusSeabed's sources (the list shared with the web app), read once from the app's assets. */
+    private fun ausSources(context: Context): AusSeabed.Sources =
+        ausSources ?: AusSeabed.parse(context.assets.open(AUS_LIST).bufferedReader().use { it.readText() }).also { ausSources = it }
+
+    private const val AUS_LIST = "bathypicker/ausseabed.json"
+    const val AUS_NOTE = "IMAS's server isn't sending depths, so these were put together from AusSeabed: Geoscience Australia's models with the AusSeabed surveys on top."
+
+    /** Australia from AusSeabed: GA's national model underneath, its regional models, compilations and the surveys on top. */
+    private suspend fun buildAusSeabed(
+        context: Context, area: SeabedDownload.Area, dir: File, target: File, credits: File, onProgress: (Int, String) -> Unit
+    ): Built {
+        val job = Job()
+        val work = File(context.cacheDir, "ausseabed-depths").apply { mkdirs() }
+        val sources = ausSources(context)
+        val b = bbox(area)
+        val res = AusSeabed.resolution(b, limitMb(context) * 1048576.0)
+        currentCoroutineContext().ensureActive()
+        var prepared: AusSeabed.Prepared? = null
+        try {
+            return buildInto(job, target, onProgress) { raf, src ->
+                val prep = AusSeabed.prepare(sources, b, res, work, World.HTTP, net, job, src.bytesDownloaded)
+                prepared = prep
+                val builder = Builder(prep.plan, job, src, workers)
+                builder.workDir = context.cacheDir
+                builder.run(raf.channel, raf.channel)
+                val line = AusSeabed.creditLine(prep, builder.layerPixels)
+                val text = AusSeabed.creditsText(prep, builder.layerPixels, target.name, "SeaBathy ${BuildConfig.VERSION_NAME}")
+                    .replaceFirst("\n\n", "\n$ON_THE_CHART$line\n\n")
+                runCatching { credits.writeText(text) }
+                Built(target, text, line, AUS_NOTE)
+            }
+        } finally {
+            prepared?.cleanup()
+        }
     }
 
     private const val ON_THE_CHART = "On the chart: "
+
+    private val SERVER_FAILED = Regex("""HTTP (40[1349]|410|5\d\d) from |Can't reach |timed out|Connection reset""", RegexOption.IGNORE_CASE)
+
+    /**
+     * True when [error] is IMAS's servers refusing, failing or no longer holding the files (a
+     * 401/403/404/409/410, a 5xx, no answer), not this phone, the area or the plan. Then the
+     * worldwide depths are fetched instead.
+     */
+    fun serverDown(error: Throwable): Boolean = generateSequence(error) { it.cause }.take(8).any { e ->
+        val m = e.message.orEmpty()
+        m.contains("imas.utas.edu.au", ignoreCase = true) && SERVER_FAILED.containsMatchIn(m)
+    }
 
     private suspend fun buildAustralia(
         context: Context, area: SeabedDownload.Area, dir: File, target: File, credits: File, onProgress: (Int, String) -> Unit

@@ -156,6 +156,11 @@ class LayerImportCoordinator(
             }.onFailure { error ->
                 if (error is java.io.InterruptedIOException) {
                     onResult("Stopped. Nothing was saved.")
+                } else if (HighDetailDepths.australian(area) && HighDetailDepths.serverDown(error)) {
+                    // IMAS's servers refusing or failing is no reason to leave the person with nothing:
+                    // the worldwide depths for the same box come from a different server.
+                    DiagnosticLog.logError(TAG, "high-detail build FAILED, IMAS down: getting the worldwide depths instead", error)
+                    downloadSeabed(area, "High detail isn't available right now (IMAS's server isn't working), so these are the worldwide depths.")
                 } else {
                     DiagnosticLog.logError(TAG, "high-detail build FAILED", error)
                     onError(error.readableMessage("Couldn't build the high-detail depths"))
@@ -164,8 +169,11 @@ class LayerImportCoordinator(
         }
     }
 
-    /** Downloads free depth data for [area] ([SeabedDownload]) and opens it as a layer. */
-    fun downloadSeabed(area: SeabedDownload.Area) {
+    /**
+     * Downloads free depth data for [area] ([SeabedDownload]) and opens it as a layer. [note] is
+     * added to the message shown when it is done.
+     */
+    fun downloadSeabed(area: SeabedDownload.Area, note: String = "") {
         scope.launch {
             val progress = importProgress.show("Seabed depths", "Asking for the depths… this can take a moment")
             DiagnosticLog.log(TAG, "seabed download: ${area.name} from ${SeabedDownload.url(area)}")
@@ -201,7 +209,7 @@ class LayerImportCoordinator(
                 } else if (imported != null) {
                     val id = overlays.addGeoTiff(imported, SeabedDownload.CREDIT)
                     overlays.boundsOf(id)?.let(onShowArea)
-                    onResult(describe(imported))
+                    onResult(if (note.isEmpty()) describe(imported) else "$note ${describe(imported)}")
                 }
             }.onFailure { error ->
                 DiagnosticLog.logError(TAG, "seabed download FAILED", error)

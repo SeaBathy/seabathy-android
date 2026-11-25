@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.4.9 — 2026-11-25
+
+- **High detail in Australia works again.** IMAS (University of Tasmania) closed its depth files and
+  map layers to everyone on 25 November 2026, so High detail failed with "HTTP 403". The app still
+  asks IMAS first, and when IMAS refuses it puts the same depths together on the phone from the
+  sources IMAS made its composite from, all published by Geoscience Australia's AusSeabed:
+  Geoscience Australia's national 250 m model underneath, its 30 m regional models (Great Barrier
+  Reef, Northern Australia, Torres Strait, Bass Strait, Perth, North West Shelf) and regional
+  compilations over it, and the AusSeabed surveys on top, finest last, at 10 m like IMAS. Some
+  places get more than IMAS had: Shark Bay, for one, now has its 2017 10 m survey.
+- The box line says when the depths will come from AusSeabed, and the credits name Geoscience
+  Australia and AusSeabed.
+
 ## 1.4.8 — 2026-11-24
 
 From testers' suggestions in the Google Play closed test:

@@ -1,0 +1,1 @@
+High detail in Australia works again. IMAS closed its depth files on 25 November 2026, so the app now puts the same depths together from AusSeabed: Geoscience Australia's national and 30 m regional models with the AusSeabed surveys on top, at 10 m. Shark Bay now has its 2017 10 m survey.
